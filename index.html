@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FLETYA v0.5</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f4f7f8;color:#172126}
+header{background:#fff;border-bottom:1px solid #e4eaec;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+.logo{font-size:25px;font-weight:900;letter-spacing:-1px;color:#087f8c}.logo span{color:#15252b}
+nav button,.btn{border:0;border-radius:12px;padding:11px 15px;font-weight:800;cursor:pointer}
+nav button{background:#eef5f5;margin-left:5px}.btn{background:#087f8c;color:white}.btn.dark{background:#172126}.btn.light{background:#e9f2f2;color:#087f8c}
+.wrap{max-width:1120px;margin:auto;padding:22px}.hero{background:linear-gradient(135deg,#0b8794,#12343c);color:#fff;border-radius:24px;padding:30px;margin-bottom:20px}
+.hero h1{font-size:34px;margin:0 0 8px}.hero p{margin:0;opacity:.9}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card{background:#fff;border:1px solid #e4eaec;border-radius:18px;padding:20px;box-shadow:0 6px 20px #17323a0c}
+label{display:block;font-size:13px;font-weight:800;margin:12px 0 6px}input,select{width:100%;padding:12px;border:1px solid #ccd8db;border-radius:10px;font-size:15px;background:#fff}
+.price{font-size:34px;font-weight:900;margin:10px 0;color:#087f8c}.muted{color:#66777d;font-size:13px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.pill{display:inline-block;padding:7px 10px;border-radius:999px;background:#edf5f5;color:#087f8c;font-size:12px;font-weight:800}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;border-bottom:1px solid #e8eeee;text-align:left}.hidden{display:none}.status{font-weight:900}.ok{color:#087f8c}.warn{color:#a66b00}.danger{color:#b43a3a}
+.map{height:280px;border-radius:16px;background:#dcebed;position:relative;overflow:hidden;margin-top:12px}
+.map:before{content:"";position:absolute;inset:-40px;background:repeating-linear-gradient(30deg,transparent 0 34px,#fff9 35px 38px),repeating-linear-gradient(120deg,transparent 0 50px,#fff8 51px 54px)}
+.pin{position:absolute;transform:translate(-50%,-100%);font-size:30px}.pin.origin{left:28%;top:62%}.pin.driver{left:62%;top:38%}.pin.dest{left:78%;top:72%}
+.toast{position:fixed;right:16px;bottom:16px;background:#172126;color:white;padding:13px 16px;border-radius:12px;display:none;z-index:20}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.hero h1{font-size:28px}header{padding:12px}.wrap{padding:14px}nav button{padding:9px 10px;font-size:12px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">FLET<span>YA</span></div>
+  <nav>
+    <button onclick="show('client')">Cliente</button>
+    <button onclick="show('driver')">Fletero</button>
+    <button onclick="show('admin')">Admin</button>
+  </nav>
+</header>
+
+<main class="wrap">
+<section id="client">
+<div class="hero"><h1>Tu flete, en minutos.</h1><p>Simula una solicitud real de FLETYA desde tu navegador.</p></div>
+<div class="grid">
+<div class="card">
+<h2>Solicitar flete</h2>
+<label>Nombre</label><input id="cname" placeholder="Tu nombre">
+<label>Origen</label><input id="origin" placeholder="Ej. Plaza Las Américas">
+<label>Destino</label><input id="dest" placeholder="Ej. Región 102">
+<label>Distancia aproximada (km)</label><input id="km" type="number" value="8" min="1" oninput="quote()">
+<label>Vehículo</label><select id="vehicle" onchange="quote()"><option value="pickup">Pickup / Estaquita</option><option value="camioneta">Camioneta</option><option value="camion">Camión</option></select>
+<label>Ayudantes</label><select id="helpers" onchange="quote()"><option value="0">Sin ayudante</option><option value="1">1 ayudante</option><option value="2">2 ayudantes</option></select>
+<label>Servicio</label><select id="service"><option>Mudanza</option><option>Flete de muebles</option><option>Materiales</option><option>Paquetería</option></select>
+<div class="price" id="price">$0 MXN</div><div class="muted" id="breakdown"></div>
+<br><button class="btn" onclick="requestJob()">Solicitar FLETYA</button>
+</div>
+<div class="card">
+<h2>Seguimiento</h2><div id="clientStatus"><span class="pill">Sin servicio activo</span></div>
+<div class="map"><div class="pin origin">📍</div><div class="pin driver">🚚</div><div class="pin dest">🏁</div></div>
+<p class="muted">Mapa de demostración. En la siguiente etapa se conecta un mapa real y GPS.</p>
+</div>
+</div>
+</section>
+
+<section id="driver" class="hidden">
+<div class="hero"><h1>Panel del fletero</h1><p>Así verá el conductor las solicitudes y sus servicios.</p></div>
+<div class="grid">
+<div class="card">
+<h2>Mi perfil</h2><label>Nombre</label><input id="dname" value="Fletero Demo">
+<label>Vehículo</label><select id="dvehicle"><option>Pickup / Estaquita</option><option>Camioneta</option><option>Camión</option></select>
+<label>Placas</label><input id="plates" placeholder="ABC-123-D">
+<br><br><button class="btn light" onclick="driverLocation()">📍 Actualizar ubicación</button>
+<p id="gps" class="muted">Ubicación pendiente</p>
+</div>
+<div class="card">
+<h2>Solicitud disponible</h2><div id="jobCard"><span class="pill">Esperando solicitud…</span></div>
+</div>
+</div>
+</section>
+
+<section id="admin" class="hidden">
+<div class="hero"><h1>FLETYA Admin</h1><p>Control básico de servicios, ventas y comisión.</p></div>
+<div class="grid">
+<div class="card"><h3>Servicios</h3><div class="price" id="jobsCount">0</div><span class="muted">solicitudes</span></div>
+<div class="card"><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
+<div class="card"><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
+<div class="card"><h3>Fletero recibe</h3><div class="price" id="driverNet">$0</div><span class="muted">85% en este demo</span></div>
+</div>
+<div class="card" style="margin-top:18px"><h2>Servicios recientes</h2><div id="adminTable"></div></div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const state={jobs:[],active:null,accepted:false,status:'Pendiente'};
+const rate={pickup:35,camioneta:45,camion:65};
+function money(n){return n.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0})}
+function quote(){
+ let km=+document.getElementById('km').value||1,v=document.getElementById('vehicle').value,h=+document.getElementById('helpers').value;
+ let base=120, p=base+km*rate[v]+h*180;
+ if(v==='camioneta')p+=100;if(v==='camion')p+=300;
+ document.getElementById('price').textContent=money(p);
+ document.getElementById('breakdown').textContent=`Base + distancia + vehículo + ${h} ayudante(s)`;
+ return p;
+}
+function show(id){
+ ['client','driver','admin'].forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==id));
+ if(id==='admin')renderAdmin(); if(id==='driver')renderDriver();
+}
+function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
+function requestJob(){
+ let price=quote(), job={id:'FLY-'+Date.now().toString().slice(-6),name:document.getElementById('cname').value||'Cliente Demo',origin:document.getElementById('origin').value||'Cancún',dest:document.getElementById('dest').value||'Cancún',km:+document.getElementById('km').value||1,vehicle:document.getElementById('vehicle').value,helpers:+document.getElementById('helpers').value,service:document.getElementById('service').value,price,status:'Buscando fletero',created:new Date().toLocaleString('es-MX')};
+ state.jobs.unshift(job);state.active=job;localStorage.setItem('fletya_jobs',JSON.stringify(state.jobs));renderClient();toast('Solicitud enviada. Buscando fletero cercano…');setTimeout(()=>{job.status='Fletero encontrado';state.accepted=true;renderClient();renderDriver();toast('¡Un fletero aceptó tu servicio!')},1800);
+}
+function renderClient(){
+ let j=state.active;if(!j){document.getElementById('clientStatus').innerHTML='<span class="pill">Sin servicio activo</span>';return}
+ document.getElementById('clientStatus').innerHTML=`<h3>${j.status}</h3><p>${j.origin} → ${j.dest}</p><p class="status ok">${money(j.price)} · ${j.service}</p><button class="btn light" onclick="advance()">Actualizar estado</button>`;
+}
+function advance(){
+ let j=state.active, seq=['Fletero encontrado','En camino','Recogido','Entregado'],i=seq.indexOf(j.status);j.status=seq[Math.min(i+1,seq.length-1)];renderClient();renderDriver();renderAdmin();toast(j.status==='Entregado'?'Servicio completado 🎉':'Estado actualizado');
+}
+function renderDriver(){
+ let e=document.getElementById('jobCard'),j=state.active;
+ if(!j)e.innerHTML='<span class="pill">No hay solicitudes</span>';
+ else e.innerHTML=`<p><b>${j.service}</b> · ${j.km} km</p><p>${j.origin} → ${j.dest}</p><p><b>${money(j.price)}</b></p><p><span class="pill">${j.status}</span></p><button class="btn" onclick="acceptDriver()">Aceptar / continuar</button>`;
+}
+function acceptDriver(){if(state.active){state.active.status='En camino';state.accepted=true;renderClient();renderDriver();renderAdmin();toast('Servicio aceptado. Cliente notificado.')}}
+function driverLocation(){
+ if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
+ navigator.geolocation.getCurrentPosition(p=>{document.getElementById('gps').textContent=`GPS actualizado: ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`;toast('Ubicación actualizada')},()=>{document.getElementById('gps').textContent='No se pudo obtener GPS. Permite ubicación en el navegador.'});
+}
+function renderAdmin(){
+ let jobs=state.jobs, sales=jobs.reduce((a,j)=>a+j.price,0),comm=sales*.15;
+ document.getElementById('jobsCount').textContent=jobs.length;document.getElementById('sales').textContent=money(sales);document.getElementById('commission').textContent=money(comm);document.getElementById('driverNet').textContent=money(sales-comm);
+ document.getElementById('adminTable').innerHTML=jobs.length?`<table><tr><th>ID</th><th>Cliente</th><th>Servicio</th><th>Total</th><th>Estado</th></tr>${jobs.map(j=>`<tr><td>${j.id}</td><td>${j.name}</td><td>${j.service}</td><td>${money(j.price)}</td><td>${j.status}</td></tr>`).join('')}</table>`:'<p class="muted">Todavía no hay servicios.</p>';
+}
+(function init(){try{state.jobs=JSON.parse(localStorage.getItem('fletya_jobs')||'[]');state.active=state.jobs[0]||null}catch(e){}quote();renderClient();renderDriver();renderAdmin()})();
+</script>
+</body></html>
