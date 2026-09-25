@@ -262,7 +262,64 @@ async function registerClient() {
   message.textContent = 'Cuenta creada. Revisa tu correo.';
 }
 
-async function loginClient() {
+async function registerDriver() {
+  const email = document.getElementById('driverEmail').value.trim();
+  const password = document.getElementById('driverPassword').value;
+  const message = document.getElementById('driverMessage');
+
+  if (!email || !password) {
+    message.textContent = 'Escribe tu correo y contraseña.';
+    return;
+  }
+
+  if (password.length < 6) {
+    message.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+    return;
+  }
+
+  const { error } = await supabaseClient.auth.signUp({
+    email: email,
+    password: password,
+    options: {
+      data: {
+        role: 'driver'
+      }
+    }
+  });
+
+  if (error) {
+    message.textContent = 'Error: ' + error.message;
+    return;
+  }
+
+  message.textContent =
+    'Cuenta de fletero creada. Revisa tu correo si Supabase solicita confirmación.';
+}
+
+async function loginDriver() {
+  const email = document.getElementById('driverEmail').value.trim();
+  const password = document.getElementById('driverPassword').value;
+  const message = document.getElementById('driverMessage');
+
+  if (!email || !password) {
+    message.textContent = 'Escribe tu correo y contraseña.';
+    return;
+  }
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: email,
+    password: password
+  });
+
+  if (error) {
+    message.textContent = 'Error: ' + error.message;
+    return;
+  }
+
+  message.textContent = '¡Sesión de fletero iniciada correctamente!';
+  console.log('Fletero conectado:', data.user);
+}
+  async function loginClient() {
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   const message = document.getElementById('authMessage');
