@@ -149,10 +149,13 @@ function renderAdmin(){
 const SUPABASE_URL = 'https://wsdfqscrvfygxripmrzi.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O';
 
-const supabase = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_PUBLISHABLE_KEY
-);
+const supabaseClient =
+  window.supabase && window.supabase.createClient
+    ? window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_PUBLISHABLE_KEY
+      )
+    : null;
 
 async function registerClient() {
   const email = document.getElementById('authEmail').value.trim();
@@ -169,7 +172,7 @@ async function registerClient() {
     return;
   }
 
-  const { error } = await supabase.auth.signUp({
+  const { error } = await supabaseClient.auth.signUp({
     email: email,
     password: password,
     options: {
@@ -197,7 +200,7 @@ async function loginClient() {
     return;
   }
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { error } = await supabaseClient.auth.signInWithPassword({
     email: email,
     password: password
   });
