@@ -36,7 +36,20 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;bord
 <section id="client">
 <div class="hero"><h1>Tu flete, en minutos.</h1><p>Simula una solicitud real de FLETYA desde tu navegador.</p></div>
 <div class="grid">
-<div class="card">
+<div class="card"><div class="card" id="authClient">
+  <h2>Cuenta de cliente</h2>
+
+  <label>Correo electrónico</label>
+  <input id="authEmail" type="email" placeholder="tu@email.com">
+
+  <label>Contraseña</label>
+  <input id="authPassword" type="password" placeholder="Mínimo 6 caracteres">
+
+  <button class="btn" onclick="registerClient()">Crear cuenta</button>
+  <button class="btn" onclick="loginClient()">Iniciar sesión</button>
+
+  <p id="authMessage" class="muted"></p>
+</div>
 <h2>Solicitar flete</h2>
 <label>Nombre</label><input id="cname" placeholder="Tu nombre">
 <label>Origen</label><input id="origin" placeholder="Ej. Plaza Las Américas">
@@ -129,5 +142,72 @@ function renderAdmin(){
  document.getElementById('adminTable').innerHTML=jobs.length?`<table><tr><th>ID</th><th>Cliente</th><th>Servicio</th><th>Total</th><th>Estado</th></tr>${jobs.map(j=>`<tr><td>${j.id}</td><td>${j.name}</td><td>${j.service}</td><td>${money(j.price)}</td><td>${j.status}</td></tr>`).join('')}</table>`:'<p class="muted">Todavía no hay servicios.</p>';
 }
 (function init(){try{state.jobs=JSON.parse(localStorage.getItem('fletya_jobs')||'[]');state.active=state.jobs[0]||null}catch(e){}quote();renderClient();renderDriver();renderAdmin()})();
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+const SUPABASE_URL = 'https://wsdfqscrvfygxripmrzi.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O';
+
+const supabase = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
+);
+
+async function registerClient() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const message = document.getElementById('authMessage');
+
+  if (!email || !password) {
+    message.textContent = 'Escribe tu correo y contraseña.';
+    return;
+  }
+
+  if (password.length < 6) {
+    message.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+    return;
+  }
+
+  const { error } = await supabase.auth.signUp({
+    email: email,
+    password: password,
+    options: {
+      data: {
+        role: 'client'
+      }
+    }
+  });
+
+  if (error) {
+    message.textContent = 'Error: ' + error.message;
+    return;
+  }
+
+  message.textContent = 'Cuenta creada. Revisa tu correo.';
+}
+
+async function loginClient() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const message = document.getElementById('authMessage');
+
+  if (!email || !password) {
+    message.textContent = 'Escribe tu correo y contraseña.';
+    return;
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email,
+    password: password
+  });
+
+  if (error) {
+    message.textContent = 'Error: ' + error.message;
+    return;
+  }
+
+  message.textContent = '¡Sesión iniciada correctamente!';
+}
 </script>
 </body></html>
