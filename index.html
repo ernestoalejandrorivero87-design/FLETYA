@@ -115,9 +115,67 @@ function show(id){
  if(id==='admin')renderAdmin(); if(id==='driver')renderDriver();
 }
 function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
-function requestJob(){
- let price=quote(), job={id:'FLY-'+Date.now().toString().slice(-6),name:document.getElementById('cname').value||'Cliente Demo',origin:document.getElementById('origin').value||'Cancún',dest:document.getElementById('dest').value||'Cancún',km:+document.getElementById('km').value||1,vehicle:document.getElementById('vehicle').value,helpers:+document.getElementById('helpers').value,service:document.getElementById('service').value,price,status:'Buscando fletero',created:new Date().toLocaleString('es-MX')};
- state.jobs.unshift(job);state.active=job;localStorage.setItem('fletya_jobs',JSON.stringify(state.jobs));renderClient();toast('Solicitud enviada. Buscando fletero cercano…');setTimeout(()=>{job.status='Fletero encontrado';state.accepted=true;renderClient();renderDriver();toast('¡Un fletero aceptó tu servicio!')},1800);
+async function requestJob(){
+  const { data: { user }, error: authError } =
+    await supabaseClient.auth.getUser();
+
+  if (authError || !user) {
+    toast('Debes iniciar sesión como cliente.');
+    return;
+  }
+
+  const origin = document.getElementById('origin').value.trim();
+  const destination = document.getElementById('dest').value.trim();
+  const distance = parseFloat(document.getElementById('km').value) || 0;
+  const vehicle = document.getElementById('vehicle').value;
+  const helpers = parseInt(document.getElementById('helpers').value) || 0;
+  const service = document.getElementById('service').value;
+  const price = quote();
+
+  if (!origin || !destination) {
+    toast('Escribe origen y destino.');
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('jobs')
+    .insert({
+      origin: origin,
+      destination: destination,
+      distance_km: distance,
+      vehicle_type: vehicle,
+      helpers: helpers,
+      service_type: service,
+      price: price,
+      client_id: user.id
+    })
+    .select()
+    .single();
+
+  if (error) {
+    toast('Error al guardar el flete: ' + error.message);
+    console.error(error);
+    return;
+  }
+
+  const job = {
+    id: data.id,
+    origin: origin,
+    destination: destination,
+    distance: distance,
+    vehicle: vehicle,
+    helpers: helpers,
+    service: service,
+    price: price,
+    status: 'requested'
+  };
+
+  state.jobs.unshift(job);
+  state.active = job;
+  localStorage.setItem('fletya_jobs', JSON.stringify(state.jobs));
+
+  toast('¡Flete solicitado correctamente!');
+  renderClient();
 }
 function renderClient(){
  let j=state.active;if(!j){document.getElementById('clientStatus').innerHTML='<span class="pill">Sin servicio activo</span>';return}
