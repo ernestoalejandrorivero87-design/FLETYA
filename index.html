@@ -50,6 +50,20 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;bord
 
   <p id="authMessage" class="muted"></p>
 </div>
+  <div class="card" id="authDriver">
+  <h2>Cuenta de fletero</h2>
+
+  <label>Correo electrónico</label>
+  <input id="driverEmail" type="email" placeholder="fletero@email.com">
+
+  <label>Contraseña</label>
+  <input id="driverPassword" type="password" placeholder="Mínimo 6 caracteres">
+
+  <button class="btn" onclick="registerDriver()">Crear cuenta de fletero</button>
+  <button class="btn" onclick="loginDriver()">Iniciar sesión como fletero</button>
+
+  <p id="driverMessage" class="muted"></p>
+</div>
 <h2>Solicitar flete</h2>
 <label>Nombre</label><input id="cname" placeholder="Tu nombre">
 <label>Origen</label><input id="origin" placeholder="Ej. Plaza Las Américas">
