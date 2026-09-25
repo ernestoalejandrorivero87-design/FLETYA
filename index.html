@@ -198,10 +198,39 @@ function renderClient(){
 function advance(){
  let j=state.active, seq=['Fletero encontrado','En camino','Recogido','Entregado'],i=seq.indexOf(j.status);j.status=seq[Math.min(i+1,seq.length-1)];renderClient();renderDriver();renderAdmin();toast(j.status==='Entregado'?'Servicio completado 🎉':'Estado actualizado');
 }
-function renderDriver(){
- let e=document.getElementById('jobCard'),j=state.active;
- if(!j)e.innerHTML='<span class="pill">No hay solicitudes</span>';
- else e.innerHTML=`<p><b>${j.service}</b> · ${j.km} km</p><p>${j.origin} → ${j.dest}</p><p><b>${money(j.price)}</b></p><p><span class="pill">${j.status}</span></p><button class="btn" onclick="acceptDriver()">Aceptar / continuar</button>`;
+async function renderDriver(){
+  const e = document.getElementById('jobCard');
+
+  e.innerHTML = '<span class="pill">Buscando fletes disponibles...</span>';
+
+  const { data, error } = await supabaseClient
+    .from('jobs')
+    .select('*')
+    .eq('status', 'requested')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    e.innerHTML = '<span class="pill">Error al cargar fletes.</span>';
+    console.error(error);
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    e.innerHTML = '<span class="pill">No hay fletes disponibles.</span>';
+    return;
+  }
+
+  e.innerHTML = data.map(job => `
+    <div class="card">
+      <h3>${job.origin} → ${job.destination}</h3>
+      <p><b>Vehículo:</b> ${job.vehicle_type || 'No especificado'}</p>
+      <p><b>Distancia:</b> ${job.distance_km || 0} km</p>
+      <p><b>Ayudantes:</b> ${job.helpers || 0}</p>
+      <p><b>Servicio:</b> ${job.service_type || 'No especificado'}</p>
+      <p><b>Precio:</b> $${Number(job.price || 0).toFixed(2)} MXN</p>
+      <span class="pill">Solicitud disponible</span>
+    </div>
+  `).join('');
 }
 function acceptDriver(){if(state.active){state.active.status='En camino';state.accepted=true;renderClient();renderDriver();renderAdmin();toast('Servicio aceptado. Cliente notificado.')}}
 function driverLocation(){
