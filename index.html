@@ -118,7 +118,7 @@ function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style
 async function requestJob(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
-
+alert('ID del usuario: ' + (user ? user.id : 'SIN USUARIO'));
   if (authError || !user) {
     toast('Debes iniciar sesión como cliente.');
     return;
