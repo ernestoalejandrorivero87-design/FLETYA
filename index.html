@@ -281,7 +281,26 @@ function driverLocation(){
  if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
  navigator.geolocation.getCurrentPosition(p=>{document.getElementById('gps').textContent=`GPS actualizado: ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`;toast('Ubicación actualizada')},()=>{document.getElementById('gps').textContent='No se pudo obtener GPS. Permite ubicación en el navegador.'});
 }
-function renderAdmin(){
+async function renderAdmin(){
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+
+  if (authError || !user) {
+    toast('Debes iniciar sesión como administrador');
+    show('client');
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile || profile.role !== 'admin') {
+    toast('Esta sección es solo para administradores');
+    show('client');
+    return;
+  }
  let jobs=state.jobs, sales=jobs.reduce((a,j)=>a+j.price,0),comm=sales*.15;
  document.getElementById('jobsCount').textContent=jobs.length;document.getElementById('sales').textContent=money(sales);document.getElementById('commission').textContent=money(comm);document.getElementById('driverNet').textContent=money(sales-comm);
  document.getElementById('adminTable').innerHTML=jobs.length?`<table><tr><th>ID</th><th>Cliente</th><th>Servicio</th><th>Total</th><th>Estado</th></tr>${jobs.map(j=>`<tr><td>${j.id}</td><td>${j.name}</td><td>${j.service}</td><td>${money(j.price)}</td><td>${j.status}</td></tr>`).join('')}</table>`:'<p class="muted">Todavía no hay servicios.</p>';
