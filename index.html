@@ -285,12 +285,10 @@ async function logoutDriver(){
 
   const jobId = state.active.id;
 
-  const { data, error } = await supabaseClient
+  const { error } = await supabaseClient
     .from('jobs')
     .update({ status: 'En camino' })
-    .eq('id', jobId)
-    .select()
-    .single();
+    .eq('id', jobId);
 
   if(error){
     console.error(error);
@@ -298,7 +296,7 @@ async function logoutDriver(){
     return;
   }
 
-  state.active = data;
+  state.active.status = 'En camino';
   state.accepted = true;
 
   state.jobs = state.jobs.filter(j => j.id !== jobId);
