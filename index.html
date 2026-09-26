@@ -303,7 +303,6 @@ async function logoutDriver(){
 
   state.jobs = state.jobs.filter(j => j.id !== jobId);
 
-  renderClient();
   renderDriver();
 
   toast('Servicio aceptado. Cliente notificado.');
