@@ -280,7 +280,34 @@ async function logoutDriver(){
       block: 'center'
     });
   }, 100);
-}function acceptDriver(){if(state.active){state.active.status='En camino';state.accepted=true;renderClient();renderDriver();renderAdmin();toast('Servicio aceptado. Cliente notificado.')}}
+}async function acceptDriver(){
+  if(!state.active) return;
+
+  const jobId = state.active.id;
+
+  const { data, error } = await supabaseClient
+    .from('jobs')
+    .update({ status: 'En camino' })
+    .eq('id', jobId)
+    .select()
+    .single();
+
+  if(error){
+    console.error(error);
+    toast('Error al aceptar el servicio: ' + error.message);
+    return;
+  }
+
+  state.active = data;
+  state.accepted = true;
+
+  state.jobs = state.jobs.filter(j => j.id !== jobId);
+
+  renderClient();
+  renderDriver();
+
+  toast('Servicio aceptado. Cliente notificado.');
+}}
 function driverLocation(){
  if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
  navigator.geolocation.getCurrentPosition(p=>{document.getElementById('gps').textContent=`GPS actualizado: ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`;toast('Ubicación actualizada')},()=>{document.getElementById('gps').textContent='No se pudo obtener GPS. Permite ubicación en el navegador.'});
