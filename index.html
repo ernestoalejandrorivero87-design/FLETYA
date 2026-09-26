@@ -243,8 +243,23 @@ async function renderDriver(){  const { data: { user }, error: authError } = awa
       <span class="pill">Solicitud disponible</span>
     </div>
   `).join('');
+ const logoutButton = document.createElement('button');
+logoutButton.className = 'btn';
+logoutButton.textContent = '🚪 Cerrar sesión';
+logoutButton.onclick = logoutDriver;
+e.appendChild(logoutButton);                             
 }
-function acceptDriver(){if(state.active){state.active.status='En camino';state.accepted=true;renderClient();renderDriver();renderAdmin();toast('Servicio aceptado. Cliente notificado.')}}
+async function logoutDriver(){
+  await supabaseClient.auth.signOut();
+  toast('Sesión cerrada');
+  show('client');
+  setTimeout(() => {
+    document.getElementById('authDriver')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+  }, 100);
+}function acceptDriver(){if(state.active){state.active.status='En camino';state.accepted=true;renderClient();renderDriver();renderAdmin();toast('Servicio aceptado. Cliente notificado.')}}
 function driverLocation(){
  if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
  navigator.geolocation.getCurrentPosition(p=>{document.getElementById('gps').textContent=`GPS actualizado: ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`;toast('Ubicación actualizada')},()=>{document.getElementById('gps').textContent='No se pudo obtener GPS. Permite ubicación en el navegador.'});
