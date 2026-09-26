@@ -198,7 +198,19 @@ function renderClient(){
 function advance(){
  let j=state.active, seq=['Fletero encontrado','En camino','Recogido','Entregado'],i=seq.indexOf(j.status);j.status=seq[Math.min(i+1,seq.length-1)];renderClient();renderDriver();renderAdmin();toast(j.status==='Entregado'?'Servicio completado 🎉':'Estado actualizado');
 }
-async function renderDriver(){
+async function renderDriver(){  const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+
+  if (authError || !user) {
+    toast('Debes iniciar sesión como fletero');
+    show('client');
+    setTimeout(() => {
+      document.getElementById('authDriver')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }, 100);
+    return;
+  }
   const e = document.getElementById('jobCard');
 
   e.innerHTML = '<span class="pill">Buscando fletes disponibles...</span>';
