@@ -306,7 +306,7 @@ async function logoutDriver(){
   renderDriver();
 
   toast('Servicio aceptado. Cliente notificado.');
-}}
+}
 function driverLocation(){
  if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
  navigator.geolocation.getCurrentPosition(p=>{document.getElementById('gps').textContent=`GPS actualizado: ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`;toast('Ubicación actualizada')},()=>{document.getElementById('gps').textContent='No se pudo obtener GPS. Permite ubicación en el navegador.'});
