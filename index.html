@@ -191,10 +191,37 @@ async function requestJob(){
   toast('¡Flete solicitado correctamente!');
   renderClient();
 }
-function renderClient(){
- let j=state.active;if(!j){document.getElementById('clientStatus').innerHTML='<span class="pill">Sin servicio activo</span>';return}
- document.getElementById('clientStatus').innerHTML=`<h3>${j.status}</h3><p>${j.origin} → ${j.dest}</p><p class="status ok">${money(j.price)} · ${j.service}</p><button class="btn light" onclick="advance()">Actualizar estado</button>`;
-}
+async function renderClient(){
+  let j = state.active;
+
+  if(!j){
+    document.getElementById('clientStatus').innerHTML =
+      '<span class="pill">Sin servicio activo</span>';
+    return;
+  }
+
+  const { data: { user } } = await supabaseClient.auth.getUser();
+
+  if(user){
+    const { data, error } = await supabaseClient
+      .from('jobs')
+      .select('*')
+      .eq('id', j.id)
+      .eq('client_id', user.id)
+      .single();
+
+    if(!error && data){
+      j = data;
+      state.active = data;
+    }
+  }
+
+  document.getElementById('clientStatus').innerHTML =
+    `<h3>${j.status}</h3>
+     <p>${j.origin} → ${j.destination}</p>
+     <p class="status-ok">${money(j.price)} · ${j.service_type}</p>
+     <button class="btn light" onclick="renderClient()">Actualizar estado</button>`;
+  }
 function advance(){
  let j=state.active, seq=['Fletero encontrado','En camino','Recogido','Entregado'],i=seq.indexOf(j.status);j.status=seq[Math.min(i+1,seq.length-1)];renderClient();renderDriver();renderAdmin();toast(j.status==='Entregado'?'Servicio completado 🎉':'Estado actualizado');
 }
