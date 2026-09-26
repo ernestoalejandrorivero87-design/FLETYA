@@ -310,12 +310,22 @@ async function logoutDriver(){
 }async function acceptDriver(){
   if(!state.active) return;
 
-  const jobId = state.active.id;
+  const { data: { user } } = await supabaseClient.auth.getUser();
 
-  const { error } = await supabaseClient
-    .from('jobs')
-    .update({ status: 'En camino' })
-    .eq('id', jobId);
+if (!user) {
+  toast('Debes iniciar sesión como fletero');
+  return;
+}
+
+const jobId = state.active.id;
+
+const { error } = await supabaseClient
+  .from('jobs')
+  .update({
+    status: 'En camino',
+    driver_id: user.id
+  })
+  .eq('id', jobId);
 
   if(error){
     console.error(error);
