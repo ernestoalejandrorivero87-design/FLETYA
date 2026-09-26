@@ -249,17 +249,21 @@ if (profileError || !profile || profile.role !== 'driver') {
     return;
   }
 
-  e.innerHTML = data.map(job => `
-    <div class="card">
-      <h3>${job.origin} → ${job.destination}</h3>
-      <p><b>Vehículo:</b> ${job.vehicle_type || 'No especificado'}</p>
-      <p><b>Distancia:</b> ${job.distance_km || 0} km</p>
-      <p><b>Ayudantes:</b> ${job.helpers || 0}</p>
-      <p><b>Servicio:</b> ${job.service_type || 'No especificado'}</p>
-      <p><b>Precio:</b> $${Number(job.price || 0).toFixed(2)} MXN</p>
-      <span class="pill">Solicitud disponible</span>
-    </div>
-  `).join('');
+ e.innerHTML = data.map(job =>
+  `<div class="card">
+    <h3>${job.origin} → ${job.destination}</h3>
+    <p><b>Vehículo:</b> ${job.vehicle_type || 'No especificado'}</p>
+    <p><b>Distancia:</b> ${job.distance_km || 0} km</p>
+    <p><b>Ayudantes:</b> ${job.helpers || 0}</p>
+    <p><b>Servicio:</b> ${job.service_type || 'No especificado'}</p>
+    <p><b>Precio:</b> $${Number(job.price || 0).toFixed(2)} MXN</p>
+    <span class="pill">Solicitud disponible</span>
+    <br><br>
+    <button class="btn" onclick='state.active = ${JSON.stringify(job)}; acceptDriver();'>
+      🚚 Aceptar servicio
+    </button>
+  </div>`
+).join(''); 
  const logoutButton = document.createElement('button');
 logoutButton.className = 'btn';
 logoutButton.textContent = '🚪 Cerrar sesión';
