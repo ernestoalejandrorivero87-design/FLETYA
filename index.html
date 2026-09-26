@@ -211,6 +211,23 @@ async function renderDriver(){  const { data: { user }, error: authError } = awa
     }, 100);
     return;
   }
+ const { data: profile, error: profileError } = await supabaseClient
+  .from('profiles')
+  .select('role')
+  .eq('id', user.id)
+  .single();
+
+if (profileError || !profile || profile.role !== 'driver') {
+  toast('Esta sección es solo para fleteros');
+  show('client');
+  setTimeout(() => {
+    document.getElementById('authDriver')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+  }, 100);
+  return;
+  }
   const e = document.getElementById('jobCard');
 
   e.innerHTML = '<span class="pill">Buscando fletes disponibles...</span>';
