@@ -361,6 +361,13 @@ async function renderAdmin(){
  document.getElementById('adminTable').innerHTML=jobs.length?`<table><tr><th>ID</th><th>Cliente</th><th>Servicio</th><th>Total</th><th>Estado</th></tr>${jobs.map(j=>`<tr><td>${j.id}</td><td>${j.name}</td><td>${j.service}</td><td>${money(j.price)}</td><td>${j.status}</td></tr>`).join('')}</table>`:'<p class="muted">Todavía no hay servicios.</p>';
 }
 (function init(){try{state.jobs=JSON.parse(localStorage.getItem('fletya_jobs')||'[]');state.active=state.jobs[0]||null}catch(e){}quote();renderClient();renderDriver();renderAdmin()})();
+setInterval(() => {
+  const clientSection = document.getElementById('client');
+
+  if (clientSection && !clientSection.classList.contains('hidden')) {
+    renderClient();
+  }
+}, 10000);
 </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
