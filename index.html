@@ -316,7 +316,7 @@ if (!user) {
   toast('Debes iniciar sesión como fletero');
   return;
 }
-
+toast('ID fletero: ' + user.id);
 const jobId = state.active.id;
 
 const { error } = await supabaseClient
