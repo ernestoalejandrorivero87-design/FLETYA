@@ -472,11 +472,12 @@ const { error } = await supabaseClient
   }
 
   state.active.status = 'completed';
-  state.accepted = false;
+state.active = null;
+state.accepted = false;
 
-  toast('✅ Servicio completado correctamente');
+toast('✅ Servicio completado correctamente');
 
-  renderDriver();
+renderDriver();
 }
 function driverLocation(){
  if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
