@@ -322,7 +322,7 @@ const jobId = state.active.id;
 const { error } = await supabaseClient
   .from('jobs')
   .update({
-    status: 'En camino',
+    status: 'en_route',
     driver_id: user.id
   })
   .eq('id', jobId);
@@ -333,7 +333,7 @@ const { error } = await supabaseClient
     return;
   }
 
-  state.active.status = 'En camino';
+  state.active.status = 'en_route';
   state.accepted = true;
 
   state.jobs = state.jobs.filter(j => j.id !== jobId);
