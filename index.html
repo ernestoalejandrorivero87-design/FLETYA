@@ -376,7 +376,7 @@ async function renderAdmin(){
     state.active=state.jobs[0]||null;
   }catch(e){}
   quote();
-  renderClient();
+  // renderClient se ejecutará cuando corresponda
 })();
 setInterval(() => {
   const clientSection = document.getElementById('client');
