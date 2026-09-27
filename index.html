@@ -317,6 +317,12 @@ function advance(){
         <span class="pill">
           🟢 ${activeJob.status === 'en_route' ? 'En ruta' : 'Aceptado'}
         </span>
+        ${activeJob.status === 'en_route' ? `
+  <br><br>
+  <button class="btn" onclick="completeDriver()">
+    ✅ Completar servicio
+  </button>
+` : ''}
       </div>
       <br>
     `;
