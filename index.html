@@ -225,7 +225,9 @@ async function renderClient(){
 function advance(){
  let j=state.active, seq=['Fletero encontrado','En camino','Recogido','Entregado'],i=seq.indexOf(j.status);j.status=seq[Math.min(i+1,seq.length-1)];renderClient();renderDriver();renderAdmin();toast(j.status==='Entregado'?'Servicio completado 🎉':'Estado actualizado');
 }
-async function renderDriver(){  const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+ async function renderDriver(){
+  const { data: { user }, error: authError } =
+    await supabaseClient.auth.getUser();
 
   if (authError || !user) {
     toast('Debes iniciar sesión como fletero');
@@ -238,65 +240,159 @@ async function renderDriver(){  const { data: { user }, error: authError } = awa
     }, 100);
     return;
   }
- const { data: profile, error: profileError } = await supabaseClient
-  .from('profiles')
-  .select('role')
-  .eq('id', user.id)
-  .single();
 
-if (profileError || !profile || profile.role !== 'driver') {
-  toast('Esta sección es solo para fleteros');
-  show('client');
-  setTimeout(() => {
-    document.getElementById('authDriver')?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center'
-    });
-  }, 100);
-  return;
+  const { data: profile, error: profileError } =
+    await supabaseClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+  if (profileError || !profile || profile.role !== 'driver') {
+    toast('Esta sección es solo para fleteros');
+    show('client');
+    return;
   }
+
   const e = document.getElementById('jobCard');
 
-  e.innerHTML = '<span class="pill">Buscando fletes disponibles...</span>';
+  e.innerHTML =
+    '<span class="pill">Cargando servicios...</span>';
+
+  /* =========================
+     MI SERVICIO ACTUAL
+     ========================= */
+
+  const { data: activeJob, error: activeError } =
+    await supabaseClient
+      .from('jobs')
+      .select('*')
+      .eq('driver_id', user.id)
+      .in('status', ['accepted', 'en_route'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  let html = '';
+
+  if (activeError) {
+    console.error(activeError);
+  }
+
+  if (activeJob) {
+    html += `
+      <div class="card" style="border:2px solid #087f8c">
+        <h3>🚚 Mi servicio actual</h3>
+
+        <p>
+          <b>Ruta:</b>
+          ${activeJob.origin} → ${activeJob.destination}
+        </p>
+
+        <p>
+          <b>Vehículo:</b>
+          ${activeJob.vehicle_type || 'No especificado'}
+        </p>
+
+        <p>
+          <b>Distancia:</b>
+          ${activeJob.distance_km || 0} km
+        </p>
+
+        <p>
+          <b>Ayudantes:</b>
+          ${activeJob.helpers || 0}
+        </p>
+
+        <p>
+          <b>Servicio:</b>
+          ${activeJob.service_type || 'No especificado'}
+        </p>
+
+        <p>
+          <b>Precio:</b>
+          $${Number(activeJob.price || 0).toFixed(2)} MXN
+        </p>
+
+        <span class="pill">
+          🟢 ${activeJob.status === 'en_route' ? 'En ruta' : 'Aceptado'}
+        </span>
+      </div>
+      <br>
+    `;
+  }
+
+  /* =========================
+     NUEVAS SOLICITUDES
+     ========================= */
 
   const { data, error } = await supabaseClient
     .from('jobs')
     .select('*')
     .eq('status', 'requested')
+    .is('driver_id', null)
     .order('created_at', { ascending: false });
 
   if (error) {
-    e.innerHTML = '<span class="pill">Error al cargar fletes.</span>';
     console.error(error);
-    return;
+    html +=
+      '<span class="pill">Error al cargar nuevas solicitudes.</span>';
+  } else if (!data || data.length === 0) {
+    html +=
+      '<span class="pill">No hay nuevas solicitudes disponibles.</span>';
+  } else {
+    html += '<h3>📋 Nuevas solicitudes</h3>';
+
+    html += data.map(job =>
+      `<div class="card">
+        <h3>${job.origin} → ${job.destination}</h3>
+
+        <p>
+          <b>Vehículo:</b>
+          ${job.vehicle_type || 'No especificado'}
+        </p>
+
+        <p>
+          <b>Distancia:</b>
+          ${job.distance_km || 0} km
+        </p>
+
+        <p>
+          <b>Ayudantes:</b>
+          ${job.helpers || 0}
+        </p>
+
+        <p>
+          <b>Servicio:</b>
+          ${job.service_type || 'No especificado'}
+        </p>
+
+        <p>
+          <b>Precio:</b>
+          $${Number(job.price || 0).toFixed(2)} MXN
+        </p>
+
+        <span class="pill">Solicitud disponible</span>
+
+        <br><br>
+
+        <button class="btn"
+          onclick='state.active = ${JSON.stringify(job)}; acceptDriver();'>
+          🚚 Aceptar servicio
+        </button>
+      </div>`
+    ).join('');
   }
 
-  if (!data || data.length === 0) {
-    e.innerHTML = '<span class="pill">No hay fletes disponibles.</span>';
-    return;
-  }
+  e.innerHTML = html;
 
- e.innerHTML = data.map(job =>
-  `<div class="card">
-    <h3>${job.origin} → ${job.destination}</h3>
-    <p><b>Vehículo:</b> ${job.vehicle_type || 'No especificado'}</p>
-    <p><b>Distancia:</b> ${job.distance_km || 0} km</p>
-    <p><b>Ayudantes:</b> ${job.helpers || 0}</p>
-    <p><b>Servicio:</b> ${job.service_type || 'No especificado'}</p>
-    <p><b>Precio:</b> $${Number(job.price || 0).toFixed(2)} MXN</p>
-    <span class="pill">Solicitud disponible</span>
-    <br><br>
-    <button class="btn" onclick='state.active = ${JSON.stringify(job)}; acceptDriver();'>
-      🚚 Aceptar servicio
-    </button>
-  </div>`
-).join(''); 
- const logoutButton = document.createElement('button');
-logoutButton.className = 'btn';
-logoutButton.textContent = '🚪 Cerrar sesión';
-logoutButton.onclick = logoutDriver;
-e.appendChild(logoutButton);                             
-}
+  const logoutButton = document.createElement('button');
+  logoutButton.className = 'btn';
+  logoutButton.textContent = '🚪 Cerrar sesión';
+  logoutButton.onclick = logoutDriver;
+
+  e.appendChild(logoutButton);
+ }                         
 async function logoutDriver(){
   await supabaseClient.auth.signOut();
   toast('Sesión cerrada');
