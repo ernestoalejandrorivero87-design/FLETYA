@@ -438,6 +438,40 @@ const { error } = await supabaseClient
 
   toast('Servicio aceptado. Cliente notificado.');
 }
+  async function completeDriver(){
+  if(!state.active) return;
+
+  const { data: { user }, error: authError } =
+    await supabaseClient.auth.getUser();
+
+  if(authError || !user){
+    toast('Debes iniciar sesión como fletero');
+    return;
+  }
+
+  const jobId = state.active.id;
+
+  const { error } = await supabaseClient
+    .from('jobs')
+    .update({
+      status: 'completed'
+    })
+    .eq('id', jobId)
+    .eq('driver_id', user.id);
+
+  if(error){
+    console.error(error);
+    toast('Error al completar el servicio: ' + error.message);
+    return;
+  }
+
+  state.active.status = 'completed';
+  state.accepted = false;
+
+  toast('✅ Servicio completado correctamente');
+
+  renderDriver();
+}
 function driverLocation(){
  if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
  navigator.geolocation.getCurrentPosition(p=>{document.getElementById('gps').textContent=`GPS actualizado: ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`;toast('Ubicación actualizada')},()=>{document.getElementById('gps').textContent='No se pudo obtener GPS. Permite ubicación en el navegador.'});
