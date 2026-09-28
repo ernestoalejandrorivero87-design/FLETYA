@@ -192,36 +192,57 @@ async function requestJob(){
   renderClient();
 }
 async function renderClient(){
-  let j = state.active;
 
-  if(!j){
+  const { data: { user }, error: authError } =
+    await supabaseClient.auth.getUser();
+
+  if (authError || !user) {
     document.getElementById('clientStatus').innerHTML =
-      '<span class="pill">Sin servicio activo</span>';
+      '<span class="pill">Inicia sesión para ver tu servicio.</span>';
     return;
   }
 
-  const { data: { user } } = await supabaseClient.auth.getUser();
+  const { data: jobs, error } = await supabaseClient
+    .from('jobs')
+    .select('*')
+    .eq('client_id', user.id)
+    .in('status', ['requested', 'en_route'])
+    .order('created_at', { ascending: false })
+    .limit(1);
 
-  if(user){
-    const { data, error } = await supabaseClient
-      .from('jobs')
-      .select('*')
-      .eq('id', j.id)
-      .eq('client_id', user.id)
-      .single();
+  if (error) {
+    console.error(error);
 
-    if(!error && data){
-      j = data;
-      state.active = data;
-    }
+    document.getElementById('clientStatus').innerHTML =
+      '<span class="pill">Error al consultar tu servicio.</span>';
+
+    return;
   }
+
+  if (!jobs || jobs.length === 0) {
+
+    state.active = null;
+
+    document.getElementById('clientStatus').innerHTML =
+      '<span class="pill">Sin servicio activo</span>';
+
+    return;
+  }
+
+  const j = jobs[0];
+
+  state.active = j;
 
   document.getElementById('clientStatus').innerHTML =
     `<h3>${j.status}</h3>
      <p>${j.origin} → ${j.destination}</p>
-     <p class="status-ok">${money(j.price)} · ${j.service_type}</p>
-     <button class="btn light" onclick="renderClient()">Actualizar estado</button>`;
-  }
+     <p class="status-ok">
+       ${money(j.price)} · ${j.service_type || 'Servicio'}
+     </p>
+     <button class="btn light" onclick="renderClient()">
+       Actualizar estado
+     </button>`;
+}
 function advance(){
  let j=state.active, seq=['Fletero encontrado','En camino','Recogido','Entregado'],i=seq.indexOf(j.status);j.status=seq[Math.min(i+1,seq.length-1)];renderClient();renderDriver();renderAdmin();toast(j.status==='Entregado'?'Servicio completado 🎉':'Estado actualizado');
 }
