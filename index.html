@@ -838,5 +838,9 @@ async function loginClient() {
   await supabaseClient.auth.signOut();
   show('client');
   }
+  async function logoutClient() {
+  await supabaseClient.auth.signOut();
+  show('client');
+  }
 </script>
 </body></html>
