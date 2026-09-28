@@ -244,7 +244,30 @@ async function renderClient(){
 
     return;
   }
+  const { data: history, error: historyError } =
+    await supabaseClient
+      .from('jobs')
+      .select('*')
+      .eq('client_id', user.id)
+      .order('created_at', { ascending: false });
 
+  if (!historyError) {
+    const historyBox = document.getElementById('clientHistory');
+
+    historyBox.innerHTML = history && history.length
+      ? history.map(job => `
+          <div class="card" style="margin-top:10px">
+            <strong>${job.service_type || 'Servicio'}</strong>
+            <p>${job.origin || ''} → ${job.destination || ''}</p>
+            <p>${money(Number(job.price || 0))}</p>
+            <p class="muted">
+              ${job.status || 'Sin estado'}
+              · ${new Date(job.created_at).toLocaleDateString('es-MX')}
+            </p>
+          </div>
+        `).join('')
+      : '<p class="muted">Todavía no tienes servicios.</p>';
+  }
   if (!jobs || jobs.length === 0) {
 
     state.active = null;
