@@ -206,7 +206,7 @@ async function renderClient(){
     .from('jobs')
     .select('*')
     .eq('client_id', user.id)
-    .in('status', ['requested', 'en_route'])
+    .in('status', ['requested', 'en_route', 'completed'])
     .order('created_at', { ascending: false })
     .limit(1);
 
