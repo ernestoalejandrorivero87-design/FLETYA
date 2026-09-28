@@ -64,6 +64,23 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;bord
 
   <p id="driverMessage" class="muted"></p>
 </div>
+
+<div class="card" id="authAdmin">
+  <h2>Cuenta de administrador</h2>
+
+  <label>Correo electrónico</label>
+  <input id="adminEmail" type="email" placeholder="admin@email.com">
+
+  <label>Contraseña</label>
+  <input id="adminPassword" type="password" placeholder="Mínimo 6 caracteres">
+
+  <button class="btn" onclick="loginAdmin()">
+    🔐 Iniciar sesión como administrador
+  </button>
+
+  <p id="adminMessage" class="muted"></p>
+</div>
+
 <h2>Solicitar flete</h2>
 <label>Nombre</label><input id="cname" placeholder="Tu nombre">
 <label>Origen</label><input id="origin" placeholder="Ej. Plaza Las Américas">
