@@ -760,5 +760,43 @@ async function loginClient() {
 
   message.textContent = '¡Sesión iniciada correctamente!';
 }
+  async function loginAdmin() {
+  const email = document.getElementById('adminEmail').value.trim();
+  const password = document.getElementById('adminPassword').value;
+  const message = document.getElementById('adminMessage');
+
+  if (!email || !password) {
+    message.textContent = 'Escribe tu correo y contraseña.';
+    return;
+  }
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: email,
+    password: password
+  });
+
+  if (error) {
+    message.textContent = 'Error: ' + error.message;
+    return;
+  }
+
+  const user = data.user;
+
+  const { data: profile, error: profileError } =
+    await supabaseClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+  if (profileError || !profile || profile.role !== 'admin') {
+    await supabaseClient.auth.signOut();
+    message.textContent = 'Esta cuenta no es de administrador.';
+    return;
+  }
+
+  message.textContent = '¡Sesión de administrador iniciada correctamente!';
+  show('admin');
+  }
 </script>
 </body></html>
