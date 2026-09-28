@@ -118,6 +118,9 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;bord
 
 <section id="admin" class="hidden">
 <div class="hero"><h1>FLETYA Admin</h1><p>Control básico de servicios, ventas y comisión.</p></div>
+  <button class="btn" onclick="logoutAdmin()">
+  🚪 Cerrar sesión de administrador
+  </button>
 <div class="grid">
 <div class="card"><h3>Servicios</h3><div class="price" id="jobsCount">0</div><span class="muted">solicitudes</span></div>
 <div class="card"><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
@@ -797,6 +800,10 @@ async function loginClient() {
 
   message.textContent = '¡Sesión de administrador iniciada correctamente!';
   show('admin');
+  }
+  async function logoutAdmin() {
+  await supabaseClient.auth.signOut();
+  show('client');
   }
 </script>
 </body></html>
