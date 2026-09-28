@@ -707,7 +707,7 @@ async function loginDriver() {
   message.textContent = '¡Sesión de fletero iniciada correctamente!';
   console.log('Fletero conectado:', data.user);
 }
-  async function loginClient() {
+async function loginClient() {
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   const message = document.getElementById('authMessage');
@@ -717,13 +717,27 @@ async function loginDriver() {
     return;
   }
 
-  const { error } = await supabaseClient.auth.signInWithPassword({
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
     email: email,
     password: password
   });
 
   if (error) {
     message.textContent = 'Error: ' + error.message;
+    return;
+  }
+
+  const user = data.user;
+
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile || profile.role !== 'client') {
+    await supabaseClient.auth.signOut();
+    message.textContent = 'Esta cuenta no es de cliente.';
     return;
   }
 
