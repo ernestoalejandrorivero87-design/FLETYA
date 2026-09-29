@@ -801,6 +801,7 @@ async function loginClient() {
   }
 
   message.textContent = '¡Sesión iniciada correctamente!';
+  renderClient();
 }
   async function loginAdmin() {
   const email = document.getElementById('adminEmail').value.trim();
