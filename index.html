@@ -227,9 +227,15 @@ async function renderClient(){
     await supabaseClient.auth.getUser();
 
   if (authError || !user) {
-    document.getElementById('clientStatus').innerHTML =
-      '<span class="pill">Inicia sesión para ver tu servicio.</span>';
-    return;
+  document.getElementById('clientStatus').innerHTML =
+    '<span class="pill">Inicia sesión para ver tu servicio.</span>';
+
+  document.getElementById('clientHistory').innerHTML =
+    '<p class="muted">Inicia sesión para ver tu historial.</p>';
+
+  document.getElementById('clientLogoutBtn').style.display = 'none';
+
+  return;
   }
 
   const { data: jobs, error } = await supabaseClient
