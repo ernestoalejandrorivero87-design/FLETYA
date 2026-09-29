@@ -237,7 +237,7 @@ async function renderClient(){
 
   return;
   }
-
+document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   const { data: jobs, error } = await supabaseClient
     .from('jobs')
     .select('*')
