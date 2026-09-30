@@ -619,6 +619,23 @@ const nameById = Object.fromEntries(
     profile.full_name || 'Sin nombre'
   ])
 );
+  const search = (document.getElementById('adminSearch')?.value || '').toLowerCase().trim();
+
+const filteredServices = services.filter(job => {
+  const clientName = nameById[job.client_id] || 'Sin cliente';
+  const driverName = nameById[job.driver_id] || 'Sin fletero';
+  const service = job.service_type || '';
+  const status = job.status || '';
+  const id = job.id || '';
+
+  return (
+    clientName.toLowerCase().includes(search) ||
+    driverName.toLowerCase().includes(search) ||
+    service.toLowerCase().includes(search) ||
+    status.toLowerCase().includes(search) ||
+    id.toLowerCase().includes(search)
+  );
+});
   const sales = services.reduce(
     (total, job) => total + Number(job.price || 0),
     0
@@ -652,7 +669,7 @@ const nameById = Object.fromEntries(
             <th>Estado</th>
           </tr>
 
-          ${services.map(job => `
+          ${filteredServices.map(job => `
             <tr>
               <td>${job.id}</td>
               <td>${nameById[job.client_id] || 'Sin cliente'}</td>
