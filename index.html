@@ -628,6 +628,7 @@ async function renderAdmin(){
           <tr>
             <th>ID</th>
             <th>Cliente</th>
+            <th>Fletero</th>
             <th>Servicio</th>
             <th>Total</th>
             <th>Estado</th>
@@ -637,6 +638,7 @@ async function renderAdmin(){
             <tr>
               <td>${job.id}</td>
               <td>${job.client_id || 'Sin cliente'}</td>
+              <td>${job.driver_id || 'Sin fletero'}</td>
               <td>${job.service_type || 'Sin especificar'}</td>
               <td>${money(Number(job.price || 0))}</td>
               <td>${job.status || 'Sin estado'}</td>
