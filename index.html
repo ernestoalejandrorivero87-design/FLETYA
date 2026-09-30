@@ -137,7 +137,15 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;bord
 <div class="card"><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
 <div class="card"><h3>Fletero recibe</h3><div class="price" id="driverNet">$0</div><span class="muted">85% en este demo</span></div>
 </div>
-<div class="card" style="margin-top:18px"><h2>Servicios recientes</h2><div id="adminTable"></div></div>
+<div class="card" style="margin-top:18px"><h2>Servicios recientes</h2> 
+  <input
+  id="adminSearch"
+  type="text"
+  placeholder="🔎 Buscar por cliente, fletero, servicio, estado o ID..."
+  oninput="renderAdmin()"
+  style="width:100%;padding:12px;margin:12px 0;border:1px solid #ddd;border-radius:10px;"
+>
+  <div id="adminTable"></div></div>
 </section>
 </main>
 <div class="toast" id="toast"></div>
