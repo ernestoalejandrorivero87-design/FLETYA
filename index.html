@@ -145,6 +145,16 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;bord
   oninput="renderAdmin()"
   style="width:100%;padding:12px;margin:12px 0;border:1px solid #ddd;border-radius:10px;"
 >
+ <select
+  id="adminStatusFilter"
+  onchange="renderAdmin()"
+  style="width:100%;padding:12px;margin:12px 0"
+>
+  <option value="">Todos los estados</option>
+  <option value="requested">Solicitado</option>
+  <option value="en_route">En camino</option>
+  <option value="completed">Completado</option>
+ </select>
   <div id="adminTable"></div></div>
 </section>
 </main>
