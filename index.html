@@ -601,6 +601,16 @@ async function renderAdmin(){
 
   const services = jobs || [];
 
+  const { data: profiles } = await supabaseClient
+  .from('profiles')
+  .select('id, email');
+
+const emailById = Object.fromEntries(
+  (profiles || []).map(profile => [
+    profile.id,
+    profile.email || 'Sin correo'
+  ])
+);
   const sales = services.reduce(
     (total, job) => total + Number(job.price || 0),
     0
@@ -637,8 +647,8 @@ async function renderAdmin(){
           ${services.map(job => `
             <tr>
               <td>${job.id}</td>
-              <td>${job.client_id || 'Sin cliente'}</td>
-              <td>${job.driver_id || 'Sin fletero'}</td>
+              <td>${emailById[job.client_id] || 'Sin cliente'}</td>
+              <td>${emailById[job.driver_id] || 'Sin fletero'}</td>
               <td>${job.service_type || 'Sin especificar'}</td>
               <td>${money(Number(job.price || 0))}</td>
               <td>${job.status || 'Sin estado'}</td>
