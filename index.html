@@ -678,11 +678,13 @@ const filteredServices = services.filter(job => {
         <table>
           <tr>
             <th>ID</th>
-            <th>Cliente</th>
-            <th>Fletero</th>
-            <th>Servicio</th>
-            <th>Total</th>
-            <th>Estado</th>
+<th>Cliente</th>
+<th>Fletero</th>
+<th>Origen</th>
+<th>Destino</th>
+<th>Servicio</th>
+<th>Total</th>
+<th>Estado</th>
           </tr>
 
           ${filteredServices.map(job => `
@@ -690,6 +692,8 @@ const filteredServices = services.filter(job => {
               <td>${job.id}</td>
               <td>${nameById[job.client_id] || 'Sin cliente'}</td>
               <td>${nameById[job.driver_id] || 'Sin fletero'}</td>
+              <td>${job.origin || 'Sin origen'}</td>
+<td>${job.destination || 'Sin destino'}</td>
               <td>${job.service_type || 'Sin especificar'}</td>
               <td>${money(Number(job.price || 0))}</td>
               <td>${job.status || 'Sin estado'}</td>
