@@ -619,6 +619,9 @@ async function renderAdmin(){
 
   const services = jobs || [];
 
+const statusFilter =
+  document.getElementById('adminStatusFilter')?.value || '';
+
   const { data: profiles } = await supabaseClient
   .from('profiles')
   .select('id, full_name');
@@ -639,12 +642,15 @@ const filteredServices = services.filter(job => {
   const id = job.id || '';
 
   return (
+  (!statusFilter || status === statusFilter) &&
+  (
     clientName.toLowerCase().includes(search) ||
     driverName.toLowerCase().includes(search) ||
     service.toLowerCase().includes(search) ||
     status.toLowerCase().includes(search) ||
     id.toLowerCase().includes(search)
-  );
+  )
+);
 });
   const sales = services.reduce(
     (total, job) => total + Number(job.price || 0),
