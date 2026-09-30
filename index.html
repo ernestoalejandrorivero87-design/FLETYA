@@ -647,8 +647,8 @@ const nameById = Object.fromEntries(
           ${services.map(job => `
             <tr>
               <td>${job.id}</td>
-              ${nameById[job.client_id] || 'Sin cliente'}
-              ${nameById[job.driver_id] || 'Sin fletero'}
+              <td>${nameById[job.client_id] || 'Sin cliente'}</td>
+              <td>${nameById[job.driver_id] || 'Sin fletero'}</td>
               <td>${job.service_type || 'Sin especificar'}</td>
               <td>${money(Number(job.price || 0))}</td>
               <td>${job.status || 'Sin estado'}</td>
