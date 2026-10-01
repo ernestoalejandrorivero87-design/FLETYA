@@ -740,7 +740,12 @@ const filteredServices = services.filter(job => {
 <td>${job.destination || 'Sin destino'}</td>
               <td>${job.service_type || 'Sin especificar'}</td>
               <td>${money(Number(job.price || 0))}</td>
-              <td>${job.status || 'Sin estado'}</td>
+              <td>${
+  job.status === 'requested' ? '🟡 Solicitado' :
+  job.status === 'en_route' ? '🔵 En camino' :
+  job.status === 'completed' ? '🟢 Completado' :
+  job.status || 'Sin estado'
+}</td>
   <td>
   <button onclick="viewJob('${job.id}')">Ver</button>
 </td>          
