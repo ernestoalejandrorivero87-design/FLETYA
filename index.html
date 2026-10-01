@@ -685,6 +685,7 @@ const filteredServices = services.filter(job => {
 <th>Servicio</th>
 <th>Total</th>
 <th>Estado</th>
+<th>Detalles</th>
           </tr>
 
           ${filteredServices.map(job => `
@@ -697,12 +698,40 @@ const filteredServices = services.filter(job => {
               <td>${job.service_type || 'Sin especificar'}</td>
               <td>${money(Number(job.price || 0))}</td>
               <td>${job.status || 'Sin estado'}</td>
+  <td>
+  <button onclick="viewJob('${job.id}')">Ver</button>
+</td>          
             </tr>
           `).join('')}
         </table>
       `
       : '<p class="muted">Todavía no hay servicios.</p>';
                     }
+  async function viewJob(jobId){
+  const { data: job, error } = await supabaseClient
+    .from('jobs')
+    .select('*')
+    .eq('id', jobId)
+    .single();
+
+  if (error || !job) {
+    toast('No se pudo cargar el servicio');
+    return;
+  }
+
+  alert(
+    'DETALLES DEL SERVICIO\n\n' +
+    'ID: ' + job.id + '\n' +
+    'Origen: ' + (job.origin || 'Sin origen') + '\n' +
+    'Destino: ' + (job.destination || 'Sin destino') + '\n' +
+    'Servicio: ' + (job.service_type || 'Sin especificar') + '\n' +
+    'Distancia: ' + (job.distance_km || 0) + ' km\n' +
+    'Vehículo: ' + (job.vehicle_type || 'Sin especificar') + '\n' +
+    'Ayudantes: ' + (job.helpers || 0) + '\n' +
+    'Precio: $' + Number(job.price || 0).toLocaleString('es-MX') + '\n' +
+    'Estado: ' + (job.status || 'Sin estado')
+  );
+  }
 (function init(){
   try{
     state.jobs=JSON.parse(localStorage.getItem('fletya_jobs')||'[]');
