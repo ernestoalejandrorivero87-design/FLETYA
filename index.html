@@ -228,7 +228,22 @@ async function requestJob(){
     toast('Debes iniciar sesión como cliente.');
     return;
   }
+const { data: activeJobs, error: activeJobsError } = await supabaseClient
+  .from('jobs')
+  .select('id')
+  .eq('client_id', user.id)
+  .in('status', ['requested', 'en_route'])
+  .limit(1);
 
+if (activeJobsError) {
+  toast('No se pudo comprobar tus servicios activos.');
+  return;
+}
+
+if (activeJobs && activeJobs.length > 0) {
+  toast('🚚 Ya tienes un servicio solicitado o en camino.');
+  return;
+}
   const origin = document.getElementById('origin').value.trim();
   const destination = document.getElementById('dest').value.trim();
   const distance = parseFloat(document.getElementById('km').value) || 0;
