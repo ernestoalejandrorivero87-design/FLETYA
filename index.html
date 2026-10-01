@@ -715,7 +715,7 @@ const filteredServices = services.filter(job => {
     money(driverNet);
 
   document.getElementById('adminTable').innerHTML =
-    services.length
+    filteredServices.length
       ? `
         <table>
           <tr>
