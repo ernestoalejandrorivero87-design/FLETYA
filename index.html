@@ -354,7 +354,12 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   state.active = j;
 
   document.getElementById('clientStatus').innerHTML =
-    `<h3>${j.status}</h3>
+    <h3>${
+  j.status === 'requested' ? '🟡 Solicitado' :
+  j.status === 'en_route' ? '🔵 En camino' :
+  j.status === 'completed' ? '🟢 Completado' :
+  j.status
+}</h3>
      <p>${j.origin} → ${j.destination}</p>
      <p class="status-ok">
        ${money(j.price)} · ${j.service_type || 'Servicio'}
