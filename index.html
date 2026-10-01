@@ -903,6 +903,7 @@ async function loginDriver() {
 
   message.textContent = '¡Sesión de fletero iniciada correctamente!';
   console.log('Fletero conectado:', data.user);
+ show('driver');
 }
 async function loginClient() {
   const email = document.getElementById('authEmail').value.trim();
