@@ -775,6 +775,9 @@ const filteredServices = services.filter(job => {
 
 document.getElementById('jobModal').classList.remove('hidden');
   }
+  function closeJobModal(){
+  document.getElementById('jobModal').classList.add('hidden');
+  }
 (function init(){
   try{
     state.jobs=JSON.parse(localStorage.getItem('fletya_jobs')||'[]');
