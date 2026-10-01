@@ -159,7 +159,49 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;bord
 </section>
 </main>
 <div class="toast" id="toast"></div>
+<div id="jobModal" class="hidden" style="
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.55);
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+">
+  <div class="card" style="
+    width:100%;
+    max-width:520px;
+    max-height:90vh;
+    overflow:auto;
+    position:relative;
+  ">
+    <button
+      onclick="closeJobModal()"
+      style="
+        position:absolute;
+        right:15px;
+        top:15px;
+        border:0;
+        background:transparent;
+        font-size:24px;
+        cursor:pointer;
+      "
+    >✕</button>
 
+    <h2>Detalles del servicio</h2>
+
+    <div id="jobModalContent"></div>
+
+    <button
+      class="btn"
+      onclick="closeJobModal()"
+      style="margin-top:18px;"
+    >
+      Cerrar
+    </button>
+  </div>
+</div>
 <script>
 const state={jobs:[],active:null,accepted:false,status:'Pendiente'};
 const rate={pickup:35,camioneta:45,camion:65};
@@ -719,18 +761,19 @@ const filteredServices = services.filter(job => {
     return;
   }
 
-  alert(
-    'DETALLES DEL SERVICIO\n\n' +
-    'ID: ' + job.id + '\n' +
-    'Origen: ' + (job.origin || 'Sin origen') + '\n' +
-    'Destino: ' + (job.destination || 'Sin destino') + '\n' +
-    'Servicio: ' + (job.service_type || 'Sin especificar') + '\n' +
-    'Distancia: ' + (job.distance_km || 0) + ' km\n' +
-    'Vehículo: ' + (job.vehicle_type || 'Sin especificar') + '\n' +
-    'Ayudantes: ' + (job.helpers || 0) + '\n' +
-    'Precio: $' + Number(job.price || 0).toLocaleString('es-MX') + '\n' +
-    'Estado: ' + (job.status || 'Sin estado')
-  );
+  document.getElementById('jobModalContent').innerHTML = `
+  <p><strong>🆔 ID:</strong><br>${job.id}</p>
+  <p><strong>📍 Origen:</strong> ${job.origin || 'Sin origen'}</p>
+  <p><strong>🏁 Destino:</strong> ${job.destination || 'Sin destino'}</p>
+  <p><strong>📦 Servicio:</strong> ${job.service_type || 'Sin especificar'}</p>
+  <p><strong>📏 Distancia:</strong> ${job.distance_km || 0} km</p>
+  <p><strong>🚚 Vehículo:</strong> ${job.vehicle_type || 'Sin especificar'}</p>
+  <p><strong>👷 Ayudantes:</strong> ${job.helpers || 0}</p>
+  <p><strong>💰 Precio:</strong> $${Number(job.price || 0).toLocaleString('es-MX')}</p>
+  <p><strong>🔵 Estado:</strong> ${job.status || 'Sin estado'}</p>
+`;
+
+document.getElementById('jobModal').classList.remove('hidden');
   }
 (function init(){
   try{
