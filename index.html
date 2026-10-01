@@ -332,7 +332,12 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
             <p>${job.origin || ''} → ${job.destination || ''}</p>
             <p>${money(Number(job.price || 0))}</p>
             <p class="muted">
-              ${job.status || 'Sin estado'}
+              ${
+  job.status === 'requested' ? '🟡 Solicitado' :
+  job.status === 'en_route' ? '🔵 En camino' :
+  job.status === 'completed' ? '🟢 Completado' :
+  job.status || 'Sin estado'
+              }
               · ${new Date(job.created_at).toLocaleDateString('es-MX')}
             </p>
           </div>
