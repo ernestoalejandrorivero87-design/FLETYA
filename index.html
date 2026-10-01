@@ -137,6 +137,9 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 <div class="card"><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
 <div class="card"><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
 <div class="card"><h3>Fletero recibe</h3><div class="price" id="driverNet">$0</div><span class="muted">85% en este demo</span></div>
+ <div class="card"><h3>🟡 Solicitados</h3><div class="price" id="requestedCount">0</div><span class="muted">servicios pendientes</span></div>
+<div class="card"><h3>🔵 En camino</h3><div class="price" id="enRouteCount">0</div><span class="muted">servicios activos</span></div>
+<div class="card"><h3>🟢 Completados</h3><div class="price" id="completedCount">0</div><span class="muted">servicios terminados</span></div>
 </div>
 <div class="card" style="margin-top:18px"><h2>Servicios recientes</h2> 
   <input
@@ -730,6 +733,14 @@ const filteredServices = services.filter(job => {
 
   document.getElementById('jobsCount').textContent =
     services.length;
+   document.getElementById('requestedCount').textContent =
+    services.filter(job => job.status === 'requested').length;
+
+  document.getElementById('enRouteCount').textContent =
+    services.filter(job => job.status === 'en_route').length;
+
+  document.getElementById('completedCount').textContent =
+    services.filter(job => job.status === 'completed').length;
 
   document.getElementById('sales').textContent =
     money(sales);
