@@ -702,7 +702,17 @@ async function renderAdmin(){
   }
 
   const services = jobs || [];
+  const { data: adminUsers, error: adminUsersError } =
+    await supabaseClient
+      .from('profiles')
+      .select('id, full_name, email, phone, role, created_at')
+      .order('created_at', { ascending: false });
 
+  if (adminUsersError) {
+    console.error(adminUsersError);
+    toast('Error al cargar los usuarios');
+    return;
+ }
 const statusFilter =
   document.getElementById('adminStatusFilter')?.value || '';
 
@@ -743,7 +753,33 @@ const filteredServices = services.filter(job => {
 
   const commission = sales * 0.15;
   const driverNet = sales - commission;
+  document.getElementById('adminUsersTable').innerHTML =
+    adminUsers.length
+      ? `
+        <table>
+          <tr>
+            <th>Nombre</th>
+            <th>Correo</th>
+            <th>Teléfono</th>
+            <th>Rol</th>
+          </tr>
 
+          ${adminUsers.map(user => `
+            <tr>
+              <td>${user.full_name || 'Sin nombre'}</td>
+              <td>${user.email || 'Sin correo'}</td>
+              <td>${user.phone || 'Sin teléfono'}</td>
+              <td>${
+                user.role === 'admin' ? '🛡️ Administrador' :
+                user.role === 'driver' ? '🚚 Fletero' :
+                user.role === 'client' ? '👤 Cliente' :
+                user.role || 'Sin rol'
+              }</td>
+            </tr>
+          `).join('')}
+        </table>
+      `
+      : '<p class="muted">No hay usuarios registrados.</p>';
   document.getElementById('jobsCount').textContent =
     services.length;
    document.getElementById('requestedCount').textContent =
