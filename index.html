@@ -140,6 +140,11 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
  <div class="card"><h3>🟡 Solicitados</h3><div class="price" id="requestedCount">0</div><span class="muted">servicios pendientes</span></div>
 <div class="card"><h3>🔵 En camino</h3><div class="price" id="enRouteCount">0</div><span class="muted">servicios activos</span></div>
 <div class="card"><h3>🟢 Completados</h3><div class="price" id="completedCount">0</div><span class="muted">servicios terminados</span></div>
+ <div class="card"><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">ventas realizadas</span></div>
+
+<div class="card"><h3>🚚 Servicios del mes</h3><div class="price" id="monthlyJobs">0</div><span class="muted">servicios registrados</span></div>
+
+<div class="card"><h3>💵 Comisión del mes</h3><div class="price" id="monthlyCommission">$0</div><span class="muted">15% de comisión</span></div>
 </div>
 <div class="card" style="margin-top:18px"><h2>Servicios recientes</h2> 
   <input
@@ -799,7 +804,24 @@ const filteredServices = services.filter(job => {
 
   document.getElementById('completedCount').textContent =
     services.filter(job => job.status === 'completed').length;
+ 
+const now = new Date();
+const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+const monthlyServices = services.filter(job =>
+  new Date(job.created_at) >= startOfMonth
+);
+
+const monthlySales = monthlyServices.reduce(
+  (total, job) => total + Number(job.price || 0),
+  0
+);
+
+const monthlyCommission = monthlySales * 0.15;
+
+document.getElementById('monthlySales').textContent = money(monthlySales);
+document.getElementById('monthlyJobs').textContent = monthlyServices.length;
+document.getElementById('monthlyCommission').textContent = money(monthlyCommission);
   document.getElementById('sales').textContent =
     money(sales);
 
