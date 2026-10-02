@@ -855,7 +855,26 @@ const monthlySales = monthlyServices.reduce(
 );
 
 const monthlyCommission = monthlySales * 0.15;
+const requestedCount = services.filter(
+  job => job.status === 'requested'
+).length;
 
+const enRouteCount = services.filter(
+  job => job.status === 'en_route'
+).length;
+
+const completedCount = services.filter(
+  job => job.status === 'completed'
+).length;
+
+document.getElementById('requestedCount').textContent =
+  requestedCount;
+
+document.getElementById('enRouteCount').textContent =
+  enRouteCount;
+
+document.getElementById('completedCount').textContent =
+  completedCount;
 document.getElementById('monthlySales').textContent = money(monthlySales);
 document.getElementById('monthlyJobs').textContent = monthlyServices.length;
 document.getElementById('monthlyCommission').textContent = money(monthlyCommission);
