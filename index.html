@@ -146,6 +146,43 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 
 <div class="card"><h3>💵 Comisión del mes</h3><div class="price" id="monthlyCommission">$0</div><span class="muted">15% de comisión</span></div>
 </div>
+ <div class="card" style="margin-top:18px">
+  <h2>📊 Reporte financiero</h2>
+  <p class="muted">Consulta el rendimiento de FLETYA por período.</p>
+
+  <select
+    id="adminReportPeriod"
+    onchange="renderAdmin()"
+    style="width:100%;padding:12px;margin-top:12px"
+  >
+    <option value="today">Hoy</option>
+    <option value="week">Esta semana</option>
+    <option value="month" selected>Este mes</option>
+    <option value="all">Todo el tiempo</option>
+  </select>
+
+  <div class="grid" style="margin-top:12px">
+    <div class="card">
+      <h3>💰 Ventas</h3>
+      <div class="price" id="reportSales">$0</div>
+    </div>
+
+    <div class="card">
+      <h3>🚚 Servicios</h3>
+      <div class="price" id="reportJobs">0</div>
+    </div>
+
+    <div class="card">
+      <h3>💵 Comisión FLETYA</h3>
+      <div class="price" id="reportCommission">$0</div>
+    </div>
+
+    <div class="card">
+      <h3>🧑‍🔧 Fleteros reciben</h3>
+      <div class="price" id="reportDriverNet">$0</div>
+    </div>
+  </div>
+ </div>
 <div class="card" style="margin-top:18px"><h2>Servicios recientes</h2> 
   <input
   id="adminSearch"
