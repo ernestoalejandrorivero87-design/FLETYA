@@ -857,7 +857,16 @@ const monthlySales = monthlyServices.reduce(
 const monthlyCommission = monthlySales * 0.15;
  const reportPeriod =
   document.getElementById('adminReportPeriod')?.value || 'month';
+const reportPeriodLabel =
+  document.getElementById('reportPeriodLabel');
 
+if (reportPeriodLabel) {
+  reportPeriodLabel.textContent =
+    reportPeriod === 'today' ? '📅 Período: Hoy' :
+    reportPeriod === 'week' ? '📅 Período: Esta semana' :
+    reportPeriod === 'month' ? '📅 Período: Este mes' :
+    '📅 Período: Todo el tiempo';
+}
 let reportServices = services;
 
 const nowReport = new Date();
