@@ -855,6 +855,61 @@ const monthlySales = monthlyServices.reduce(
 );
 
 const monthlyCommission = monthlySales * 0.15;
+ const reportPeriod =
+  document.getElementById('adminReportPeriod')?.value || 'month';
+
+let reportServices = services;
+
+const nowReport = new Date();
+
+if (reportPeriod === 'today') {
+  reportServices = services.filter(job => {
+    const d = new Date(job.created_at);
+    return d.toDateString() === nowReport.toDateString();
+  });
+}
+
+if (reportPeriod === 'week') {
+  const startWeek = new Date(nowReport);
+  startWeek.setDate(nowReport.getDate() - 7);
+
+  reportServices = services.filter(job =>
+    new Date(job.created_at) >= startWeek
+  );
+}
+
+if (reportPeriod === 'month') {
+  const startMonth = new Date(
+    nowReport.getFullYear(),
+    nowReport.getMonth(),
+    1
+  );
+
+  reportServices = services.filter(job =>
+    new Date(job.created_at) >= startMonth
+  );
+}
+
+const reportSales = reportServices.reduce(
+  (total, job) => total + Number(job.price || 0),
+  0
+);
+
+const reportJobs = reportServices.length;
+const reportCommission = reportSales * 0.15;
+const reportDriverNet = reportSales - reportCommission;
+
+document.getElementById('reportSales').textContent =
+  money(reportSales);
+
+document.getElementById('reportJobs').textContent =
+  reportJobs;
+
+document.getElementById('reportCommission').textContent =
+  money(reportCommission);
+
+document.getElementById('reportDriverNet').textContent =
+  money(reportDriverNet);
 const requestedCount = services.filter(
   job => job.status === 'requested'
 ).length;
