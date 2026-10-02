@@ -727,7 +727,15 @@ const nameById = Object.fromEntries(
   ])
 );
   const search = (document.getElementById('adminSearch')?.value || '').toLowerCase().trim();
+const userSearch =
+  (document.getElementById('adminUsersSearch')?.value || '')
+    .toLowerCase()
+    .trim();
 
+const filteredUsers = adminUsers.filter(user =>
+  (user.full_name || '').toLowerCase().includes(userSearch) ||
+  (user.email || '').toLowerCase().includes(userSearch)
+);
 const filteredServices = services.filter(job => {
   const clientName = nameById[job.client_id] || 'Sin cliente';
   const driverName = nameById[job.driver_id] || 'Sin fletero';
@@ -764,7 +772,7 @@ const filteredServices = services.filter(job => {
             <th>Rol</th>
           </tr>
 
-          ${adminUsers.map(user => `
+          ${filteredUsers.map(user => `
             <tr>
               <td>${user.full_name || 'Sin nombre'}</td>
               <td>${user.email || 'Sin correo'}</td>
