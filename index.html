@@ -831,6 +831,7 @@ const filteredServices = services.filter(job => {
             <th>Correo</th>
             <th>Teléfono</th>
             <th>Rol</th>
+            <th>Registro</th>
           </tr>
 
           ${filteredUsers.map(user => `
@@ -844,6 +845,7 @@ const filteredServices = services.filter(job => {
                 user.role === 'client' ? '👤 Cliente' :
                 user.role || 'Sin rol'
               }</td>
+              <td>${user.created_at ? new Date(user.created_at).toLocaleDateString('es-MX') : 'Sin fecha'}</td>
             </tr>
           `).join('')}
         </table>
