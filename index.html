@@ -1031,6 +1031,8 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
 
   document.getElementById('jobModalContent').innerHTML = `
   <p><strong>🆔 ID:</strong><br>${job.id}</p>
+  <p><strong>👤 Cliente:</strong> ${job.client_id || 'Sin cliente'}</p>
+<p><strong>🚚 Fletero:</strong> ${job.driver_id || 'Sin fletero'}</p>
   <p><strong>📍 Origen:</strong> ${job.origin || 'Sin origen'}</p>
   <p><strong>🏁 Destino:</strong> ${job.destination || 'Sin destino'}</p>
   <p><strong>📦 Servicio:</strong> ${job.service_type || 'Sin especificar'}</p>
