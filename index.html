@@ -233,6 +233,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
   >
 
   <div id="adminUsersTable"></div>
+  <div id="driverAccountsTable" style="margin-top:18px"></div>
  </div>
 </section>
 </main>
@@ -822,6 +823,60 @@ const filteredServices = services.filter(job => {
 
   const commission = sales * 0.15;
   const driverNet = sales - commission;
+ const driverAccounts = adminUsers
+  .filter(user => user.role === 'driver')
+  .map(driver => {
+    const driverJobs = services.filter(
+      job =>
+        job.driver_id === driver.id &&
+        job.status === 'completed'
+    );
+
+    const total = driverJobs.reduce(
+      (sum, job) => sum + Number(job.price || 0),
+      0
+    );
+
+    const commission = total * 0.15;
+    const net = total - commission;
+
+    return {
+      ...driver,
+      jobs: driverJobs.length,
+      total,
+      commission,
+      net
+    };
+  });
+ document.getElementById('driverAccountsTable').innerHTML =
+  driverAccounts.length
+    ? `
+      <div class="card">
+        <h2>💰 Estado de cuenta de fleteros</h2>
+        <p class="muted">Resumen de servicios completados y pagos.</p>
+
+        <table>
+          <tr>
+            <th>Fletero</th>
+            <th>Servicios</th>
+            <th>Generado</th>
+            <th>Comisión</th>
+            <th>Neto</th>
+          </tr>
+
+          ${driverAccounts.map(driver => `
+            <tr>
+              <td>${driver.full_name || 'Sin nombre'}</td>
+              <td>${driver.jobs}</td>
+              <td>$${driver.total.toLocaleString('es-MX')}</td>
+              <td>$${driver.commission.toLocaleString('es-MX')}</td>
+              <td>$${driver.net.toLocaleString('es-MX')}</td>
+            </tr>
+          `).join('')}
+        </table>
+      </div>
+    `
+    : '';
   document.getElementById('adminUsersTable').innerHTML =
     adminUsers.length
       ? `
