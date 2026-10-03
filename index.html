@@ -1028,11 +1028,21 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
     toast('No se pudo cargar el servicio');
     return;
   }
+  const { data: profiles } = await supabaseClient
+    .from('profiles')
+    .select('id, full_name');
 
+  const clientProfile = profiles?.find(
+    profile => profile.id === job.client_id
+  );
+
+  const driverProfile = profiles?.find(
+    profile => profile.id === job.driver_id
+  );
   document.getElementById('jobModalContent').innerHTML = `
   <p><strong>🆔 ID:</strong><br>${job.id}</p>
-  <p><strong>👤 Cliente:</strong> ${job.client_id || 'Sin cliente'}</p>
-<p><strong>🚚 Fletero:</strong> ${job.driver_id || 'Sin fletero'}</p>
+  <p><strong>👤 Cliente:</strong> ${clientProfile?.full_name || 'Sin cliente'}</p>
+<p><strong>🚚 Fletero:</strong> ${driverProfile?.full_name || 'Sin fletero'}</p>
   <p><strong>📍 Origen:</strong> ${job.origin || 'Sin origen'}</p>
   <p><strong>🏁 Destino:</strong> ${job.destination || 'Sin destino'}</p>
   <p><strong>📦 Servicio:</strong> ${job.service_type || 'Sin especificar'}</p>
