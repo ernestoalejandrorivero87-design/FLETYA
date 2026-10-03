@@ -1050,7 +1050,12 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
   <p><strong>🚚 Vehículo:</strong> ${job.vehicle_type || 'Sin especificar'}</p>
   <p><strong>👷 Ayudantes:</strong> ${job.helpers || 0}</p>
   <p><strong>💰 Precio:</strong> $${Number(job.price || 0).toLocaleString('es-MX')}</p>
-  <p><strong>🔵 Estado:</strong> ${job.status || 'Sin estado'}</p>
+  <p><strong>🔵 Estado:</strong> ${
+  job.status === 'requested' ? '🟡 Solicitado' :
+  job.status === 'en_route' ? '🔵 En camino' :
+  job.status === 'completed' ? '🟢 Completado' :
+  job.status || 'Sin estado'
+}</p>
 `;
 
 document.getElementById('jobModal').classList.remove('hidden');
