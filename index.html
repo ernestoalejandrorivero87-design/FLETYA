@@ -881,7 +881,9 @@ const pendingTotal = pendingJobs.reduce(
               <td>${driver.jobs}</td>
               <td>$${driver.total.toLocaleString('es-MX')}</td>
               <td>$${driver.commission.toLocaleString('es-MX')}</td>
-              <td>$${driver.net.toLocaleString('es-MX')}</td>
+              <td>$${driver.net.toLocaleString('es-MX')}
+              <td>$${driver.pendingTotal.toLocaleString('es-MX')}</td>
+              </td>
             </tr>
           `).join('')}
         </table>
