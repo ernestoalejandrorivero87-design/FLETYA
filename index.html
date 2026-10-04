@@ -873,6 +873,7 @@ const pendingTotal = pendingJobs.reduce(
             <th>Comisión</th>
             <th>Neto</th>
             <th>Pendiente</th>
+            <th>Acción</th>
           </tr>
 
           ${driverAccounts.map(driver => `
@@ -884,6 +885,11 @@ const pendingTotal = pendingJobs.reduce(
               <td>$${driver.net.toLocaleString('es-MX')}
               <td>$${driver.pendingTotal.toLocaleString('es-MX')}</td>
               </td>
+              <td>
+  <button onclick="markDriverPaid('${driver.id}')">
+    💸 Marcar pagado
+  </button>
+</td>
             </tr>
           `).join('')}
         </table>
