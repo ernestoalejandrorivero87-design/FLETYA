@@ -839,14 +839,24 @@ const filteredServices = services.filter(job => {
 
     const commission = total * 0.15;
     const net = total - commission;
+   const pendingJobs = driverJobs.filter(
+  job => job.driver_paid !== true
+);
 
-    return {
-      ...driver,
-      jobs: driverJobs.length,
-      total,
-      commission,
-      net
-    };
+const pendingTotal = pendingJobs.reduce(
+  (sum, job) => sum + Number(job.price || 0) * 0.85,
+  0
+);
+
+  return {
+  ...driver,
+  jobs: driverJobs.length,
+  total,
+  commission,
+  net,
+  pendingJobs: pendingJobs.length,
+  pendingTotal
+};
   });
  document.getElementById('driverAccountsTable').innerHTML =
   driverAccounts.length
