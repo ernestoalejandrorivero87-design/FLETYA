@@ -727,6 +727,45 @@ function driverLocation(){
  if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
  navigator.geolocation.getCurrentPosition(p=>{document.getElementById('gps').textContent=`GPS actualizado: ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`;toast('Ubicación actualizada')},()=>{document.getElementById('gps').textContent='No se pudo obtener GPS. Permite ubicación en el navegador.'});
 }
+ async function markDriverPaid(driverId){
+
+  const { data: { user }, error: authError } =
+    await supabaseClient.auth.getUser();
+
+  if (authError || !user) {
+    toast('Debes iniciar sesión como administrador');
+    return;
+  }
+
+  const { data: profile, error: profileError } =
+    await supabaseClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+  if (profileError || !profile || profile.role !== 'admin') {
+    toast('Esta acción es solo para administradores');
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from('jobs')
+    .update({ driver_paid: true })
+    .eq('driver_id', driverId)
+    .eq('status', 'completed')
+    .eq('driver_paid', false);
+
+  if (error) {
+    console.error(error);
+    toast('Error al registrar el pago: ' + error.message);
+    return;
+  }
+
+  toast('💸 Pago registrado correctamente');
+
+  renderAdmin();
+ }
 async function renderAdmin(){
 
   const { data: { user }, error: authError } =
