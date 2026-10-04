@@ -298,7 +298,21 @@ function show(id){
  if(id==='admin')renderAdmin(); if(id==='driver')renderDriver();
 }
 function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
-async function requestJob(){
+async function createNotification(userId, title, message, type = 'info'){
+  const { error } = await supabaseClient
+    .from('notifications')
+    .insert({
+      user_id: userId,
+      title: title,
+      message: message,
+      type: type
+    });
+
+  if(error){
+    console.error('Error creando notificación:', error);
+  }
+}
+ async function requestJob(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
 
