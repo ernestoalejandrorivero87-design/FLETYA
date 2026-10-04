@@ -925,9 +925,12 @@ const pendingTotal = pendingJobs.reduce(
               <td>$${driver.pendingTotal.toLocaleString('es-MX')}</td>
               </td>
               <td>
-  <button onclick="markDriverPaid('${driver.id}')">
-    💸 Marcar pagado
-  </button>
+  ${driver.pendingTotal > 0
+  ? `<button onclick="markDriverPaid('${driver.id}')">
+      💸 Marcar pagado
+    </button>`
+  : `<span>✅ Pagado</span>`
+  }
 </td>
             </tr>
           `).join('')}
