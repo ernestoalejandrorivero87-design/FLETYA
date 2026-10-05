@@ -338,6 +338,20 @@ if (activeJobs && activeJobs.length > 0) {
 }
   const origin = document.getElementById('origin').value.trim();
   const destination = document.getElementById('dest').value.trim();
+  const { data: routeData, error: routeError } =
+  await supabaseClient.functions.invoke('fletya-routes', {
+    body: {
+      origin: origin,
+      destination: destination
+    }
+  });
+
+if (routeError || !routeData?.distance_km) {
+  toast('No se pudo calcular la distancia real.');
+  return;
+}
+
+document.getElementById('km').value = routeData.distance_km;
   const distance = parseFloat(document.getElementById('km').value) || 0;
   const vehicle = document.getElementById('vehicle').value;
   const helpers = parseInt(document.getElementById('helpers').value) || 0;
