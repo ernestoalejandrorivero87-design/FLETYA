@@ -313,8 +313,16 @@ async function createNotification(userId, title, message, type = 'info'){
   }
 }
  async function calculateRoute(){
-  const origin = document.getElementById('origin').value.trim();
-  const destination = document.getElementById('dest').value.trim();
+  const originInput = document.getElementById('origin').value.trim();
+const destinationInput = document.getElementById('dest').value.trim();
+
+const origin = originInput.includes('Cancún')
+  ? originInput
+  : originInput + ', Cancún, Quintana Roo, México';
+
+const destination = destinationInput.includes('Cancún')
+  ? destinationInput
+  : destinationInput + ', Cancún, Quintana Roo, México';
 
   if(!origin || !destination){
     return;
