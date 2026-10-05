@@ -316,11 +316,17 @@ async function createNotification(userId, title, message, type = 'info'){
   const originInput = document.getElementById('origin').value.trim();
 const destinationInput = document.getElementById('dest').value.trim();
 
-const origin = originInput.includes('Cancún')
+const originHasCancun =
+  originInput.toLowerCase().normalize('NFD').includes('cancun');
+
+const destinationHasCancun =
+  destinationInput.toLowerCase().normalize('NFD').includes('cancun');
+
+const origin = originHasCancun
   ? originInput
   : originInput + ', Cancún, Quintana Roo, México';
 
-const destination = destinationInput.includes('Cancún')
+const destination = destinationHasCancun
   ? destinationInput
   : destinationInput + ', Cancún, Quintana Roo, México';
 
