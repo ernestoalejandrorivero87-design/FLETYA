@@ -324,12 +324,38 @@ async function createNotification(userId, title, message, type = 'info'){
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g,'');
 
-  if(normalized.includes('cancun')){
+  // Si ya contiene país o estado, no modificar
+  if(
+    normalized.includes('quintana roo') ||
+    normalized.includes('mexico')
+  ){
     return address;
   }
 
+  // Ciudades principales de Quintana Roo
+  const cities = [
+    'cancun',
+    'playa del carmen',
+    'puerto morelos',
+    'tulum',
+    'cozumel',
+    'isla mujeres',
+    'felipe carrillo puerto',
+    'chetumal'
+  ];
+
+  const isCity = cities.some(city =>
+    normalized.includes(city)
+  );
+
+  if(isCity){
+    return address + ', Quintana Roo, México';
+  }
+
+  // Si parece una colonia, residencial o zona,
+  // asumimos Cancún como contexto
   return address + ', Cancún, Quintana Roo, México';
-}
+ }
 
 async function calculateRoute(){
   const originInput =
