@@ -312,37 +312,59 @@ async function createNotification(userId, title, message, type = 'info'){
     console.error('Error creando notificación:', error);
   }
 }
- async function calculateRoute(){
-  const originInput = document.getElementById('origin').value.trim();
-const destinationInput = document.getElementById('dest').value.trim();
+ function prepareRouteAddress(value){
+  const address = value.trim();
 
-const originHasCancun =
-  originInput.toLowerCase().normalize('NFD').includes('cancun');
+  if(!address){
+    return '';
+  }
 
-const destinationHasCancun =
-  destinationInput.toLowerCase().normalize('NFD').includes('cancun');
+  const normalized = address
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'');
 
-const origin = originHasCancun
-  ? originInput
-  : originInput + ', Cancún, Quintana Roo, México';
+  if(normalized.includes('cancun')){
+    return address;
+  }
 
-const destination = destinationHasCancun
-  ? destinationInput
-  : destinationInput + ', Cancún, Quintana Roo, México';
+  return address + ', Cancún, Quintana Roo, México';
+}
 
-  if(!origin || !destination){
+async function calculateRoute(){
+  const originInput =
+    document.getElementById('origin').value;
+
+  const destinationInput =
+    document.getElementById('dest').value;
+
+  if(!originInput.trim() || !destinationInput.trim()){
     return;
   }
-document.getElementById('breakdown').textContent = '🔄 Calculando ruta real...';
+
+  const origin = prepareRouteAddress(originInput);
+  const destination = prepareRouteAddress(destinationInput);
+
+  document.getElementById('km').value = '';
+  document.getElementById('breakdown').textContent =
+    '🔄 Calculando ruta real...';
+
   const { data: routeData, error: routeError } =
-    await supabaseClient.functions.invoke('fletya-routes', {
-      body: {
-        origin: origin,
-        destination: destination
+    await supabaseClient.functions.invoke(
+      'fletya-routes',
+      {
+        body: {
+          origin: origin,
+          destination: destination
+        }
       }
-    });
+    );
 
   if(routeError || !routeData?.distance_km){
+    document.getElementById('km').value = '';
+    document.getElementById('price').textContent = '$0 MXN';
+    document.getElementById('breakdown').textContent =
+      '❌ No se pudo calcular la ruta real.';
     toast('No se pudo calcular la distancia real.');
     return;
   }
