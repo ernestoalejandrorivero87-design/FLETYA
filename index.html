@@ -319,7 +319,7 @@ async function createNotification(userId, title, message, type = 'info'){
   if(!origin || !destination){
     return;
   }
-
+document.getElementById('breakdown').textContent = '🔄 Calculando ruta real...';
   const { data: routeData, error: routeError } =
     await supabaseClient.functions.invoke('fletya-routes', {
       body: {
