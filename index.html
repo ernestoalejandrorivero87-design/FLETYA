@@ -988,9 +988,98 @@ toast('✅ Servicio completado correctamente');
 
 renderDriver();
 }
-function driverLocation(){
- if(!navigator.geolocation){document.getElementById('gps').textContent='GPS no disponible en este navegador.';return}
- navigator.geolocation.getCurrentPosition(p=>{document.getElementById('gps').textContent=`GPS actualizado: ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`;toast('Ubicación actualizada')},()=>{document.getElementById('gps').textContent='No se pudo obtener GPS. Permite ubicación en el navegador.'});
+async function driverLocation(){
+
+  const { data: { user }, error: authError } =
+    await supabaseClient.auth.getUser();
+
+  if (authError || !user) {
+    toast('Debes iniciar sesión como fletero');
+    return;
+  }
+
+  const { data: activeJob, error: jobError } =
+    await supabaseClient
+      .from('jobs')
+      .select('id')
+      .eq('driver_id', user.id)
+      .eq('status', 'en_route')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  if (jobError) {
+    console.error(jobError);
+    toast('No se pudo consultar tu servicio activo');
+    return;
+  }
+
+  if (!activeJob) {
+    toast('Primero debes aceptar un servicio');
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    document.getElementById('gps').textContent =
+      'GPS no disponible en este navegador.';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (p) => {
+
+      const latitude = p.coords.latitude;
+      const longitude = p.coords.longitude;
+      const accuracy = p.coords.accuracy;
+
+      const { error } = await supabaseClient
+        .from('driver_locations')
+        .upsert(
+          {
+            driver_id: user.id,
+            job_id: activeJob.id,
+            latitude: latitude,
+            longitude: longitude,
+            accuracy: accuracy,
+            updated_at: new Date().toISOString()
+          },
+          {
+            onConflict: 'driver_id'
+          }
+        );
+
+      if (error) {
+        console.error(error);
+
+        document.getElementById('gps').textContent =
+          'Error al guardar ubicación';
+
+        toast('No se pudo guardar la ubicación');
+        return;
+      }
+
+      document.getElementById('gps').textContent =
+        `📍 GPS actualizado: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+
+      toast('🚚 Ubicación guardada correctamente');
+    },
+
+    (error) => {
+
+      console.error(error);
+
+      document.getElementById('gps').textContent =
+        'No se pudo obtener GPS. Permite ubicación en el navegador.';
+
+      toast('Activa el permiso de ubicación del teléfono');
+    },
+
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 5000
+    }
+  );
 }
  async function markDriverPaid(driverId){
 
