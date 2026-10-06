@@ -424,15 +424,27 @@ if (activeJobs && activeJobs.length > 0) {
   toast('🚚 Ya tienes un servicio solicitado o en camino.');
   return;
 }
-  const origin = document.getElementById('origin').value.trim();
-  const destination = document.getElementById('dest').value.trim();
-  const { data: routeData, error: routeError } =
+ const originInput =
+  document.getElementById('origin').value.trim();
+
+const destinationInput =
+  document.getElementById('dest').value.trim();
+
+if (!originInput || !destinationInput) {
+  toast('Escribe origen y destino.');
+  return;
+}
+
+const origin = prepareRouteAddress(originInput);
+const destination = prepareRouteAddress(destinationInput);
+
+const { data: routeData, error: routeError } =
   await supabaseClient.functions.invoke('fletya-routes', {
     body: {
       origin: origin,
       destination: destination
     }
-  });
+  }); 
 
 if (routeError || !routeData?.distance_km) {
   toast('No se pudo calcular la distancia real.');
