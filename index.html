@@ -733,9 +733,82 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
        Actualizar estado
      </button>`;
 }
-function advance(){
- let j=state.active, seq=['Fletero encontrado','En camino','Recogido','Entregado'],i=seq.indexOf(j.status);j.status=seq[Math.min(i+1,seq.length-1)];renderClient();renderDriver();renderAdmin();toast(j.status==='Entregado'?'Servicio completado 🎉':'Estado actualizado');
+ async function updateDriverTracking(){
+  const activeJob = state.active;
+
+  if (!activeJob || activeJob.status !== 'en_route') {
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('driver_locations')
+    .select('latitude, longitude, accuracy, updated_at')
+    .eq('job_id', activeJob.id)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const box = document.getElementById('driverTracking');
+
+  if (error) {
+    console.error(error);
+    if (box) {
+      box.textContent = '⚠️ No se pudo consultar la ubicación del fletero.';
+    }
+    return;
+  }
+
+  if (!data) {
+    if (box) {
+      box.textContent = '🚚 Buscando ubicación del fletero...';
+    }
+    return;
+  }
+
+  const hora = new Date(data.updated_at).toLocaleTimeString();
+
+  if (box) {
+    box.innerHTML = `
+      <div class="pill">🟢 Fletero en camino</div>
+      <p>📍 Ubicación actualizada</p>
+      <p>Lat: ${Number(data.latitude).toFixed(6)}</p>
+      <p>Lng: ${Number(data.longitude).toFixed(6)}</p>
+      <p>🎯 Precisión: ${Math.round(data.accuracy || 0)} m</p>
+      <p>🕐 Última actualización: ${hora}</p>
+    `;
+  }
+ }
+ let driverTrackingTimer = null;
+
+function startDriverTracking(){
+  if (driverTrackingTimer) {
+    clearInterval(driverTrackingTimer);
+  }
+
+  updateDriverTracking();
+
+  driverTrackingTimer = setInterval(() => {
+    updateDriverTracking();
+  }, 5000);
 }
+function advance(){
+  let j = state.active;
+
+  if (!j) return;
+
+  let seq = ['requested', 'en_route', 'picked_up', 'completed'];
+  let i = seq.indexOf(j.status);
+
+  if (i < seq.length - 1) {
+    j.status = seq[i + 1];
+  }
+
+  renderClient();
+
+  if (j.status === 'en_route') {
+    startDriverTracking();
+  }
+ }
  async function renderDriver(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
