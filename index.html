@@ -22,7 +22,23 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 .toast{position:fixed;right:16px;bottom:16px;background:#172126;color:white;padding:13px 16px;border-radius:12px;display:none;z-index:20}
 @media(max-width:760px){.grid{grid-template-columns:1fr}.hero h1{font-size:28px}header{padding:12px}.wrap{padding:14px}nav button{padding:9px 10px;font-size:12px}}
 </style>
-</ head>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+#routeMap {
+  height: 320px;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+</style>
+</head>
 <body>
 <header>
   <div class="logo">FLET<span>YA</span></div>
@@ -99,8 +115,11 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 </div>
 <div class="card">
 <h2>Seguimiento</h2><div id="clientStatus"><span class="pill">Sin servicio activo</span></div>
-<div class="map"><div class="pin origin">📍</div><div class="pin driver">🚚</div><div class="pin dest">🏁</div></div>
-<p class="muted">Mapa de demostración. En la siguiente etapa se conecta un mapa real y GPS.</p>
+<div id="routeMap"></div>
+
+<p id="routeInfo" class="muted">
+  Introduce origen y destino para calcular la ruta.
+</p>
 </div>
 </div>
   <div class="card" style="margin-top:18px">
@@ -356,7 +375,107 @@ async function createNotification(userId, title, message, type = 'info'){
   // asumimos Cancún como contexto
   return address + ', Cancún, Quintana Roo, México';
  }
+let routeMap = null;
+let routeLine = null;
+let originMarker = null;
+let destinationMarker = null;
 
+function initRouteMap() {
+  const mapElement = document.getElementById('routeMap');
+
+  if (!mapElement || routeMap) return;
+
+  routeMap = L.map('routeMap').setView([21.1619, -86.8515], 12);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(routeMap);
+}
+
+function drawRouteOnMap(polyline) {
+  if (!polyline || !routeMap) return;
+
+  if (routeLine) {
+    routeMap.removeLayer(routeLine);
+  }
+
+  if (originMarker) {
+    routeMap.removeLayer(originMarker);
+  }
+
+  if (destinationMarker) {
+    routeMap.removeLayer(destinationMarker);
+  }
+
+  // Google devuelve una polyline codificada.
+  // Leaflet necesita coordenadas, así que la decodificamos.
+  const points = decodePolyline(polyline);
+
+  if (!points.length) return;
+
+  routeLine = L.polyline(points, {
+    weight: 5
+  }).addTo(routeMap);
+
+  originMarker = L.marker(points[0])
+    .addTo(routeMap)
+    .bindPopup('📍 Origen');
+
+  destinationMarker = L.marker(points[points.length - 1])
+    .addTo(routeMap)
+    .bindPopup('🏁 Destino');
+
+  routeMap.fitBounds(routeLine.getBounds(), {
+    padding: [25, 25]
+  });
+}
+
+function decodePolyline(encoded) {
+  let points = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    const deltaLat =
+      (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    lat += deltaLat;
+
+    shift = 0;
+    result = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    const deltaLng =
+      (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    lng += deltaLng;
+
+    points.push([
+      lat / 100000,
+      lng / 100000
+    ]);
+  }
+
+  return points;
+}
+
+initRouteMap();
 async function calculateRoute(){
   const originInput =
     document.getElementById('origin').value;
@@ -397,7 +516,12 @@ async function calculateRoute(){
 
   document.getElementById('km').value =
     routeData.distance_km;
+if (routeData.polyline) {
+  drawRouteOnMap(routeData.polyline);
 
+  document.getElementById('routeInfo').textContent =
+    `📏 ${routeData.distance_km} km · 🗺️ Ruta calculada`;
+}
   quote();
 }
  async function requestJob(){
