@@ -519,8 +519,15 @@ async function calculateRoute(){
 if (routeData.polyline) {
   drawRouteOnMap(routeData.polyline);
 
-  document.getElementById('routeInfo').textContent =
-    `📏 ${routeData.distance_km} km · 🗺️ Ruta calculada`;
+  const originText =
+    document.getElementById('origin').value;
+
+  const destinationText =
+    document.getElementById('dest').value;
+
+  document.getElementById('routeInfo').innerHTML =
+    `📍 <strong>${originText}</strong> → <strong>${destinationText}</strong><br>
+     📏 ${routeData.distance_km} km · ⏱️ ${routeData.duration_text || 'Tiempo estimado'} · 🗺️ Ruta calculada`;
 }
   quote();
 }
