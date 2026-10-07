@@ -732,6 +732,9 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
      <button class="btn light" onclick="renderClient()">
        Actualizar estado
      </button>`;
+   if (j.status === 'en_route') {
+    startDriverTracking();
+   }
 }
  async function updateDriverTracking(){
   const activeJob = state.active;
