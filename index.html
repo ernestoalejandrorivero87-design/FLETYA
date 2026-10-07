@@ -1622,16 +1622,24 @@ document.getElementById('jobModal').classList.remove('hidden');
   // renderClient se ejecutará cuando corresponda
 })();
 setInterval(() => {
+
   const clientSection = document.getElementById('client');
   const driverSection = document.getElementById('driver');
 
-  if (clientSection && !clientSection.classList.contains('hidden')) {
+  if (
+    clientSection &&
+    !clientSection.classList.contains('hidden')
+  ) {
     renderClient();
   }
 
-  if (driverSection && !driverSection.classList.contains('hidden')) {
+  if (
+    driverSection &&
+    !driverSection.classList.contains('hidden')
+  ) {
     renderDriver();
   }
+
 }, 10000);
 </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
