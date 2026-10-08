@@ -634,12 +634,6 @@ document.getElementById('km').value = routeData.distance_km;
   localStorage.setItem('fletya_jobs', JSON.stringify(state.jobs));
 
   toast('¡Flete solicitado correctamente!');
-    await createNotification(
-    user.id,
-    '🚚 Nuevo servicio solicitado',
-    'Un cliente acaba de solicitar un servicio.',
-    'info'
-  );
   renderClient();
 }
 async function renderClient(){
