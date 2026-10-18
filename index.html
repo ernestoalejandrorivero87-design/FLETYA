@@ -343,6 +343,64 @@ async function createNotification(userId, title, message, type = 'info'){
     console.error('Error creando notificación:', error);
   }
 }
+async function loadDriverNotifications(userId) {
+  const box = document.getElementById('driverNotifications');
+  if (!box) return;
+
+  const { data, error } = await supabaseClient
+    .from('notifications')
+    .select('id, title, message, read, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (error) {
+    console.error('Error cargando notificaciones:', error);
+    box.textContent = 'No se pudieron cargar las notificaciones.';
+    return;
+  }
+
+  box.replaceChildren();
+
+  if (!data || data.length === 0) {
+    box.textContent = 'No tienes notificaciones nuevas.';
+    return;
+  }
+
+  data.forEach(n => {
+    const item = document.createElement('div');
+    item.className = 'card';
+
+    const title = document.createElement('strong');
+    title.textContent = `${n.read ? '📨' : '🔔'} ${n.title || 'Notificación'}`;
+
+    const message = document.createElement('p');
+    message.textContent = n.message || '';
+
+    const date = document.createElement('small');
+    date.textContent = n.created_at
+      ? new Date(n.created_at).toLocaleString('es-MX')
+      : '';
+
+    item.append(title, message, date);
+    box.appendChild(item);
+  });
+}
+
+let driverNotificationsTimer = null;
+
+function startDriverNotifications(userId) {
+  if (driverNotificationsTimer) {
+    clearInterval(driverNotificationsTimer);
+  }
+
+  loadDriverNotifications(userId);
+
+  driverNotificationsTimer = setInterval(() => {
+    loadDriverNotifications(userId);
+  }, 10000);
+}
+
  function prepareRouteAddress(value){
   const address = value.trim();
 
@@ -845,6 +903,7 @@ function advance(){
     return;
   }
 
+  startDriverNotifications(user.id);
   const e = document.getElementById('jobCard');
 
   e.innerHTML =
