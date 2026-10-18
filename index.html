@@ -950,6 +950,10 @@ function advance(){
     console.error(activeError);
   }
 
+  // Mantener sincronizado el servicio consultado con el estado usado por los botones.
+  state.active = activeJob || null;
+  state.accepted = !!activeJob && activeJob.status === 'en_route';
+
   if (activeJob) {
     html += `
       <div class="card" style="border:2px solid #087f8c">
@@ -1116,8 +1120,6 @@ const { error } = await supabaseClient
   toast('Servicio aceptado. Cliente notificado.');
 }
   async function completeDriver(){
-  if(!state.active) return;
-
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
 
@@ -1126,15 +1128,38 @@ const { error } = await supabaseClient
     return;
   }
 
-  const jobId = state.active.id;
-
-  const { error } = await supabaseClient
+  // Consultar el servicio directamente para no depender de un estado local desactualizado.
+  const { data: activeJob, error: activeError } = await supabaseClient
     .from('jobs')
-    .update({
-      status: 'completed'
-    })
-    .eq('id', jobId)
-    .eq('driver_id', user.id);
+    .select('id, status')
+    .eq('driver_id', user.id)
+    .eq('status', 'en_route')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if(activeError){
+    console.error(activeError);
+    toast('No se pudo consultar el servicio activo: ' + activeError.message);
+    return;
+  }
+
+  if(!activeJob){
+    state.active = null;
+    state.accepted = false;
+    toast('No se encontró un servicio en ruta para completar.');
+    await renderDriver();
+    return;
+  }
+
+  const { data: completedJob, error } = await supabaseClient
+    .from('jobs')
+    .update({ status: 'completed' })
+    .eq('id', activeJob.id)
+    .eq('driver_id', user.id)
+    .eq('status', 'en_route')
+    .select('id, status')
+    .maybeSingle();
 
   if(error){
     console.error(error);
@@ -1142,13 +1167,16 @@ const { error } = await supabaseClient
     return;
   }
 
-  state.active.status = 'completed';
-state.active = null;
-state.accepted = false;
+  if(!completedJob){
+    toast('No se pudo completar: revisa los permisos o el estado del servicio.');
+    await renderDriver();
+    return;
+  }
 
-toast('✅ Servicio completado correctamente');
-
-renderDriver();
+  state.active = null;
+  state.accepted = false;
+  toast('✅ Servicio completado correctamente');
+  await renderDriver();
 }
 async function driverLocation(){
 
