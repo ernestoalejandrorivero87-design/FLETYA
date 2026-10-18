@@ -346,7 +346,28 @@ async function createNotification(userId, title, message, type = 'info'){
 async function loadDriverNotifications(userId) {
   const box = document.getElementById('driverNotifications');
   if (!box) return;
+const { data: jobs, error: jobsError } = await supabaseClient
+  .from('jobs')
+  .select('id')
+  .eq('status', 'requested')
+  .is('driver_id', null)
+  .limit(1);
 
+if (jobsError) {
+  console.error('Error comprobando solicitudes:', jobsError);
+  return;
+}
+
+if (!jobs || jobs.length === 0) {
+  box.replaceChildren();
+
+  const message = document.createElement('p');
+  message.className = 'muted';
+  message.textContent = 'No hay solicitudes activas.';
+  box.appendChild(message);
+
+  return;
+}
   const { data, error } = await supabaseClient
     .from('notifications')
     .select('id, title, message, read, created_at')
