@@ -13,6 +13,17 @@ This checklist is intentionally non-destructive. No SQL in this file is intended
 - [ ] Verify the existing auth.users profile-creation trigger calls handle_new_user() and test signup with both client and driver metadata.
 - [ ] Verify admin payment update is restricted to completed jobs where driver_paid changes false -> true.
 
+## Findings from read-only production metadata inspection (2026-10-18)
+
+- RLS is enabled on profiles, jobs, driver_locations, and notifications; FORCE ROW LEVEL SECURITY is not enabled on these tables.
+- The current policy inventory contains the named policies listed in the static review, including client profile self-update and jobs update policies for driver acceptance/completion.
+- The current ACLs explicitly grant anon and authenticated broad table privileges, including DELETE, TRUNCATE, REFERENCES, and TRIGGER. RLS does not protect against TRUNCATE, so these grants should be minimized.
+- Default privileges for objects created by the normal postgres migration role currently grant broad table/sequence privileges to anon and authenticated. Migration 040 now proposes revoking those default grants for future tables and sequences created by postgres.
+- driver_locations has a UNIQUE constraint on driver_id, so the app's upsert conflict target is supported.
+- The live jobs trigger inventory includes trigger_notify_drivers_new_job; auth.users has on_auth_user_created calling handle_new_user.
+- The read-only advisor still reports SECURITY DEFINER execution warnings and leaked-password protection disabled. The warnings are expected to remain until a migration is applied; the password setting is an Auth dashboard configuration and is not changed by these SQL files.
+- This was metadata-only inspection. No production DDL or data mutation was run.
+
 ## Local regression cases
 
 ### Roles and profiles
