@@ -31,10 +31,8 @@ set search_path = public
 as $function$
 begin
   if tg_op = 'INSERT' then
-    if new.role = 'admin'
-       and auth.uid() is not null
-       and not public.is_admin() then
-      raise exception 'Only an administrator can assign the admin role';
+    if auth.uid() is not null and not public.is_admin() then
+      raise exception 'Profiles are created by the sign-up process';
     end if;
   elsif new.role is distinct from old.role
         and auth.uid() is not null
