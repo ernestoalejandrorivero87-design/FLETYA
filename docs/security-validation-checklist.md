@@ -56,7 +56,7 @@ This checklist is intentionally non-destructive. No SQL in this file is intended
 
 - [x] Added `scripts/check-security-migrations.mjs` to check critical migration invariants without connecting to a database.
 - [x] Added `.github/workflows/security-static-check.yml` to run those checks on relevant pull-request changes.
-- [ ] Confirm the GitHub Actions run completes successfully after the repository accepts the workflow event.
+- [x] GitHub Actions run 39182064816 completed successfully: static checks and disposable PostgreSQL integration tests passed.
 - [ ] Remember: a static pattern check does not prove SQL syntax, RLS behavior, or trigger behavior; PostgreSQL integration tests remain required.
 
 ## Local execution
@@ -72,4 +72,14 @@ This checklist is intentionally non-destructive. No SQL in this file is intended
 
 - The migration files are in the GitHub branch `fix/security-profile-role`.
 - No migrations from this branch have been applied to production.
-- Automated database tests have not yet been executed. This repository currently has no Supabase local config or test suite on the reviewed branch, so executable tests must be added after schema/policy inventory is confirmed.
+- Disposable PostgreSQL integration tests have been executed in GitHub Actions and passed (run 39182064816). They use an approximation of Supabase Auth/RLS, not the actual Supabase runtime. A real local Supabase test remains required before production.
+
+
+## Follow-up from production parity review (2026-10-18)
+
+- Read-only metadata confirms `handle_new_user()` currently assigns `coalesce(raw_user_meta_data->>'role','client')` without restricting the value. Migration 00000 changes this to an allowlist (`driver` or default `client`), blocking signup metadata from creating an admin profile.
+- The live `anon` and `authenticated` ACLs include broad privileges such as DELETE, TRUNCATE, REFERENCES, and TRIGGER on the four app tables. Migration 04000 proposes removing these and rebuilding only the browser app's required grants. Validate all front-end paths after applying in a non-production Supabase instance.
+- The current profile update policy allows a user to update their own profile row; the role-change trigger is intended to prevent self-promotion. This must be tested with real Supabase JWT claims, not only the disposable PostgreSQL fixture.
+- The existing notification trigger creates notifications on requested jobs. The draft removes direct notification INSERT for browser users; verify signup, job creation, and notification delivery still work after grant changes.
+- The production migration-history endpoint returned an empty list during this review. This does not prove that no schema changes exist; compare the actual schema and repository migrations before choosing a deployment sequence.
+- No production DDL or data changes were performed during this review.
