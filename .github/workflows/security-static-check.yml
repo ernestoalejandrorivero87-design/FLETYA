@@ -1,6 +1,12 @@
 name: Security migration static checks
 
 on:
+  push:
+    branches: [fix/security-profile-role]
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/check-security-migrations.mjs'
+      - '.github/workflows/security-static-check.yml'
   pull_request:
     branches: [main]
     paths:
