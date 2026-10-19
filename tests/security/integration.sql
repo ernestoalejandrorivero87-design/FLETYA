@@ -70,6 +70,9 @@ update public.jobs set status='completed' where id='40000000-0000-0000-0000-0000
 reset role;
 
 -- A completed job can be marked paid by an admin; unrelated edits remain forbidden.
+-- Clear the simulated user JWT before seeding the trusted admin fixture as the database owner.
+select set_config('request.jwt.claim.sub','',false);
+select set_config('request.jwt.claim.role','',false);
 insert into public.profiles(id,full_name,role) values ('50000000-0000-0000-0000-000000000005','Admin test','admin');
 set role authenticated;
 select set_config('request.jwt.claim.sub','50000000-0000-0000-0000-000000000005',false);
