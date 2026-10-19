@@ -31,7 +31,11 @@ set search_path = public
 as $function$
 begin
   if tg_op = 'INSERT' then
-    if auth.uid() is not null and not public.is_admin() then
+    -- A profile insert nested inside the trusted auth.users signup trigger is allowed.
+    -- A direct API insert from an ordinary signed-in user is rejected.
+    if pg_trigger_depth() = 1
+       and auth.uid() is not null
+       and not public.is_admin() then
       raise exception 'Profiles are created by the sign-up process';
     end if;
   elsif new.role is distinct from old.role
