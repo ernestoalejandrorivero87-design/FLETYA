@@ -23,9 +23,11 @@ begin
   end if;
 end $$;
 
--- Seed one requested job as the trusted database owner.
+-- Seed one requested job through the trusted service-role path.
+select set_config('request.jwt.claim.role','service_role',false);
 insert into public.jobs(id,origin,destination,distance_km,vehicle_type,helpers,service_type,description,price,status,client_id)
 values ('40000000-0000-0000-0000-000000000004','A','B',5,'pickup',0,'flete','test',100,'requested','10000000-0000-0000-0000-000000000001');
+select set_config('request.jwt.claim.role','',false);
 
 -- A client cannot promote their own profile to admin.
 set role authenticated;
