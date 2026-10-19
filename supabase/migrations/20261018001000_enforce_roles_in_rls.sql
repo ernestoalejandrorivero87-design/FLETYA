@@ -11,6 +11,8 @@ for insert
 to authenticated
 with check (
   auth.uid() = client_id
+  and status = 'requested'
+  and driver_id is null
   and exists (
     select 1 from public.profiles p
     where p.id = auth.uid() and p.role = 'client'
