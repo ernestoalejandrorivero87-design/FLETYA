@@ -17,7 +17,7 @@ revoke all privileges on table public.notifications from authenticated;
 grant select, update on table public.profiles to authenticated;
 grant select, insert, update on table public.jobs to authenticated;
 grant select, insert, update on table public.driver_locations to authenticated;
-grant select, insert, update on table public.notifications to authenticated;
+grant select, update on table public.notifications to authenticated;
 
 -- Tables and sequences created later by the normal migration owner (postgres)
 -- should not automatically expose full privileges to browser API roles.
