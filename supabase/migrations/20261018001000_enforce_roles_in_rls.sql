@@ -97,6 +97,12 @@ with check (
     select 1 from public.profiles p
     where p.id = auth.uid() and p.role = 'driver'
   )
+  and exists (
+    select 1 from public.jobs j
+    where j.id = job_id
+      and j.driver_id = auth.uid()
+      and j.status = 'en_route'
+  )
 );
 
 drop policy if exists "driver_update_location" on public.driver_locations;
@@ -116,5 +122,11 @@ with check (
   and exists (
     select 1 from public.profiles p
     where p.id = auth.uid() and p.role = 'driver'
+  )
+  and exists (
+    select 1 from public.jobs j
+    where j.id = job_id
+      and j.driver_id = auth.uid()
+      and j.status = 'en_route'
   )
 );
