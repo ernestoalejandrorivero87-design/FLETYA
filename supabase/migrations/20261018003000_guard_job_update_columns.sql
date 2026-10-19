@@ -59,7 +59,7 @@ begin
     end if;
 
     if new.driver_paid is distinct from old.driver_paid
-       and not (old.status = 'completed' and old.driver_paid = false and new.driver_paid = true) then
+       and not (old.status = 'completed' and coalesce(old.driver_paid, false) = false and new.driver_paid = true) then
       raise exception 'Only unpaid completed jobs can be marked as paid';
     end if;
 
