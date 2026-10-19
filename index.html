@@ -939,7 +939,7 @@ function advance(){
       .from('jobs')
       .select('*')
       .eq('driver_id', user.id)
-      .in('status', ['accepted', 'en_route'])
+      .eq('status', 'en_route')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
