@@ -53,6 +53,7 @@ begin
       or new.client_id is distinct from old.client_id
       or new.driver_id is distinct from old.driver_id
       or new.created_at is distinct from old.created_at
+      or new.updated_at is distinct from old.updated_at
     then
       raise exception 'Administrators may only change the payment flag through this app';
     end if;
