@@ -20,6 +20,8 @@ This checklist is intentionally non-destructive. No SQL in this file is intended
 - The current ACLs explicitly grant anon and authenticated broad table privileges, including DELETE, TRUNCATE, REFERENCES, and TRIGGER. RLS does not protect against TRUNCATE, so these grants should be minimized.
 - Default privileges for objects created by the normal postgres migration role currently grant broad table/sequence privileges to anon and authenticated. Migration 040 now proposes revoking those default grants for future tables and sequences created by postgres.
 - driver_locations has a UNIQUE constraint on driver_id, so the app's upsert conflict target is supported.
+- GPS insert/update policies now also require the referenced job to be assigned to that fletero and currently `en_route`; this prevents a driver from attaching their location to someone else's active job.
+- Direct authenticated INSERT on notifications is not granted in migration 040 because the reviewed browser app has no live calls to its `createNotification()` helper; the existing database trigger remains the intended notification path. Re-check this if the frontend begins writing notifications directly.
 - The live jobs trigger inventory includes trigger_notify_drivers_new_job; auth.users has on_auth_user_created calling handle_new_user.
 - The read-only advisor still reports SECURITY DEFINER execution warnings and leaked-password protection disabled. The warnings are expected to remain until a migration is applied; the password setting is an Auth dashboard configuration and is not changed by these SQL files.
 - This was metadata-only inspection. No production DDL or data mutation was run.
