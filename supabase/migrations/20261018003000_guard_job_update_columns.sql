@@ -29,7 +29,7 @@ begin
   if tg_op = 'INSERT' then
     if actor_role is distinct from 'client'
       or new.client_id is distinct from auth.uid()
-      or new.status <> 'requested'
+      or new.status is distinct from 'requested'
       or new.driver_id is not null
       or coalesce(new.driver_paid, false) <> false then
       raise exception 'Clients may only create their own new, unassigned, unpaid requests';
