@@ -895,6 +895,35 @@ function advance(){
     startDriverTracking();
   }
  }
+let driverPanelRefreshTimer = null;
+let driverPanelRefreshBusy = false;
+let driverPanelRefreshUserId = null;
+
+function startDriverPanelRefresh(userId) {
+  if (driverPanelRefreshTimer && driverPanelRefreshUserId === userId) return;
+
+  if (driverPanelRefreshTimer) clearInterval(driverPanelRefreshTimer);
+
+  driverPanelRefreshUserId = userId;
+  driverPanelRefreshTimer = setInterval(async () => {
+    const panel = document.getElementById('driver');
+
+    // No actualizar si el usuario salió del panel o ya hay una actualización en curso.
+    if (!panel || panel.classList.contains('hidden') || driverPanelRefreshBusy) return;
+
+    driverPanelRefreshBusy = true;
+    try {
+      const { data: { user }, error } = await supabaseClient.auth.getUser();
+      if (error || !user || user.id !== driverPanelRefreshUserId) return;
+      await renderDriver();
+    } catch (error) {
+      console.error('Error al actualizar automáticamente el panel del fletero:', error);
+    } finally {
+      driverPanelRefreshBusy = false;
+    }
+  }, 10000);
+}
+
  async function renderDriver(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
@@ -925,6 +954,7 @@ function advance(){
   }
 
   startDriverNotifications(user.id);
+  startDriverPanelRefresh(user.id);
   const e = document.getElementById('jobCard');
 
   e.innerHTML =
@@ -1075,6 +1105,10 @@ function advance(){
   e.appendChild(logoutButton);
  }                         
 async function logoutDriver(){
+  if (driverPanelRefreshTimer) clearInterval(driverPanelRefreshTimer);
+  driverPanelRefreshTimer = null;
+  driverPanelRefreshUserId = null;
+  driverPanelRefreshBusy = false;
   await supabaseClient.auth.signOut();
   toast('Sesión cerrada');
   show('client');
