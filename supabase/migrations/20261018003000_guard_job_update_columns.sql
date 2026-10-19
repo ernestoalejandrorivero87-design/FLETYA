@@ -44,6 +44,11 @@ begin
       raise exception 'Administrators may only change the payment flag through this app';
     end if;
 
+    if new.driver_paid is distinct from old.driver_paid
+       and not (old.status = 'completed' and old.driver_paid = false and new.driver_paid = true) then
+      raise exception 'Only unpaid completed jobs can be marked as paid';
+    end if;
+
     return new;
   end if;
 
