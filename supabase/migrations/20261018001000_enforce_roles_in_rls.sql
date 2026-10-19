@@ -1,6 +1,9 @@
 -- FLETYA authorization hardening: enforce account roles in RLS.
 -- Draft only: test in staging before applying to production.
 
+-- Profile rows are created by the trusted auth.users trigger; public clients must not insert them directly.
+drop policy if exists "Users can create their own profile" on public.profiles;
+
 drop policy if exists "Clients can create their own jobs" on public.jobs;
 create policy "Clients can create their own jobs"
 on public.jobs
