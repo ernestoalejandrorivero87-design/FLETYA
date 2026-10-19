@@ -27,7 +27,7 @@ begin
 
   -- Client-created requests must start unassigned and unpaid.
   if tg_op = 'INSERT' then
-    if actor_role <> 'client'
+    if actor_role is distinct from 'client'
       or new.client_id is distinct from auth.uid()
       or new.status <> 'requested'
       or new.driver_id is not null
