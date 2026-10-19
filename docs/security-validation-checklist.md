@@ -52,6 +52,13 @@ This checklist is intentionally non-destructive. No SQL in this file is intended
 - [ ] Client associated with an en_route job can read the intended live location.
 - [ ] Unrelated users cannot read another job's location or notifications.
 
+## Automated static gate
+
+- [x] Added `scripts/check-security-migrations.mjs` to check critical migration invariants without connecting to a database.
+- [x] Added `.github/workflows/security-static-check.yml` to run those checks on relevant pull-request changes.
+- [ ] Confirm the GitHub Actions run completes successfully after the repository accepts the workflow event.
+- [ ] Remember: a static pattern check does not prove SQL syntax, RLS behavior, or trigger behavior; PostgreSQL integration tests remain required.
+
 ## Local execution
 
 1. Install Docker Desktop and the Supabase CLI, if not already installed.
