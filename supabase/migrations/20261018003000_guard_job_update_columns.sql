@@ -54,7 +54,8 @@ begin
 
   if actor_role = 'driver' then
     -- A driver may only accept an unassigned request or complete their own in-route job.
-    if new.origin is distinct from old.origin
+    if new.id is distinct from old.id
+      or new.origin is distinct from old.origin
       or new.destination is distinct from old.destination
       or new.distance_km is distinct from old.distance_km
       or new.vehicle_type is distinct from old.vehicle_type
@@ -64,6 +65,7 @@ begin
       or new.price is distinct from old.price
       or new.client_id is distinct from old.client_id
       or new.created_at is distinct from old.created_at
+      or new.updated_at is distinct from old.updated_at
       or new.driver_paid is distinct from old.driver_paid
     then
       raise exception 'Drivers cannot edit job details or payment flags';
