@@ -18,12 +18,25 @@ begin
   end if;
 
   if auth.uid() is null then
-    raise exception 'A signed-in user is required to update a job';
+    raise exception 'A signed-in user is required to modify a job';
   end if;
 
   select p.role into actor_role
   from public.profiles p
   where p.id = auth.uid();
+
+  -- Client-created requests must start unassigned and unpaid.
+  if tg_op = 'INSERT' then
+    if actor_role <> 'client'
+      or new.client_id is distinct from auth.uid()
+      or new.status <> 'requested'
+      or new.driver_id is not null
+      or coalesce(new.driver_paid, false) <> false then
+      raise exception 'Clients may only create their own new, unassigned, unpaid requests';
+    end if;
+    new.driver_paid := false;
+    return new;
+  end if;
 
   if actor_role = 'admin' and public.is_admin() then
     -- Admin UI currently records payment only. Do not let that path edit job details.
@@ -98,6 +111,6 @@ revoke all on function public.guard_job_updates() from authenticated;
 
 drop trigger if exists guard_job_updates on public.jobs;
 create trigger guard_job_updates
-before update on public.jobs
+before insert or update on public.jobs
 for each row
 execute function public.guard_job_updates();
