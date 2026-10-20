@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FLETYA — prueba de seguridad</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:Arial,sans-serif;max-width:680px;margin:24px auto;padding:0 16px;background:#f4f7f8;color:#172126}
+main{background:#fff;border:1px solid #dce5e7;border-radius:16px;padding:22px}
+h1{color:#087f8c}label{display:block;margin:12px 0 5px;font-weight:bold}input{width:100%;padding:12px;border:1px solid #ccd8db;border-radius:8px;box-sizing:border-box}
+button{margin-top:14px;padding:12px 16px;border:0;border-radius:9px;background:#087f8c;color:white;font-weight:bold}
+#out{white-space:pre-wrap;background:#f4f7f8;padding:14px;border-radius:9px;margin-top:16px;overflow-wrap:anywhere}
+.note{font-size:14px;color:#52646a}
+</style></head>
+<body><main>
+<h1>FLETYA · Prueba de seguridad</h1>
+<p>Esta página solo apunta al proyecto <b>FLETYA-testing</b>. No uses una contraseña de producción si es distinta. No compartas aquí tu contraseña ni tokens.</p>
+<p class="note">La prueba intenta cambiar temporalmente el precio del servicio de prueba por $0.01. Si el servidor lo permite, intenta restaurar inmediatamente el precio original y lo reporta como fallo de seguridad.</p>
+<label>Correo de la cuenta fletero propietaria del pedido</label>
+<input id="email" type="email" autocomplete="username" value="alejandroriver1410@gmail.com">
+<label>Contraseña de esa cuenta de prueba</label>
+<input id="password" type="password" autocomplete="current-password">
+<button id="run" onclick="runTest()">Iniciar sesión y probar bloqueo</button>
+<div id="out">Esperando la prueba.</div>
+</main>
+<script>
+const URL='https://ccdtpwvalqznasstnqxj.supabase.co';
+const KEY='sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
+const JOB='c201dee1-d9d5-4e62-8ad8-6dfb7adb31a6';
+const DRIVER='ba51357e-6aff-4dfb-ba8b-9f85626c2b04';
+const sb=window.supabase.createClient(URL,KEY);
+const out=document.getElementById('out');
+async function runTest(){
+ const btn=document.getElementById('run'); btn.disabled=true;
+ const email=document.getElementById('email').value.trim();
+ const password=document.getElementById('password').value;
+ try{
+  out.textContent='1/4 Iniciando sesión en FLETYA-testing…';
+  const {data:auth,error:authErr}=await sb.auth.signInWithPassword({email,password});
+  if(authErr) throw new Error('No se pudo iniciar sesión: '+authErr.message);
+  if(!auth.user || auth.user.id!==DRIVER) throw new Error('La cuenta autenticada no es el fletero propietario del pedido de prueba. No se intentó modificar nada.');
+  out.textContent='2/4 Verificando el pedido asignado…';
+  const {data:job,error:readErr}=await sb.from('jobs').select('id,price,status,driver_id').eq('id',JOB).single();
+  if(readErr) throw new Error('No se pudo leer el pedido: '+readErr.message);
+  if(job.driver_id!==auth.user.id || job.status!=='en_route') throw new Error('El pedido ya no está en ruta o no pertenece a esta cuenta. No se intentó modificar nada.');
+  const original=Number(job.price);
+  out.textContent='3/4 Intentando cambiar el precio de '+original.toFixed(2)+' a '+(original+0.01).toFixed(2)+' MXN…';
+  const {data:changed,error:updateErr}=await sb.from('jobs').update({price:Number((original+0.01).toFixed(2))}).eq('id',JOB).select('id,price');
+  if(updateErr){
+    out.textContent='RESULTADO: BLOQUEADO ✓\nEl servidor rechazó el cambio de precio para el fletero autenticado.\nRespuesta: '+updateErr.message+'\n\nSe consultará el precio para confirmar que no cambió.';
+    const {data:after,error:afterErr}=await sb.from('jobs').select('price,status').eq('id',JOB).single();
+    out.textContent+='\nPrecio después: '+(afterErr?('No se pudo verificar: '+afterErr.message):Number(after.price).toFixed(2)+' MXN')+'\nEstado: '+(afterErr?'no verificado':after.status);
+  } else {
+    const didChange=Array.isArray(changed)&&changed.length>0;
+    if(didChange){
+      out.textContent='ALERTA: EL CAMBIO FUE ACEPTADO. Intentando restaurar el precio original…';
+      const {error:restoreErr}=await sb.from('jobs').update({price:original}).eq('id',JOB);
+      if(restoreErr) out.textContent+='\nFALLO AL RESTAURAR: '+restoreErr.message+'\nEl proyecto es solo de pruebas; avisa antes de continuar.';
+      else out.textContent+='\nEl precio original se restauró, pero la prueba FALLÓ: el servidor permitió modificar el precio.';
+    } else {
+      out.textContent='La petición no devolvió filas modificadas. No se puede declarar aprobado; verifica el precio en el panel o repite con revisión técnica.';
+    }
+  }
+ }catch(e){out.textContent='PRUEBA INTERRUMPIDA\n'+(e&&e.message?e.message:String(e));}
+ finally{try{await sb.auth.signOut()}catch(e){} btn.disabled=false;}
+}
+</script></body></html>
