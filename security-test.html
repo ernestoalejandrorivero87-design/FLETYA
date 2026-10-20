@@ -8,60 +8,79 @@
 body{font-family:Arial,sans-serif;max-width:680px;margin:24px auto;padding:0 16px;background:#f4f7f8;color:#172126}
 main{background:#fff;border:1px solid #dce5e7;border-radius:16px;padding:22px}
 h1{color:#087f8c}label{display:block;margin:12px 0 5px;font-weight:bold}input{width:100%;padding:12px;border:1px solid #ccd8db;border-radius:8px;box-sizing:border-box}
-button{margin-top:14px;padding:12px 16px;border:0;border-radius:9px;background:#087f8c;color:white;font-weight:bold}
+button{margin-top:14px;padding:12px 16px;border:0;border-radius:9px;background:#087f8c;color:white;font-weight:bold}button:disabled{opacity:.6}
 #out{white-space:pre-wrap;background:#f4f7f8;padding:14px;border-radius:9px;margin-top:16px;overflow-wrap:anywhere}
 .note{font-size:14px;color:#52646a}
 </style></head>
 <body><main>
 <h1>FLETYA · Prueba de seguridad</h1>
 <p>Esta página solo apunta al proyecto <b>FLETYA-testing</b>. No uses una contraseña de producción si es distinta. No compartas aquí tu contraseña ni tokens.</p>
-<p class="note">La prueba intenta cambiar temporalmente el precio del servicio de prueba por $0.01. Si el servidor lo permite, intenta restaurar inmediatamente el precio original y lo reporta como fallo de seguridad.</p>
-<label>Correo de la cuenta fletero propietaria del pedido</label>
+<p class="note">La prueba intenta cambiar temporalmente el precio del servicio de prueba por $0.01. Si el servidor lo permite, intenta restaurar inmediatamente el precio original y lo reporta como fallo.</p>
+<label for="email">Correo de la cuenta fletero propietaria del pedido</label>
 <input id="email" type="email" autocomplete="username" value="alejandroriver1410@gmail.com">
-<label>Contraseña de esa cuenta de prueba</label>
+<label for="password">Contraseña de esa cuenta de prueba</label>
 <input id="password" type="password" autocomplete="current-password">
-<button id="run" onclick="runTest()">Iniciar sesión y probar bloqueo</button>
-<div id="out">Esperando la prueba.</div>
+<button id="run" type="button">Iniciar sesión y probar bloqueo</button>
+<div id="out" role="status" aria-live="polite">Página cargada. Pulsa el botón para comenzar.</div>
 </main>
 <script>
-const URL='https://ccdtpwvalqznasstnqxj.supabase.co';
-const KEY='sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
-const JOB='c201dee1-d9d5-4e62-8ad8-6dfb7adb31a6';
-const DRIVER='ba51357e-6aff-4dfb-ba8b-9f85626c2b04';
-const sb=window.supabase.createClient(URL,KEY);
-const out=document.getElementById('out');
-async function runTest(){
- const btn=document.getElementById('run'); btn.disabled=true;
- const email=document.getElementById('email').value.trim();
- const password=document.getElementById('password').value;
- try{
-  out.textContent='1/4 Iniciando sesión en FLETYA-testing…';
-  const {data:auth,error:authErr}=await sb.auth.signInWithPassword({email,password});
-  if(authErr) throw new Error('No se pudo iniciar sesión: '+authErr.message);
-  if(!auth.user || auth.user.id!==DRIVER) throw new Error('La cuenta autenticada no es el fletero propietario del pedido de prueba. No se intentó modificar nada.');
-  out.textContent='2/4 Verificando el pedido asignado…';
-  const {data:job,error:readErr}=await sb.from('jobs').select('id,price,status,driver_id').eq('id',JOB).single();
-  if(readErr) throw new Error('No se pudo leer el pedido: '+readErr.message);
-  if(job.driver_id!==auth.user.id || job.status!=='en_route') throw new Error('El pedido ya no está en ruta o no pertenece a esta cuenta. No se intentó modificar nada.');
-  const original=Number(job.price);
-  out.textContent='3/4 Intentando cambiar el precio de '+original.toFixed(2)+' a '+(original+0.01).toFixed(2)+' MXN…';
-  const {data:changed,error:updateErr}=await sb.from('jobs').update({price:Number((original+0.01).toFixed(2))}).eq('id',JOB).select('id,price');
-  if(updateErr){
-    out.textContent='RESULTADO: BLOQUEADO ✓\nEl servidor rechazó el cambio de precio para el fletero autenticado.\nRespuesta: '+updateErr.message+'\n\nSe consultará el precio para confirmar que no cambió.';
-    const {data:after,error:afterErr}=await sb.from('jobs').select('price,status').eq('id',JOB).single();
-    out.textContent+='\nPrecio después: '+(afterErr?('No se pudo verificar: '+afterErr.message):Number(after.price).toFixed(2)+' MXN')+'\nEstado: '+(afterErr?'no verificado':after.status);
-  } else {
-    const didChange=Array.isArray(changed)&&changed.length>0;
-    if(didChange){
-      out.textContent='ALERTA: EL CAMBIO FUE ACEPTADO. Intentando restaurar el precio original…';
-      const {error:restoreErr}=await sb.from('jobs').update({price:original}).eq('id',JOB);
-      if(restoreErr) out.textContent+='\nFALLO AL RESTAURAR: '+restoreErr.message+'\nEl proyecto es solo de pruebas; avisa antes de continuar.';
-      else out.textContent+='\nEl precio original se restauró, pero la prueba FALLÓ: el servidor permitió modificar el precio.';
-    } else {
-      out.textContent='La petición no devolvió filas modificadas. No se puede declarar aprobado; verifica el precio en el panel o repite con revisión técnica.';
+(function(){
+ const TEST_SUPABASE_URL='https://ccdtpwvalqznasstnqxj.supabase.co';
+ const TEST_SUPABASE_KEY='sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
+ const TEST_JOB_ID='c201dee1-d9d5-4e62-8ad8-6dfb7adb31a6';
+ const TEST_DRIVER_ID='ba51357e-6aff-4dfb-ba8b-13aa3074359a';
+ const out=document.getElementById('out');
+ const btn=document.getElementById('run');
+ btn.addEventListener('click',runTest);
+ if(!window.supabase || typeof window.supabase.createClient!=='function'){
+   out.textContent='No se pudo cargar la biblioteca de conexión. Comprueba la conexión a internet y vuelve a abrir esta página.';
+   btn.disabled=true;
+ }
+ async function runTest(){
+  btn.disabled=true;
+  const email=document.getElementById('email').value.trim();
+  const password=document.getElementById('password').value;
+  let sb=null;
+  try{
+   if(!window.supabase || typeof window.supabase.createClient!=='function') throw new Error('No se cargó la biblioteca de conexión. Recarga la página.');
+   if(!email || !password) throw new Error('Escribe el correo y la contraseña de la cuenta de prueba.');
+   sb=window.supabase.createClient(TEST_SUPABASE_URL,TEST_SUPABASE_KEY);
+   out.textContent='1/4 · Iniciando sesión en FLETYA-testing…';
+   const {data:auth,error:authErr}=await sb.auth.signInWithPassword({email,password});
+   if(authErr) throw new Error('No se pudo iniciar sesión: '+authErr.message);
+   if(!auth.user || auth.user.id!==TEST_DRIVER_ID) throw new Error('Esta cuenta no es la propietaria del pedido seleccionado. No se intentó modificar nada.');
+   out.textContent='2/4 · Verificando el pedido de prueba…';
+   const {data:job,error:readErr}=await sb.from('jobs').select('id,price,status,driver_id').eq('id',TEST_JOB_ID).single();
+   if(readErr) throw new Error('No se pudo leer el pedido: '+readErr.message);
+   if(job.driver_id!==auth.user.id || job.status!=='en_route') throw new Error('El pedido ya no está en ruta o no corresponde a esta cuenta. No se intentó modificar nada.');
+   const original=Number(job.price);
+   const attempted=Number((original+0.01).toFixed(2));
+   out.textContent='3/4 · Enviando intento de cambio de precio…';
+   const {data:changed,error:updateErr}=await sb.from('jobs').update({price:attempted}).eq('id',TEST_JOB_ID).select('id,price');
+   out.textContent='4/4 · Verificando el precio guardado…';
+   const {data:after,error:afterErr}=await sb.from('jobs').select('price,status').eq('id',TEST_JOB_ID).single();
+   if(afterErr) throw new Error('La petición de cambio respondió '+(updateErr?updateErr.message:'sin error')+', pero no se pudo verificar el precio: '+afterErr.message);
+   const current=Number(after.price);
+   if(current===original){
+    out.textContent='PRECIO SIN CAMBIOS ✓\nPrecio antes: $'+original.toFixed(2)+' MXN\nPrecio después: $'+current.toFixed(2)+' MXN\n'+(updateErr?'El servidor rechazó la petición: '+updateErr.message:'No se guardó ningún cambio.')+'\n\nEl precio permaneció igual. Este resultado es compatible con un bloqueo, aunque no sustituye una revisión completa de permisos.';
+   }else if(current===attempted){
+    out.textContent='ALERTA: EL PRECIO CAMBIÓ. Intentando restaurar el precio original…';
+    const {error:restoreErr}=await sb.from('jobs').update({price:original}).eq('id',TEST_JOB_ID);
+    const {data:restored, error:verifyRestoreErr}=await sb.from('jobs').select('price').eq('id',TEST_JOB_ID).single();
+    if(!restoreErr && !verifyRestoreErr && Number(restored.price)===original){
+      out.textContent='FALLO DE SEGURIDAD: el servidor permitió cambiar el precio del pedido.\nEl precio original de $'+original.toFixed(2)+' MXN fue restaurado.\nNo se debe fusionar la migración hasta corregir y volver a probar.';
+    }else{
+      out.textContent='FALLO DE SEGURIDAD: el precio cambió y no se pudo confirmar su restauración.\nError de restauración: '+(restoreErr?restoreErr.message:(verifyRestoreErr?verifyRestoreErr.message:'el precio no coincide'))+'\nNo continúes usando este pedido de prueba hasta revisarlo.';
     }
+   }else{
+    out.textContent='RESULTADO NO CONCLUYENTE\nPrecio inicial: $'+original.toFixed(2)+' MXN\nPrecio actual: $'+current.toFixed(2)+' MXN\nNo se modificó automáticamente porque el valor no coincide con el cambio de prueba esperado. Requiere revisión.';
+   }
+  }catch(e){
+   out.textContent='PRUEBA INTERRUMPIDA\n'+(e&&e.message?e.message:String(e));
+  }finally{
+   if(sb){try{await sb.auth.signOut()}catch(e){}}
+   btn.disabled=false;
   }
- }catch(e){out.textContent='PRUEBA INTERRUMPIDA\n'+(e&&e.message?e.message:String(e));}
- finally{try{await sb.auth.signOut()}catch(e){} btn.disabled=false;}
-}
+ }
+})();
 </script></body></html>
