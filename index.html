@@ -1305,7 +1305,11 @@ async function driverLocation(){
     }
   );
 }
- async function markDriverPaid(driverId){
+ async function markDriverPaid(jobId){
+
+  if (!confirm('Confirma que ya realizaste el pago correspondiente a este pedido. ¿Marcar solo este pedido como pagado?')) {
+    return;
+  }
 
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
@@ -1330,7 +1334,7 @@ async function driverLocation(){
   const { error } = await supabaseClient
     .from('jobs')
     .update({ driver_paid: true })
-    .eq('driver_id', driverId)
+    .eq('id', jobId)
     .eq('status', 'completed')
     .eq('driver_paid', false);
 
@@ -1340,10 +1344,11 @@ async function driverLocation(){
     return;
   }
 
-  toast('💸 Pago registrado correctamente');
+  toast('💸 Pago registrado para este pedido');
 
   renderAdmin();
- }
+}
+
 async function renderAdmin(){
 
   const { data: { user }, error: authError } =
@@ -1456,31 +1461,33 @@ const filteredServices = services.filter(job => {
 
     const commission = total * 0.15;
     const net = total - commission;
-   const pendingJobs = driverJobs.filter(
-  job => job.driver_paid !== true
-);
+    const pendingJobsList = driverJobs.filter(
+      job => job.driver_paid !== true
+    );
 
-const pendingTotal = pendingJobs.reduce(
-  (sum, job) => sum + Number(job.price || 0) * 0.85,
-  0
-);
+    const pendingTotal = pendingJobsList.reduce(
+      (sum, job) => sum + Number(job.price || 0) * 0.85,
+      0
+    );
 
-  return {
-  ...driver,
-  jobs: driverJobs.length,
-  total,
-  commission,
-  net,
-  pendingJobs: pendingJobs.length,
-  pendingTotal
-};
+    return {
+      ...driver,
+      jobs: driverJobs.length,
+      total,
+      commission,
+      net,
+      pendingJobs: pendingJobsList.length,
+      pendingJobsList,
+      pendingTotal
+    };
   });
+
  document.getElementById('driverAccountsTable').innerHTML =
   driverAccounts.length
     ? `
       <div class="card">
         <h2>💰 Estado de cuenta de fleteros</h2>
-        <p class="muted">Resumen de servicios completados y pagos.</p>
+        <p class="muted">Resumen por fletero. Los pagos se registran pedido por pedido.</p>
 
         <table>
           <tr>
@@ -1490,7 +1497,7 @@ const pendingTotal = pendingJobs.reduce(
             <th>Comisión</th>
             <th>Neto</th>
             <th>Pendiente</th>
-            <th>Acción</th>
+            <th>Pedidos pendientes</th>
           </tr>
 
           ${driverAccounts.map(driver => `
@@ -1499,24 +1506,40 @@ const pendingTotal = pendingJobs.reduce(
               <td>${driver.jobs}</td>
               <td>$${driver.total.toLocaleString('es-MX')}</td>
               <td>$${driver.commission.toLocaleString('es-MX')}</td>
-              <td>$${driver.net.toLocaleString('es-MX')}
+              <td>$${driver.net.toLocaleString('es-MX')}</td>
               <td>$${driver.pendingTotal.toLocaleString('es-MX')}</td>
-              </td>
-              <td>
-  ${driver.pendingTotal > 0
-  ? `<button onclick="markDriverPaid('${driver.id}')">
-      💸 Marcar pagado
-    </button>`
-  : `<span>✅ Pagado</span>`
-  }
-</td>
+              <td>${driver.pendingJobs}</td>
             </tr>
           `).join('')}
         </table>
+
+        ${driverAccounts.map(driver => driver.pendingJobsList.length ? `
+          <div class="card">
+            <h3>Pagos pendientes — ${driver.full_name || 'Sin nombre'}</h3>
+            <table>
+              <tr>
+                <th>Pedido</th>
+                <th>Fecha</th>
+                <th>Importe neto</th>
+                <th>Estado</th>
+                <th>Acción</th>
+              </tr>
+              ${driver.pendingJobsList.map(job => `
+                <tr>
+                  <td>${String(job.id || '').slice(0, 8)}</td>
+                  <td>${job.created_at ? new Date(job.created_at).toLocaleDateString('es-MX') : 'Sin fecha'}</td>
+                  <td>$${(Number(job.price || 0) * 0.85).toLocaleString('es-MX')}</td>
+                  <td>Completado · Pendiente de pago</td>
+                  <td><button onclick="markDriverPaid('${job.id}')">💸 Marcar este pedido pagado</button></td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        ` : '').join('')}
       </div>
     `
     : '';
-  document.getElementById('adminUsersTable').innerHTML =
+ document.getElementById('adminUsersTable').innerHTML =
     adminUsers.length
       ? `
         <table>
