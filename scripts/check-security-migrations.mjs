@@ -33,10 +33,10 @@ const checks = [
 
 let failed = false;
 for (const [label, passed] of checks) {
-  process.stdout.write(\`${passed ? 'PASS' : 'FAIL'}  ${label}\\n\`);
+  process.stdout.write((passed ? 'PASS' : 'FAIL') + '  ' + label + '\\n');
   if (!passed) failed = true;
 }
-process.stdout.write(\`\\n${checks.filter(([, passed]) => passed).length}/${checks.length} static checks passed.\\n\`);
+process.stdout.write('\\n' + checks.filter(([, passed]) => passed).length + '/' + checks.length + ' static checks passed.\\n');
 if (failed) {
   process.stderr.write('Static security checks failed. Review the migration files before proceeding.\\n');
   process.exitCode = 1;
