@@ -22,6 +22,7 @@ const checks = [
   ['GPS writes are tied to the assigned en-route job', (sql.rls.match(/j\.driver_id = auth\.uid\(\)\s+and j\.status = 'en_route'/ig) || []).length >= 2],
   ['trigger-only functions have direct execute revoked', /revoke all on function public\.handle_new_user\(\) from authenticated/i.test(sql.functions) && /revoke all on function public\.notify_drivers_new_job\(\) from authenticated/i.test(sql.functions)],
   ['admin helper is moved out of the public API schema', /create schema if not exists private/i.test(sql.privateAdmin) && /create or replace function private\.is_admin\(\)/i.test(sql.privateAdmin) && /alter policy "Admins can view all profiles"\s+on public\.profiles\s+using \(private\.is_admin\(\)\)/i.test(sql.privateAdmin) && /drop function public\.is_admin\(\)/i.test(sql.privateAdmin)],
+  ['job guard uses the private admin helper', /create or replace function public\.guard_job_updates\(\)/i.test(sql.privateAdmin) && /actor_role = 'admin' and private\.is_admin\(\)/i.test(sql.privateAdmin) && !/actor_role = 'admin' and public\.is_admin\(\)/i.test(sql.privateAdmin)],
   ['job guard covers inserts and updates', /before insert or update on public\.jobs/i.test(sql.jobs)],
   ['job creation rejects missing or invalid status', /new\.status is distinct from 'requested'/i.test(sql.jobs)],
   ['drivers cannot edit job details or payment flags', /new\.driver_paid is distinct from old\.driver_paid/i.test(sql.jobs) && /Drivers cannot edit job details or payment flags/i.test(sql.jobs)],
