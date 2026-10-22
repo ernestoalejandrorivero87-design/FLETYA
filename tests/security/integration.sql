@@ -1,5 +1,5 @@
 -- Disposable PostgreSQL smoke/integration checks. Run only in CI's throwaway database.
-\\set ON_ERROR_STOP on
+\set ON_ERROR_STOP on
 
 -- Install the auth.users trigger after the migration has defined handle_new_user().
 create trigger on_auth_user_created after insert on auth.users
