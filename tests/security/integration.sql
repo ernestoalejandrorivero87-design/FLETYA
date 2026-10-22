@@ -1,9 +1,23 @@
 -- Disposable PostgreSQL smoke/integration checks. Run only in CI's throwaway database.
-\set ON_ERROR_STOP on
+\\set ON_ERROR_STOP on
 
 -- Install the auth.users trigger after the migration has defined handle_new_user().
 create trigger on_auth_user_created after insert on auth.users
 for each row execute function public.handle_new_user();
+
+-- The helper must no longer exist in the exposed public schema.
+do $$
+begin
+  if to_regprocedure('public.is_admin()') is not null then
+    raise exception 'public.is_admin() should not remain exposed';
+  end if;
+  if to_regprocedure('private.is_admin()') is null then
+    raise exception 'private.is_admin() is missing';
+  end if;
+  if not has_function_privilege('authenticated', 'private.is_admin()', 'EXECUTE') then
+    raise exception 'authenticated role needs execute for the RLS policy';
+  end if;
+end $$;
 
 insert into auth.users(id, raw_user_meta_data) values
 ('10000000-0000-0000-0000-000000000001', '{"full_name":"Client test","role":"client"}'),
@@ -79,6 +93,14 @@ insert into public.profiles(id,full_name,role) values ('50000000-0000-0000-0000-
 set role authenticated;
 select set_config('request.jwt.claim.sub','50000000-0000-0000-0000-000000000005',false);
 select set_config('request.jwt.claim.role','authenticated',false);
+
+do $$
+begin
+  if (select count(*) from public.profiles) < 4 then
+    raise exception 'admin RLS profile visibility failed';
+  end if;
+end $$;
+
 update public.jobs set driver_paid=true where id='40000000-0000-0000-0000-000000000004' and status='completed' and driver_paid=false;
 do $$
 begin
