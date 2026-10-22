@@ -63,5 +63,6 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018002000_restrict_security_definer_execution.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018003000_guard_job_update_columns.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018004000_restrict_table_privileges.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261022090000_move_is_admin_to_private_schema.sql
       - name: Run security regression checks
         run: psql -v ON_ERROR_STOP=1 -f tests/security/integration.sql
