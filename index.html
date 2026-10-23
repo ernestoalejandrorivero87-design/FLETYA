@@ -1388,21 +1388,33 @@ const filteredServices = services.filter(job => {
         job.status === 'completed'
     );
 
-    const total = driverJobs.reduce(
-      (sum, job) => sum + Number(job.price || 0),
+    // Contabilidad por servicio: trabajar en centavos enteros para evitar
+    // diferencias de coma flotante y asegurar que comisión + neto = precio.
+    const centsFor = amount => Math.round((Number(amount) || 0) * 100);
+    const jobCommissionCents = job => Math.round(centsFor(job.price) * 0.15);
+    const jobNetCents = job => centsFor(job.price) - jobCommissionCents(job);
+
+    const totalCents = driverJobs.reduce(
+      (sum, job) => sum + centsFor(job.price),
       0
     );
+    const commissionCents = driverJobs.reduce(
+      (sum, job) => sum + jobCommissionCents(job),
+      0
+    );
+    const netCents = totalCents - commissionCents;
+    const total = totalCents / 100;
+    const commission = commissionCents / 100;
+    const net = netCents / 100;
 
-    const commission = total * 0.15;
-    const net = total - commission;
-   const pendingJobs = driverJobs.filter(
-  job => job.driver_paid !== true
-);
-
-const pendingTotal = pendingJobs.reduce(
-  (sum, job) => sum + Number(job.price || 0) * 0.85,
-  0
-);
+    const pendingJobs = driverJobs.filter(
+      job => job.driver_paid !== true
+    );
+    const pendingCents = pendingJobs.reduce(
+      (sum, job) => sum + jobNetCents(job),
+      0
+    );
+    const pendingTotal = pendingCents / 100;
 
   return {
   ...driver,
