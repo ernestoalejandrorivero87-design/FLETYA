@@ -1001,6 +1001,52 @@ function advance(){
   }
 
   /* =========================
+     HISTORIAL DE MIS SERVICIOS
+     Solo consulta registros del fletero autenticado.
+     ========================= */
+
+  const { data: completedJobs, error: historyError } = await supabaseClient
+    .from('jobs')
+    .select('id, origin, destination, service_type, vehicle_type, price, status, created_at')
+    .eq('driver_id', user.id)
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  const safeText = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[ch]);
+
+  html += '<section class="card"><h3>📚 Mis servicios</h3><p class="muted">Historial de tus servicios completados.</p>';
+
+  if (historyError) {
+    console.error('Error cargando historial del fletero:', historyError);
+    html += '<p class="pill">No se pudo cargar tu historial. Inténtalo de nuevo.</p>';
+  } else if (!completedJobs || completedJobs.length === 0) {
+    html += '<p class="muted">Todavía no tienes servicios completados.</p>';
+  } else {
+    html += completedJobs.map(job => {
+      const date = job.created_at
+        ? new Date(job.created_at).toLocaleDateString('es-MX')
+        : 'Fecha no disponible';
+      return `<div class="card">
+        <h4>${safeText(job.origin || 'Origen no disponible')} → ${safeText(job.destination || 'Destino no disponible')}</h4>
+        <p><b>Servicio:</b> ${safeText(job.service_type || 'No especificado')}</p>
+        <p><b>Vehículo:</b> ${safeText(job.vehicle_type || 'No especificado')}</p>
+        <p><b>Fecha:</b> ${safeText(date)}</p>
+        <p><b>Importe:</b> ${(Number(job.price || 0)).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})} MXN</p>
+        <span class="pill">✅ Completado</span>
+      </div>`;
+    }).join('');
+  }
+
+  html += '</section><br>';
+
+  /* =========================
      NUEVAS SOLICITUDES
      ========================= */
 
