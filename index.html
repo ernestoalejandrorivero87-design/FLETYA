@@ -56,6 +56,9 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 <div class="card"><div class="card" id="authClient">
   <h2>Cuenta de cliente</h2>
 
+  <label>Nombre completo</label>
+  <input id="clientProfileName" placeholder="Tu nombre y apellidos">
+
   <label>Correo electrónico</label>
   <input id="authEmail" type="email" placeholder="tu@email.com">
 
@@ -64,6 +67,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 
   <button class="btn" onclick="registerClient()">Crear cuenta</button>
   <button class="btn" onclick="loginClient()">Iniciar sesión</button>
+  <button class="btn light" onclick="saveClientProfile()">Guardar nombre del perfil</button>
 
   <p id="authMessage" class="muted"></p>
 
@@ -73,6 +77,9 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 </div>
   <div class="card" id="authDriver">
   <h2>Cuenta de fletero</h2>
+
+  <label>Nombre completo</label>
+  <input id="driverName" placeholder="Tu nombre y apellidos">
 
   <label>Correo electrónico</label>
   <input id="driverEmail" type="email" placeholder="fletero@email.com">
@@ -136,9 +143,10 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 <div class="hero"><h1>Panel del fletero</h1><p>Así verá el conductor las solicitudes y sus servicios.</p></div>
 <div class="grid">
 <div class="card">
-<h2>Mi perfil</h2><label>Nombre</label><input id="dname" value="Fletero Demo">
+<h2>Mi perfil</h2><label>Nombre completo</label><input id="dname" placeholder="Tu nombre y apellidos">
 <label>Vehículo</label><select id="dvehicle"><option>Pickup / Estaquita</option><option>Camioneta</option><option>Camión</option></select>
 <label>Placas</label><input id="plates" placeholder="ABC-123-D">
+<br><button class="btn light" onclick="saveDriverProfile()">Guardar nombre del perfil</button>
 <br><br><button class="btn light" onclick="driverLocation()">📍 Actualizar ubicación</button>
 <p id="gps" class="muted">Ubicación pendiente</p>
 </div>
@@ -316,6 +324,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 const state={jobs:[],active:null,accepted:false,status:'Pendiente'};
 const rate={pickup:35,camioneta:45,camion:65};
 function money(n){return n.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0})}
+function money2(n){return (Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function quote(){
  let km=+document.getElementById('km').value||1,v=document.getElementById('vehicle').value,h=+document.getElementById('helpers').value;
  let base=120, p=base+km*rate[v]+h*180;
@@ -742,6 +751,18 @@ async function renderClient(){
   return;
   }
 document.getElementById('clientLogoutBtn').style.display = 'inline-block';
+  const { data: clientProfile } = await supabaseClient
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (clientProfile?.full_name) {
+    document.getElementById('clientProfileName').value = clientProfile.full_name;
+    const requestName = document.getElementById('cname');
+    if (requestName && !requestName.value) requestName.value = clientProfile.full_name;
+  }
+
   const { data: jobs, error } = await supabaseClient
     .from('jobs')
     .select('*')
@@ -943,7 +964,7 @@ function startDriverPanelRefresh(userId) {
   const { data: profile, error: profileError } =
     await supabaseClient
       .from('profiles')
-      .select('role')
+      .select('role, full_name')
       .eq('id', user.id)
       .single();
 
@@ -953,6 +974,7 @@ function startDriverPanelRefresh(userId) {
     return;
   }
 
+  document.getElementById('dname').value = profile.full_name || '';
   startDriverNotifications(user.id);
   startDriverPanelRefresh(user.id);
   const e = document.getElementById('jobCard');
@@ -1032,6 +1054,52 @@ function startDriverPanelRefresh(userId) {
       <br>
     `;
   }
+
+  /* =========================
+     HISTORIAL DE MIS SERVICIOS
+     Solo consulta registros del fletero autenticado.
+     ========================= */
+
+  const { data: completedJobs, error: historyError } = await supabaseClient
+    .from('jobs')
+    .select('id, origin, destination, service_type, vehicle_type, price, status, created_at')
+    .eq('driver_id', user.id)
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  const safeText = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[ch]);
+
+  html += '<section class="card"><h3>📚 Mis servicios</h3><p class="muted">Historial de tus servicios completados.</p>';
+
+  if (historyError) {
+    console.error('Error cargando historial del fletero:', historyError);
+    html += '<p class="pill">No se pudo cargar tu historial. Inténtalo de nuevo.</p>';
+  } else if (!completedJobs || completedJobs.length === 0) {
+    html += '<p class="muted">Todavía no tienes servicios completados.</p>';
+  } else {
+    html += completedJobs.map(job => {
+      const date = job.created_at
+        ? new Date(job.created_at).toLocaleDateString('es-MX')
+        : 'Fecha no disponible';
+      return `<div class="card">
+        <h4>${safeText(job.origin || 'Origen no disponible')} → ${safeText(job.destination || 'Destino no disponible')}</h4>
+        <p><b>Servicio:</b> ${safeText(job.service_type || 'No especificado')}</p>
+        <p><b>Vehículo:</b> ${safeText(job.vehicle_type || 'No especificado')}</p>
+        <p><b>Fecha:</b> ${safeText(date)}</p>
+        <p><b>Importe:</b> ${(Number(job.price || 0)).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})} MXN</p>
+        <span class="pill">✅ Completado</span>
+      </div>`;
+    }).join('');
+  }
+
+  html += '</section><br>';
 
   /* =========================
      NUEVAS SOLICITUDES
@@ -1449,21 +1517,33 @@ const filteredServices = services.filter(job => {
         job.status === 'completed'
     );
 
-    const total = driverJobs.reduce(
-      (sum, job) => sum + Number(job.price || 0),
+    // Contabilidad por servicio: trabajar en centavos enteros para evitar
+    // diferencias de coma flotante y asegurar que comisión + neto = precio.
+    const centsFor = amount => Math.round((Number(amount) || 0) * 100);
+    const jobCommissionCents = job => Math.round(centsFor(job.price) * 0.15);
+    const jobNetCents = job => centsFor(job.price) - jobCommissionCents(job);
+
+    const totalCents = driverJobs.reduce(
+      (sum, job) => sum + centsFor(job.price),
       0
     );
+    const commissionCents = driverJobs.reduce(
+      (sum, job) => sum + jobCommissionCents(job),
+      0
+    );
+    const netCents = totalCents - commissionCents;
+    const total = totalCents / 100;
+    const commission = commissionCents / 100;
+    const net = netCents / 100;
 
-    const commission = total * 0.15;
-    const net = total - commission;
-   const pendingJobs = driverJobs.filter(
-  job => job.driver_paid !== true
-);
-
-const pendingTotal = pendingJobs.reduce(
-  (sum, job) => sum + Number(job.price || 0) * 0.85,
-  0
-);
+    const pendingJobs = driverJobs.filter(
+      job => job.driver_paid !== true
+    );
+    const pendingCents = pendingJobs.reduce(
+      (sum, job) => sum + jobNetCents(job),
+      0
+    );
+    const pendingTotal = pendingCents / 100;
 
   return {
   ...driver,
@@ -1497,10 +1577,10 @@ const pendingTotal = pendingJobs.reduce(
             <tr>
               <td>${driver.full_name || 'Sin nombre'}</td>
               <td>${driver.jobs}</td>
-              <td>$${driver.total.toLocaleString('es-MX')}</td>
-              <td>$${driver.commission.toLocaleString('es-MX')}</td>
-              <td>$${driver.net.toLocaleString('es-MX')}
-              <td>$${driver.pendingTotal.toLocaleString('es-MX')}</td>
+              <td>$${money2(driver.total)}</td>
+              <td>$${money2(driver.commission)}</td>
+              <td>$${money2(driver.net)}
+              <td>$${money2(driver.pendingTotal)}</td>
               </td>
               <td>
   ${driver.pendingTotal > 0
@@ -1791,8 +1871,13 @@ setInterval(() => {
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-const SUPABASE_URL = 'https://wsdfqscrvfygxripmrzi.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O';
+const IS_FLETYA_PRODUCTION_HOST = window.location.hostname === 'fletya.vercel.app';
+const SUPABASE_URL = IS_FLETYA_PRODUCTION_HOST
+  ? 'https://wsdfqscrvfygxripmrzi.supabase.co'
+  : 'https://ccdtpwvalqznasstnqxj.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = IS_FLETYA_PRODUCTION_HOST
+  ? 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O'
+  : 'sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
 
 const supabaseClient =
   window.supabase && window.supabase.createClient
@@ -1803,12 +1888,13 @@ const supabaseClient =
     : null;
 
 async function registerClient() {
+  const fullName = document.getElementById('clientProfileName').value.trim();
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   const message = document.getElementById('authMessage');
 
-  if (!email || !password) {
-    message.textContent = 'Escribe tu correo y contraseña.';
+  if (!fullName || !email || !password) {
+    message.textContent = 'Escribe tu nombre completo, correo y contraseña.';
     return;
   }
 
@@ -1822,6 +1908,7 @@ async function registerClient() {
     password: password,
     options: {
       data: {
+        full_name: fullName,
         role: 'client'
       }
     }
@@ -1836,12 +1923,13 @@ async function registerClient() {
 }
 
 async function registerDriver() {
+  const fullName = document.getElementById('driverName').value.trim();
   const email = document.getElementById('driverEmail').value.trim();
   const password = document.getElementById('driverPassword').value;
   const message = document.getElementById('driverMessage');
 
-  if (!email || !password) {
-    message.textContent = 'Escribe tu correo y contraseña.';
+  if (!fullName || !email || !password) {
+    message.textContent = 'Escribe tu nombre completo, correo y contraseña.';
     return;
   }
 
@@ -1855,6 +1943,7 @@ async function registerDriver() {
     password: password,
     options: {
       data: {
+        full_name: fullName,
         role: 'driver'
       }
     }
@@ -1867,6 +1956,55 @@ async function registerDriver() {
 
   message.textContent =
     'Cuenta de fletero creada. Revisa tu correo si Supabase solicita confirmación.';
+}
+
+async function saveProfileName(inputId, expectedRole) {
+  const nameInput = document.getElementById(inputId);
+  const fullName = nameInput?.value.trim() || '';
+  if (!fullName) {
+    toast('Escribe tu nombre completo.');
+    return;
+  }
+
+  const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+  if (authError || !user) {
+    toast('Inicia sesión antes de guardar tu nombre.');
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile || profile.role !== expectedRole) {
+    toast('No se pudo validar tu tipo de cuenta.');
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from('profiles')
+    .update({ full_name: fullName })
+    .eq('id', user.id);
+
+  if (error) {
+    console.error('Error guardando nombre del perfil:', error);
+    toast('No se pudo guardar el nombre: ' + error.message);
+    return;
+  }
+
+  const requestName = document.getElementById('cname');
+  if (expectedRole === 'client' && requestName) requestName.value = fullName;
+  toast('Nombre del perfil guardado.');
+}
+
+async function saveClientProfile() {
+  return saveProfileName('clientProfileName', 'client');
+}
+
+async function saveDriverProfile() {
+  return saveProfileName('dname', 'driver');
 }
 
 async function loginDriver() {

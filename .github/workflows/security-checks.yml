@@ -1,0 +1,68 @@
+name: FLETYA security checks
+
+on:
+  push:
+    branches: [fix/security-profile-role]
+    paths:
+      - 'supabase/migrations/**'
+      - 'tests/security/**'
+      - 'scripts/check-security-migrations.mjs'
+      - '.github/workflows/security-checks.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'tests/security/**'
+      - 'scripts/check-security-migrations.mjs'
+      - '.github/workflows/security-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check migration invariants
+        run: node scripts/check-security-migrations.mjs
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fletya_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fletya_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: fletya_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply disposable fixture
+        run: psql -v ON_ERROR_STOP=1 -f tests/security/bootstrap.sql
+      - name: Apply draft migrations to disposable PostgreSQL
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018000000_guard_profile_role_changes.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018001000_enforce_roles_in_rls.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018002000_restrict_security_definer_execution.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018003000_guard_job_update_columns.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018004000_restrict_table_privileges.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261022090000_move_is_admin_to_private_schema.sql
+      - name: Run security regression checks
+        run: psql -v ON_ERROR_STOP=1 -f tests/security/integration.sql
