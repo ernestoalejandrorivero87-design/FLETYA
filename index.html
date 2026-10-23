@@ -316,6 +316,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 const state={jobs:[],active:null,accepted:false,status:'Pendiente'};
 const rate={pickup:35,camioneta:45,camion:65};
 function money(n){return n.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0})}
+function money2(n){return (Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function quote(){
  let km=+document.getElementById('km').value||1,v=document.getElementById('vehicle').value,h=+document.getElementById('helpers').value;
  let base=120, p=base+km*rate[v]+h*180;
@@ -1435,10 +1436,10 @@ const pendingTotal = pendingJobs.reduce(
             <tr>
               <td>${driver.full_name || 'Sin nombre'}</td>
               <td>${driver.jobs}</td>
-              <td>$${driver.total.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-              <td>$${driver.commission.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-              <td>$${driver.net.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
-              <td>$${driver.pendingTotal.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              <td>$${money2(driver.total)}</td>
+              <td>$${money2(driver.commission)}</td>
+              <td>$${money2(driver.net)}
+              <td>$${money2(driver.pendingTotal)}</td>
               </td>
               <td>
   ${driver.pendingTotal > 0
