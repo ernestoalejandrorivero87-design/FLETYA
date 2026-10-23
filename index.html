@@ -1729,8 +1729,13 @@ setInterval(() => {
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-const SUPABASE_URL = 'https://wsdfqscrvfygxripmrzi.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O';
+const IS_FLETYA_PRODUCTION_HOST = window.location.hostname === 'fletya.vercel.app';
+const SUPABASE_URL = IS_FLETYA_PRODUCTION_HOST
+  ? 'https://wsdfqscrvfygxripmrzi.supabase.co'
+  : 'https://ccdtpwvalqznasstnqxj.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = IS_FLETYA_PRODUCTION_HOST
+  ? 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O'
+  : 'sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
 
 const supabaseClient =
   window.supabase && window.supabase.createClient
