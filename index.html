@@ -1435,10 +1435,10 @@ const pendingTotal = pendingJobs.reduce(
             <tr>
               <td>${driver.full_name || 'Sin nombre'}</td>
               <td>${driver.jobs}</td>
-              <td>$${driver.total.toLocaleString('es-MX')}</td>
-              <td>$${driver.commission.toLocaleString('es-MX')}</td>
-              <td>$${driver.net.toLocaleString('es-MX')}
-              <td>$${driver.pendingTotal.toLocaleString('es-MX')}</td>
+              <td>$${driver.total.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              <td>$${driver.commission.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              <td>$${driver.net.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
+              <td>$${driver.pendingTotal.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
               </td>
               <td>
   ${driver.pendingTotal > 0
