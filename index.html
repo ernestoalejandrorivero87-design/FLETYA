@@ -334,6 +334,7 @@ function quote(){
  return p;
 }
 function show(id){
+ if(id !== 'driver' && typeof stopFletyaGps === 'function') stopFletyaGps();
  ['client','driver','admin'].forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==id));
  if(id==='admin')renderAdmin(); if(id==='driver')renderDriver();
 }
@@ -1061,6 +1062,8 @@ function advance(){
       .limit(1)
       .maybeSingle();
 
+  syncFletyaGps(user.id, activeJob).catch(console.error);
+
   let html = '';
 
   if (activeError) {
@@ -1233,7 +1236,90 @@ function advance(){
 
   e.appendChild(logoutButton);
  }                         
+// GPS del fletero: seguimiento exclusivo del servicio activo y de la sesión actual.
+let fletyaGpsWatch = null;
+let fletyaGpsJobId = null;
+let fletyaGpsUserId = null;
+let fletyaGpsLastSent = 0;
+let fletyaGpsRestoreKey = '';
+
+function stopFletyaGps() {
+  if (fletyaGpsWatch !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(fletyaGpsWatch);
+  }
+  fletyaGpsWatch = null;
+  fletyaGpsJobId = null;
+  fletyaGpsUserId = null;
+  fletyaGpsLastSent = 0;
+  fletyaGpsRestoreKey = '';
+}
+
+async function syncFletyaGps(userId, activeJob) {
+  const gps = document.getElementById('gps');
+  if (!gps) return;
+  if (!activeJob || activeJob.status !== 'en_route') {
+    stopFletyaGps();
+    gps.textContent = 'Ubicación pendiente (sin servicio en ruta)';
+    return;
+  }
+  const key = userId + ':' + activeJob.id;
+  if (fletyaGpsRestoreKey !== key) {
+    fletyaGpsRestoreKey = key;
+    const { data, error } = await supabaseClient.from('driver_locations')
+      .select('latitude, longitude, updated_at')
+      .eq('driver_id', userId).eq('job_id', activeJob.id)
+      .maybeSingle();
+    if (fletyaGpsRestoreKey !== key) return;
+    if (error) {
+      console.error('Error recuperando GPS:', error);
+      gps.textContent = 'No se pudo recuperar el GPS';
+    } else if (data) {
+      gps.textContent = '📍 Última ubicación guardada: ' +
+        Number(data.latitude).toFixed(5) + ', ' + Number(data.longitude).toFixed(5);
+    } else {
+      gps.textContent = 'Ubicación pendiente';
+    }
+  }
+  if (fletyaGpsWatch !== null && fletyaGpsJobId === activeJob.id && fletyaGpsUserId === userId) return;
+  stopFletyaGps();
+  fletyaGpsRestoreKey = key;
+  if (!navigator.geolocation) {
+    gps.textContent = 'GPS no disponible en este navegador';
+    return;
+  }
+  fletyaGpsJobId = activeJob.id;
+  fletyaGpsUserId = userId;
+  const jobId = activeJob.id;
+  fletyaGpsWatch = navigator.geolocation.watchPosition(async position => {
+    if (fletyaGpsJobId !== jobId || fletyaGpsUserId !== userId ||
+        document.getElementById('driver')?.classList.contains('hidden')) return;
+    const now = Date.now();
+    if (now - fletyaGpsLastSent < 10000) return;
+    fletyaGpsLastSent = now;
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (user?.id !== userId || fletyaGpsJobId !== jobId) return;
+    const { error } = await supabaseClient.from('driver_locations').upsert({
+      driver_id: userId, job_id: jobId,
+      latitude: position.coords.latitude, longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy, updated_at: new Date().toISOString()
+    }, { onConflict: 'driver_id' });
+    if (fletyaGpsJobId !== jobId || fletyaGpsUserId !== userId) return;
+    if (error) {
+      console.error('Error guardando GPS:', error);
+      gps.textContent = 'No se pudo guardar la ubicación';
+    } else {
+      gps.textContent = '📍 GPS actualizado: ' +
+        position.coords.latitude.toFixed(5) + ', ' + position.coords.longitude.toFixed(5);
+    }
+  }, error => {
+    if (fletyaGpsJobId === jobId) {
+      gps.textContent = 'GPS no disponible: revisa el permiso de ubicación';
+      console.warn('GPS:', error.message);
+    }
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+}
 async function logoutDriver(){
+  stopFletyaGps();
   await supabaseClient.auth.signOut();
   toast('Sesión cerrada');
   show('client');
@@ -1305,6 +1391,7 @@ const { error } = await supabaseClient
     return;
   }
 
+  stopFletyaGps();
   state.active.status = 'completed';
 state.active = null;
 state.accepted = false;
