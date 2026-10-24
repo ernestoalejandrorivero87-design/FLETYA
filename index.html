@@ -492,6 +492,24 @@ function initRouteMap() {
   }).addTo(routeMap);
 }
 
+function clearRouteOnMap() {
+  if (routeMap && routeLine) routeMap.removeLayer(routeLine);
+  if (routeMap && originMarker) routeMap.removeLayer(originMarker);
+  if (routeMap && destinationMarker) routeMap.removeLayer(destinationMarker);
+
+  routeLine = null;
+  originMarker = null;
+  destinationMarker = null;
+
+  const routeInfo = document.getElementById('routeInfo');
+  if (routeInfo) {
+    routeInfo.textContent = 'Introduce origen y destino para calcular la ruta.';
+  }
+
+  const tracking = document.getElementById('driverTracking');
+  if (tracking) tracking.textContent = '🚚 Buscando ubicación del fletero...';
+}
+
 function drawRouteOnMap(polyline) {
   if (!polyline || !routeMap) return;
 
@@ -631,6 +649,54 @@ if (routeData.polyline) {
 }
   quote();
 }
+
+async function restoreRouteForJob(job, userId) {
+  if (!job || !['requested', 'en_route'].includes(job.status)) {
+    clearRouteOnMap();
+    return;
+  }
+
+  const originInput = document.getElementById('origin');
+  const destinationInput = document.getElementById('dest');
+  const routeInfo = document.getElementById('routeInfo');
+
+  if (originInput) originInput.value = job.origin || '';
+  if (destinationInput) destinationInput.value = job.destination || '';
+  if (routeInfo) routeInfo.textContent = '🔄 Recuperando la ruta de tu servicio...';
+
+  const origin = prepareRouteAddress(job.origin || '');
+  const destination = prepareRouteAddress(job.destination || '');
+
+  if (!origin || !destination) {
+    clearRouteOnMap();
+    if (routeInfo) routeInfo.textContent = 'No se pudo recuperar la ruta: falta el origen o el destino.';
+    return;
+  }
+
+  const { data: routeData, error: routeError } =
+    await supabaseClient.functions.invoke('fletya-routes', {
+      body: { origin, destination }
+    });
+
+  // Evita dibujar una ruta si el usuario cerró sesión o cambió de pedido
+  // mientras se calculaba la ruta.
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user || user.id !== userId || state.active?.id !== job.id) return;
+
+  if (routeError || !routeData?.polyline) {
+    clearRouteOnMap();
+    if (routeInfo) routeInfo.textContent = 'No se pudo recuperar la ruta. Comprueba el origen y el destino e inténtalo de nuevo.';
+    return;
+  }
+
+  drawRouteOnMap(routeData.polyline);
+  if (routeInfo) {
+    routeInfo.innerHTML =
+      `📍 <strong>${job.origin || ''}</strong> → <strong>${job.destination || ''}</strong><br>
+       📏 ${routeData.distance_km ?? job.distance_km ?? '—'} km · ⏱️ ${routeData.duration_text || 'Tiempo estimado'} · 🗺️ Ruta recuperada`;
+  }
+}
+
  async function requestJob(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
@@ -740,6 +806,8 @@ async function renderClient(){
     await supabaseClient.auth.getUser();
 
   if (authError || !user) {
+  state.active = null;
+  clearRouteOnMap();
   document.getElementById('clientStatus').innerHTML =
     '<span class="pill">Inicia sesión para ver tu servicio.</span>';
 
@@ -747,6 +815,16 @@ async function renderClient(){
     '<p class="muted">Inicia sesión para ver tu historial.</p>';
 
   document.getElementById('clientLogoutBtn').style.display = 'none';
+
+  const originInput = document.getElementById('origin');
+  const destinationInput = document.getElementById('dest');
+  if (originInput) originInput.value = '';
+  if (destinationInput) destinationInput.value = '';
+
+  if (driverTrackingTimer) {
+    clearInterval(driverTrackingTimer);
+    driverTrackingTimer = null;
+  }
 
   return;
   }
@@ -811,6 +889,17 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   if (!jobs || jobs.length === 0) {
 
     state.active = null;
+    clearRouteOnMap();
+
+    const originInput = document.getElementById('origin');
+    const destinationInput = document.getElementById('dest');
+    if (originInput) originInput.value = '';
+    if (destinationInput) destinationInput.value = '';
+
+    if (driverTrackingTimer) {
+      clearInterval(driverTrackingTimer);
+      driverTrackingTimer = null;
+    }
 
     document.getElementById('clientStatus').innerHTML =
       '<span class="pill">Sin servicio activo</span>';
@@ -821,6 +910,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   const j = jobs[0];
 
   state.active = j;
+  await restoreRouteForJob(j, user.id);
 
   document.getElementById('clientStatus').innerHTML =
     `<h3>${
