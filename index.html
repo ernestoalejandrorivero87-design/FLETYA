@@ -1062,6 +1062,14 @@ function advance(){
       .limit(1)
       .maybeSingle();
 
+  // Sincronizar el servicio recuperado con el estado usado por Completar servicio.
+  // No conservar un pedido anterior de otro usuario al cambiar de sesión.
+  if (activeError) {
+    console.error('No se pudo recuperar el servicio activo:', activeError);
+    return;
+  }
+  state.active = activeJob || null;
+  state.accepted = Boolean(activeJob);
   syncFletyaGps(user.id, activeJob).catch(console.error);
 
   let html = '';
