@@ -501,6 +501,8 @@ function clearRouteOnMap() {
   originMarker = null;
   destinationMarker = null;
 
+  if (routeMap) routeMap.setView([21.1619, -86.8515], 12);
+
   const routeInfo = document.getElementById('routeInfo');
   if (routeInfo) {
     routeInfo.textContent = 'Introduce origen y destino para calcular la ruta.';
@@ -928,6 +930,9 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
      </button>`;
    if (j.status === 'en_route') {
     startDriverTracking();
+   } else if (driverTrackingTimer) {
+    clearInterval(driverTrackingTimer);
+    driverTrackingTimer = null;
    }
 }
  async function updateDriverTracking(){
