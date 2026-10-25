@@ -123,9 +123,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 <div class="card">
 <h2>Seguimiento</h2><div id="clientStatus"><span class="pill">Sin servicio activo</span></div>
 <div id="routeMap"></div>
-<div id="driverTracking" class="muted">
-  🚚 Buscando ubicación del fletero...
-</div>
+<div id="driverTracking" class="muted" hidden></div>
 <p id="routeInfo" class="muted">
   Introduce origen y destino para calcular la ruta.
 </p>
@@ -509,8 +507,7 @@ function clearRouteOnMap() {
     routeInfo.textContent = 'Introduce origen y destino para calcular la ruta.';
   }
 
-  const tracking = document.getElementById('driverTracking');
-  if (tracking) tracking.textContent = '🚚 Buscando ubicación del fletero...';
+  stopDriverTracking();
 }
 
 function drawRouteOnMap(polyline) {
@@ -931,9 +928,8 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
      </button>`;
    if (j.status === 'en_route') {
     startDriverTracking();
-   } else if (driverTrackingTimer) {
-    clearInterval(driverTrackingTimer);
-    driverTrackingTimer = null;
+   } else {
+    stopDriverTracking();
    }
 }
  async function updateDriverTracking(){
@@ -950,6 +946,9 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Ignora respuestas pendientes de un servicio que ya terminó o cambió.
+  if (state.active?.id !== activeJob.id || state.active?.status !== 'en_route') return;
 
   const box = document.getElementById('driverTracking');
 
@@ -983,7 +982,22 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
  }
  let driverTrackingTimer = null;
 
+function stopDriverTracking(){
+  if (driverTrackingTimer) clearInterval(driverTrackingTimer);
+  driverTrackingTimer = null;
+  const box = document.getElementById('driverTracking');
+  if (box) {
+    box.hidden = true;
+    box.textContent = '';
+  }
+}
+
 function startDriverTracking(){
+  const box = document.getElementById('driverTracking');
+  if (box && box.hidden) {
+    box.textContent = '🚚 Buscando ubicación del fletero...';
+    box.hidden = false;
+  }
   if (driverTrackingTimer) {
     clearInterval(driverTrackingTimer);
   }
