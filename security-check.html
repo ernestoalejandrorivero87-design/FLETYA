@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLETYA · Comprobar permisos</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f7f8;color:#172126;font:16px/1.5 Arial,sans-serif}main{max-width:700px;margin:32px auto;padding:20px}.card{background:white;padding:24px;border:1px solid #e4eaec;border-radius:18px;margin:16px 0}h1{font-size:27px;line-height:1.2}h2{font-size:20px}a{color:#087f8c}button{border:0;border-radius:12px;background:#087f8c;color:white;padding:14px 20px;font-size:16px;font-weight:bold;cursor:pointer}button:disabled{opacity:.6;cursor:wait}.muted{color:#66777d}.pass{color:#09634a}.fail{color:#a32929}li{margin:10px 0}#summary{font-weight:bold}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}summary{cursor:pointer}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script></head>
+<body><main><a href="/">← Volver a FLETYA</a><div class="card">
+<p class="muted">FLETYA · Entorno de pruebas · PR #2</p><h1>Comprobar permisos de mi cuenta</h1>
+<p>Inicia sesión en FLETYA como cliente o fletero en este mismo navegador. Después vuelve aquí y ejecuta la prueba.</p>
+<p>Se comprueban accesos mediante la API. Los intentos de cambio se revierten dentro de la base de pruebas.</p>
+<button id="run">Comprobar permisos</button><p id="summary" role="status" aria-live="polite">Listo para comprobar tu sesión.</p>
+</div><div class="card" id="report" hidden><h2>Resultados</h2><p id="account"></p><ul id="results"></ul>
+<p id="coverage" class="muted"></p><details><summary>Detalles de la prueba</summary><pre id="details"></pre></details></div>
+<script>
+const TEST_HOST = 'fletya-git-fix-security-profile-role-fletya.vercel.app';
+const API_URL = 'https://ccdtpwvalqznasstnqxj.supabase.co';
+const API_KEY = 'sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
+const runButton = document.getElementById('run');
+const summaryBox = document.getElementById('summary');
+let running = false;
+const api = location.hostname === TEST_HOST && window.supabase
+  ? window.supabase.createClient(API_URL, API_KEY) : null;
+if (!api) {
+  runButton.disabled = true;
+  summaryBox.textContent = 'Esta comprobación solo está disponible en la vista previa de pruebas.';
+}
+async function runPermissionChecks(){
+  if (!api || running) return;
+  running = true; runButton.disabled = true;
+  document.getElementById('report').hidden = true;
+  summaryBox.textContent = 'Comprobando la sesión y los permisos…';
+  const results = [];
+  try {
+    const { data: auth, error: authError } = await api.auth.getUser();
+    if (authError || !auth?.user) throw new Error('Inicia sesión como cliente o fletero en FLETYA, en este mismo navegador, y vuelve a abrir este enlace.');
+    const userId = auth.user.id;
+    const { data: profile, error: profileError } = await api.from('profiles').select('role').eq('id',userId).single();
+    if (profileError || !['client','driver'].includes(profile?.role)) throw new Error('Usa una cuenta de cliente o fletero para esta prueba.');
+    results.push({name:'Sesión real verificada por Auth',passed:true});
+    const forbiddenProfiles = await api.from('profiles').select('id').neq('id',userId).limit(1);
+    results.push({name:'API: perfiles ajenos protegidos',passed:!forbiddenProfiles.error && Array.isArray(forbiddenProfiles.data) && forbiddenProfiles.data.length===0});
+    const forbiddenNotifications = await api.from('notifications').select('id').neq('user_id',userId).limit(1);
+    results.push({name:'API: notificaciones ajenas protegidas',passed:!forbiddenNotifications.error && Array.isArray(forbiddenNotifications.data) && forbiddenNotifications.data.length===0});
+    let query = api.from('jobs').select('id');
+    if(profile.role==='client') query=query.neq('client_id',userId);
+    else query=query.not('status','eq','requested').neq('driver_id',userId);
+    const jobs = await query.limit(1);
+    results.push({name:'API: servicios ajenos protegidos',passed:!jobs.error && Array.isArray(jobs.data) && jobs.data.length===0});
+    const { data: probe, error: probeError } = await api.rpc('fletya_session_permission_probe');
+    if(probeError) throw new Error('No se pudo ejecutar la comprobación de cambios (código ' + (probeError.code || 'desconocido') + ').');
+    if(probe?.version!==1 || probe.role!==profile.role || !Array.isArray(probe.tests) || probe.writes_rolled_back!==true) throw new Error('La API devolvió un resultado inesperado.');
+    results.push(...probe.tests);
+    const { data: afterAuth, error: afterError } = await api.auth.getUser();
+    if(afterError || afterAuth?.user?.id!==userId) throw new Error('La sesión cambió durante la prueba. Vuelve a ejecutarla.');
+    const passed = results.every(test=>test.passed===true) && probe.all_passed===true;
+    const report = {version:1,time:new Date().toISOString(),role:profile.role,tested_job_status:probe.tested_job_status,active_job_tested:probe.active_job_tested===true,all_passed:passed,results};
+    document.getElementById('account').textContent = 'Cuenta: ' + (profile.role==='client'?'Cliente':'Fletero');
+    const list = document.getElementById('results'); list.replaceChildren();
+    for(const result of results){
+      const item=document.createElement('li'); item.className=result.passed===true?'pass':'fail';
+      item.textContent=(result.passed===true?'✅ ':'❌ ')+result.name; list.appendChild(item);
+    }
+    document.getElementById('coverage').textContent = probe.active_job_tested===true
+      ? 'Incluye intentos de modificar el precio, destino y pago de un servicio en camino. Los cambios de la prueba se revirtieron.'
+      : 'Todavía falta repetir esta prueba con un servicio en camino para comprobar los cambios sobre un servicio activo.';
+    document.getElementById('details').textContent = JSON.stringify(report,null,2);
+    document.getElementById('report').hidden = false;
+    summaryBox.textContent = passed ? 'Las comprobaciones ejecutadas pasaron. Revisa abajo la cobertura pendiente.' : 'Hay comprobaciones que no pasaron. Envía una captura del resultado.';
+  } catch(error) {
+    summaryBox.textContent = error.message || 'No se pudo completar la prueba. Inténtalo de nuevo.';
+  } finally {runButton.disabled=false; running=false;}
+}
+runButton.addEventListener('click',runPermissionChecks);
+</script></main></body></html>
