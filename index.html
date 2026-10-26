@@ -50,6 +50,14 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 </header>
 
 <main class="wrap">
+<section id="securityProbePanel" class="card" hidden style="margin-bottom:20px"><div>
+<p class="muted">FLETYA · Entorno de pruebas · PR #2</p><h1>Comprobar permisos de mi cuenta</h1>
+<p>Inicia sesión en FLETYA como cliente o fletero en este mismo navegador. Después vuelve aquí y ejecuta la prueba.</p>
+<p>Se comprueban accesos mediante la API. Los intentos de cambio se revierten dentro de la base de pruebas.</p>
+<button id="probeRun">Comprobar permisos</button><p id="probeSummary" role="status" aria-live="polite">Inicia sesión como cliente o fletero y pulsa Comprobar permisos.</p>
+</div><div class="card" id="probeReport" hidden><h2>Resultados</h2><p id="probeAccount"></p><ul id="probeResults"></ul>
+<p id="probeCoverage" class="muted"></p><details><summary>Detalles de la prueba</summary><pre id="probeDetails"></pre></details></div>
+</section><style>#securityProbePanel .pass{color:#09634a}#securityProbePanel .fail{color:#a32929}#securityProbePanel pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}#securityProbePanel li{margin:10px 0}#securityProbePanel button:disabled{opacity:.6}</style>
 <section id="client">
 <div class="hero"><h1>Tu flete, en minutos.</h1><p>Simula una solicitud real de FLETYA desde tu navegador.</p></div>
 <div class="grid">
@@ -2258,5 +2266,77 @@ async function loginClient() {
   show('client');
   renderClient();
   }
+</script>
+<script>
+(function(){
+
+const TEST_HOST = 'fletya-git-fix-security-profile-role-fletya.vercel.app';
+const runButton = document.getElementById('probeRun');
+const summaryBox = document.getElementById('probeSummary');
+let running = false;
+const api = location.hostname === TEST_HOST ? supabaseClient : null;
+if (!api) {
+  runButton.disabled = true;
+  summaryBox.textContent = 'Esta comprobación solo está disponible en la vista previa de pruebas.';
+}
+async function runPermissionChecks(){
+  if (!api || running) return;
+  running = true; runButton.disabled = true;
+  document.getElementById('probeReport').hidden = true;
+  summaryBox.textContent = 'Comprobando la sesión y los permisos…';
+  const results = [];
+  try {
+    const { data: auth, error: authError } = await api.auth.getUser();
+    if (authError || !auth?.user) throw new Error('Inicia sesión como cliente o fletero en FLETYA, en este mismo navegador, y vuelve a abrir este enlace.');
+    const userId = auth.user.id;
+    const { data: profile, error: profileError } = await api.from('profiles').select('role').eq('id',userId).single();
+    if (profileError || !['client','driver'].includes(profile?.role)) throw new Error('Usa una cuenta de cliente o fletero para esta prueba.');
+    results.push({name:'Sesión real verificada por Auth',passed:true});
+    const forbiddenProfiles = await api.from('profiles').select('id').neq('id',userId).limit(1);
+    results.push({name:'API: perfiles ajenos protegidos',passed:!forbiddenProfiles.error && Array.isArray(forbiddenProfiles.data) && forbiddenProfiles.data.length===0});
+    const forbiddenNotifications = await api.from('notifications').select('id').neq('user_id',userId).limit(1);
+    results.push({name:'API: notificaciones ajenas protegidas',passed:!forbiddenNotifications.error && Array.isArray(forbiddenNotifications.data) && forbiddenNotifications.data.length===0});
+    let query = api.from('jobs').select('id');
+    if(profile.role==='client') query=query.neq('client_id',userId);
+    else query=query.not('status','eq','requested').neq('driver_id',userId);
+    const jobs = await query.limit(1);
+    results.push({name:'API: servicios ajenos protegidos',passed:!jobs.error && Array.isArray(jobs.data) && jobs.data.length===0});
+    const { data: probe, error: probeError } = await api.rpc('fletya_session_permission_probe');
+    if(probeError) throw new Error('No se pudo ejecutar la comprobación de cambios (código ' + (probeError.code || 'desconocido') + ').');
+    if(probe?.version!==1 || probe.role!==profile.role || !Array.isArray(probe.tests) || probe.writes_rolled_back!==true) throw new Error('La API devolvió un resultado inesperado.');
+    results.push(...probe.tests);
+    const { data: afterAuth, error: afterError } = await api.auth.getUser();
+    if(afterError || afterAuth?.user?.id!==userId) throw new Error('La sesión cambió durante la prueba. Vuelve a ejecutarla.');
+    const passed = results.every(test=>test.passed===true) && probe.all_passed===true;
+    const report = {version:1,time:new Date().toISOString(),role:profile.role,tested_job_status:probe.tested_job_status,active_job_tested:probe.active_job_tested===true,all_passed:passed,results};
+    document.getElementById('probeAccount').textContent = 'Cuenta: ' + (profile.role==='client'?'Cliente':'Fletero');
+    const list = document.getElementById('probeResults'); list.replaceChildren();
+    for(const result of results){
+      const item=document.createElement('li'); item.className=result.passed===true?'pass':'fail';
+      item.textContent=(result.passed===true?'✅ ':'❌ ')+result.name; list.appendChild(item);
+    }
+    document.getElementById('probeCoverage').textContent = probe.active_job_tested===true
+      ? 'Incluye intentos de modificar el precio, destino y pago de un servicio en camino. Los cambios de la prueba se revirtieron.'
+      : 'Todavía falta repetir esta prueba con un servicio en camino para comprobar los cambios sobre un servicio activo.';
+    document.getElementById('probeDetails').textContent = JSON.stringify(report,null,2);
+    document.getElementById('probeReport').hidden = false;
+    summaryBox.textContent = passed ? 'Las comprobaciones ejecutadas pasaron. Revisa abajo la cobertura pendiente.' : 'Hay comprobaciones que no pasaron. Envía una captura del resultado.';
+  } catch(error) {
+    summaryBox.textContent = error.message || 'No se pudo completar la prueba. Inténtalo de nuevo.';
+  } finally {runButton.disabled=false; running=false;}
+}
+runButton.addEventListener('click',runPermissionChecks);
+
+const probePanel = document.getElementById('securityProbePanel');
+function revealPermissionProbe(){
+  if (api && location.hash === '#comprobar-permisos') {
+    probePanel.hidden = false;
+    probePanel.scrollIntoView({block:'start'});
+  }
+}
+window.addEventListener('hashchange', revealPermissionProbe);
+revealPermissionProbe();
+
+})();
 </script>
 </body></html>
