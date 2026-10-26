@@ -1,5 +1,9 @@
 # FLETYA security review and test plan
 
+## Current validation status — 2026-10-26
+
+See [the PR #2 validation record](pr-2-validation-2026-10-26.md) for completed test-environment checks, real client/driver session results, evidence limits, and remaining release gates. The unchecked lists and production findings below are historical planning material; they do not mean that all scenarios remain untested, nor that production has been updated. PR #2 remains a draft with merge conflicts and outstanding release work.
+
 Status: draft only. Do not apply these migrations to production yet.
 
 ## Review findings
