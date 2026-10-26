@@ -1034,6 +1034,35 @@ function advance(){
     startDriverTracking();
   }
  }
+let driverPanelRefreshTimer = null;
+let driverPanelRefreshBusy = false;
+let driverPanelRefreshUserId = null;
+
+function startDriverPanelRefresh(userId) {
+  if (driverPanelRefreshTimer && driverPanelRefreshUserId === userId) return;
+
+  if (driverPanelRefreshTimer) clearInterval(driverPanelRefreshTimer);
+
+  driverPanelRefreshUserId = userId;
+  driverPanelRefreshTimer = setInterval(async () => {
+    const panel = document.getElementById('driver');
+
+    // No actualizar si el usuario salió del panel o ya hay una actualización en curso.
+    if (!panel || panel.classList.contains('hidden') || driverPanelRefreshBusy) return;
+
+    driverPanelRefreshBusy = true;
+    try {
+      const { data: { user }, error } = await supabaseClient.auth.getUser();
+      if (error || !user || user.id !== driverPanelRefreshUserId) return;
+      await renderDriver();
+    } catch (error) {
+      console.error('Error al actualizar automáticamente el panel del fletero:', error);
+    } finally {
+      driverPanelRefreshBusy = false;
+    }
+  }, 10000);
+}
+
  async function renderDriver(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
@@ -1065,6 +1094,7 @@ function advance(){
 
   document.getElementById('dname').value = profile.full_name || '';
   startDriverNotifications(user.id);
+  startDriverPanelRefresh(user.id);
   const e = document.getElementById('jobCard');
 
   e.innerHTML =
@@ -1079,7 +1109,7 @@ function advance(){
       .from('jobs')
       .select('*')
       .eq('driver_id', user.id)
-      .in('status', ['accepted', 'en_route'])
+      .eq('status', 'en_route')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -1095,10 +1125,6 @@ function advance(){
   syncFletyaGps(user.id, activeJob).catch(console.error);
 
   let html = '';
-
-  if (activeError) {
-    console.error(activeError);
-  }
 
   if (activeJob) {
     html += `
@@ -1350,6 +1376,10 @@ async function syncFletyaGps(userId, activeJob) {
 }
 async function logoutDriver(){
   stopFletyaGps();
+  if (driverPanelRefreshTimer) clearInterval(driverPanelRefreshTimer);
+  driverPanelRefreshTimer = null;
+  driverPanelRefreshUserId = null;
+  driverPanelRefreshBusy = false;
   await supabaseClient.auth.signOut();
   toast('Sesión cerrada');
   show('client');
@@ -1395,8 +1425,6 @@ const { error } = await supabaseClient
   toast('Servicio aceptado. Cliente notificado.');
 }
   async function completeDriver(){
-  if(!state.active) return;
-
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
 
@@ -1405,15 +1433,38 @@ const { error } = await supabaseClient
     return;
   }
 
-  const jobId = state.active.id;
-
-  const { error } = await supabaseClient
+  // Consultar el servicio directamente para no depender de un estado local desactualizado.
+  const { data: activeJob, error: activeError } = await supabaseClient
     .from('jobs')
-    .update({
-      status: 'completed'
-    })
-    .eq('id', jobId)
-    .eq('driver_id', user.id);
+    .select('id, status')
+    .eq('driver_id', user.id)
+    .eq('status', 'en_route')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if(activeError){
+    console.error(activeError);
+    toast('No se pudo consultar el servicio activo: ' + activeError.message);
+    return;
+  }
+
+  if(!activeJob){
+    state.active = null;
+    state.accepted = false;
+    toast('No se encontró un servicio en ruta para completar.');
+    await renderDriver();
+    return;
+  }
+
+  const { data: completedJob, error } = await supabaseClient
+    .from('jobs')
+    .update({ status: 'completed' })
+    .eq('id', activeJob.id)
+    .eq('driver_id', user.id)
+    .eq('status', 'en_route')
+    .select('id, status')
+    .maybeSingle();
 
   if(error){
     console.error(error);
@@ -1421,14 +1472,17 @@ const { error } = await supabaseClient
     return;
   }
 
+  if(!completedJob){
+    toast('No se pudo completar: revisa los permisos o el estado del servicio.');
+    await renderDriver();
+    return;
+  }
+
   stopFletyaGps();
-  state.active.status = 'completed';
-state.active = null;
-state.accepted = false;
-
-toast('✅ Servicio completado correctamente');
-
-renderDriver();
+  state.active = null;
+  state.accepted = false;
+  toast('✅ Servicio completado correctamente');
+  await renderDriver();
 }
 async function driverLocation(){
 
@@ -2000,20 +2054,12 @@ document.getElementById('jobModal').classList.remove('hidden');
 setInterval(() => {
 
   const clientSection = document.getElementById('client');
-  const driverSection = document.getElementById('driver');
 
   if (
     clientSection &&
     !clientSection.classList.contains('hidden')
   ) {
     renderClient();
-  }
-
-  if (
-    driverSection &&
-    !driverSection.classList.contains('hidden')
-  ) {
-    renderDriver();
   }
 
 }, 10000);

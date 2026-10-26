@@ -39,7 +39,7 @@ This is an ancestor of the validated frontend head, not a claim that the current
 
 ## Remaining before release
 
-- [ ] Resolve the PR's merge conflicts with main. GitHub reported mergeable=false and mergeable_state=dirty during this review, against base 4c325e79a1f2a5885758d1f845ce196ce22781c6. Review the resulting changes and rerun relevant checks after conflict resolution.
+- [x] Resolve the content conflicts against actual main commit 839c9a95acdb88d7c010edbe6a432e594e63f6a3. The PR metadata initially reported the older base 4c325e7; the main branch ref and local Git history established the current base. Preserve database-backed completion and guarded panel refresh from main, plus GPS shutdown from the PR. Remove duplicate driver polling and repeated state assignments. Local validation: 9 frontend regression tests and 15 migration pattern checks passed. Remote CI results must be checked on the resulting merge commit.
 - [ ] Exercise fresh client and driver signups through real Supabase Auth, including malicious admin metadata, profile creation, and expected email confirmation behavior. Existing-account login is not a substitute for signup validation.
 - [ ] Run a concurrent two-driver acceptance test in separate transactions/sessions. Sequential refusal to take an assigned job was tested; simultaneous acceptance was not.
 - [ ] Complete remaining negative API coverage: fresh-signup metadata escalation, writing another user's profile/notifications/GPS, and GPS writes after completion using actual end-user HTTP requests.
@@ -49,3 +49,7 @@ This is an ancestor of the validated frontend head, not a claim that the current
 - [ ] Remove the temporary session diagnostic UI/page and revoke/drop public.fletya_session_permission_probe() in FLETYA-testing after retaining the required evidence. Do not install this test-only function in production or put it in production migrations.
 
 Production deployment and PR merge have not been performed. Passing these scenarios is not a complete security audit or a guarantee against every unauthorized action.
+
+## Conflict-resolution follow-up
+
+The merge is made into the PR branch, with both the previous PR head and main as parents; main and production are not updated. The session diagnostic and previously validated security migrations remain in the branch. The security workflow now runs the frontend regression tests and also triggers on index.html changes, so future frontend changes do not silently skip these checks. Regression cases cover stale local service state, database errors and zero-row completion responses, GPS and timer shutdown, hidden or changed-account refreshes, duplicate polling, and restoration of active service/history. Browser screenshots above predate this integration; a short manual preview smoke test should follow the automated checks.

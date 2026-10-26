@@ -4,6 +4,8 @@ on:
   push:
     branches: [fix/security-profile-role]
     paths:
+      - 'index.html'
+      - 'tests/frontend/**'
       - 'supabase/migrations/**'
       - 'tests/security/**'
       - 'scripts/check-security-migrations.mjs'
@@ -11,6 +13,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'index.html'
+      - 'tests/frontend/**'
       - 'supabase/migrations/**'
       - 'tests/security/**'
       - 'scripts/check-security-migrations.mjs'
@@ -21,6 +25,16 @@ permissions:
   contents: read
 
 jobs:
+  frontend-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check driver panel and completion regression cases
+        run: node --test tests/frontend/*.test.cjs
+
   static-checks:
     runs-on: ubuntu-latest
     steps:
