@@ -41,7 +41,7 @@ This is an ancestor of the validated frontend head, not a claim that the current
 
 - [x] Resolve the content conflicts against actual main commit 839c9a95acdb88d7c010edbe6a432e594e63f6a3. The PR metadata initially reported the older base 4c325e7; the main branch ref and local Git history established the current base. Preserve database-backed completion and guarded panel refresh from main, plus GPS shutdown from the PR. Remove duplicate driver polling and repeated state assignments. Local validation: 9 frontend regression tests and 15 migration pattern checks passed. Remote CI results must be checked on the resulting merge commit.
 - [x] Owner confirmed normal fresh client and driver signups, confirmation emails and login on October 27. See the October 28 follow-up.
-- [ ] Exercise malicious admin signup metadata through actual Auth; normal signup success does not cover this negative case.
+- [x] Public signup with data.role=admin was exercised through actual Auth on October 28. The pending-confirmation account received a client profile; administrator count stayed unchanged. See [evidence and limits](pr-2-signup-role-2026-10-28.md).
 - [x] Two actual Auth sessions competed through simultaneous HTTP PATCH requests on October 28. Server-side lock observation confirmed overlap; exactly one received the assignment. See [concurrency evidence](pr-2-concurrency-2026-10-28.md).
 - [ ] Complete remaining negative API coverage: fresh-signup metadata escalation, writing another user's profile/notifications/GPS, and GPS writes after completion using actual end-user HTTP requests.
 - [ ] Review production schema, grants, policies, triggers, migration history/order, and differences from FLETYA-testing before selecting a deployment sequence. Do not treat the historical October 18 metadata snapshot as a current production audit.
@@ -58,3 +58,7 @@ The merge is made into the PR branch, with both the previous PR head and main as
 ## October 28 follow-up
 
 The owner-confirmed post-integration service smoke test and normal fresh registrations passed. Controlled concurrent HTTP acceptance also passed, and the losing-driver success message was corrected. Details, limitations and cleanup verification are recorded in [the concurrency follow-up](pr-2-concurrency-2026-10-28.md). Remaining release gates above still apply.
+
+## Public signup role check — October 28
+
+A real unauthenticated signup request with admin metadata created a client application profile. The temporary account was removed and baseline counts were restored. See [the public signup validation record](pr-2-signup-role-2026-10-28.md) for the confirmation-stage limit and sanitized evidence.
