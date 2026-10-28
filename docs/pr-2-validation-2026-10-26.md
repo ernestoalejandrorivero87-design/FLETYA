@@ -40,8 +40,9 @@ This is an ancestor of the validated frontend head, not a claim that the current
 ## Remaining before release
 
 - [x] Resolve the content conflicts against actual main commit 839c9a95acdb88d7c010edbe6a432e594e63f6a3. The PR metadata initially reported the older base 4c325e7; the main branch ref and local Git history established the current base. Preserve database-backed completion and guarded panel refresh from main, plus GPS shutdown from the PR. Remove duplicate driver polling and repeated state assignments. Local validation: 9 frontend regression tests and 15 migration pattern checks passed. Remote CI results must be checked on the resulting merge commit.
-- [ ] Exercise fresh client and driver signups through real Supabase Auth, including malicious admin metadata, profile creation, and expected email confirmation behavior. Existing-account login is not a substitute for signup validation.
-- [ ] Run a concurrent two-driver acceptance test in separate transactions/sessions. Sequential refusal to take an assigned job was tested; simultaneous acceptance was not.
+- [x] Owner confirmed normal fresh client and driver signups, confirmation emails and login on October 27. See the October 28 follow-up.
+- [ ] Exercise malicious admin signup metadata through actual Auth; normal signup success does not cover this negative case.
+- [x] Two actual Auth sessions competed through simultaneous HTTP PATCH requests on October 28. Server-side lock observation confirmed overlap; exactly one received the assignment. See [concurrency evidence](pr-2-concurrency-2026-10-28.md).
 - [ ] Complete remaining negative API coverage: fresh-signup metadata escalation, writing another user's profile/notifications/GPS, and GPS writes after completion using actual end-user HTTP requests.
 - [ ] Review production schema, grants, policies, triggers, migration history/order, and differences from FLETYA-testing before selecting a deployment sequence. Do not treat the historical October 18 metadata snapshot as a current production audit.
 - [ ] Prepare and review deployment and rollback steps, including database recovery and the previous frontend revision. Reverting a frontend commit alone does not undo database migrations.
@@ -53,3 +54,7 @@ Production deployment and PR merge have not been performed. Passing these scenar
 ## Conflict-resolution follow-up
 
 The merge is made into the PR branch, with both the previous PR head and main as parents; main and production are not updated. The session diagnostic and previously validated security migrations remain in the branch. The security workflow now runs the frontend regression tests and also triggers on index.html changes, so future frontend changes do not silently skip these checks. Regression cases cover stale local service state, database errors and zero-row completion responses, GPS and timer shutdown, hidden or changed-account refreshes, duplicate polling, and restoration of active service/history. Browser screenshots above predate this integration; a short manual preview smoke test should follow the automated checks.
+
+## October 28 follow-up
+
+The owner-confirmed post-integration service smoke test and normal fresh registrations passed. Controlled concurrent HTTP acceptance also passed, and the losing-driver success message was corrected. Details, limitations and cleanup verification are recorded in [the concurrency follow-up](pr-2-concurrency-2026-10-28.md). Remaining release gates above still apply.

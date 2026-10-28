@@ -1391,23 +1391,25 @@ async function logoutDriver(){
   }, 100);
 }async function acceptDriver(){
   if(!state.active) return;
+  const jobId = state.active.id;
 
-  const { data: { user } } = await supabaseClient.auth.getUser();
+  const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
 
-if (!user) {
+if (authError || !user) {
   toast('Debes iniciar sesión como fletero');
   return;
 }
-toast('ID fletero: ' + user.id);
-const jobId = state.active.id;
-
-const { error } = await supabaseClient
+const { data: acceptedJob, error } = await supabaseClient
   .from('jobs')
   .update({
     status: 'en_route',
     driver_id: user.id
   })
-  .eq('id', jobId);
+  .eq('id', jobId)
+  .eq('status', 'requested')
+  .is('driver_id', null)
+  .select('*')
+  .maybeSingle();
 
   if(error){
     console.error(error);
@@ -1415,14 +1417,20 @@ const { error } = await supabaseClient
     return;
   }
 
-  state.active.status = 'en_route';
+  if (!acceptedJob) {
+    toast('Este servicio ya no está disponible. Otro fletero pudo haberlo aceptado.');
+    await renderDriver();
+    return;
+  }
+
+  state.active = acceptedJob;
   state.accepted = true;
 
   state.jobs = state.jobs.filter(j => j.id !== jobId);
 
-  renderDriver();
+  await renderDriver();
 
-  toast('Servicio aceptado. Cliente notificado.');
+  toast('Servicio aceptado correctamente.');
 }
   async function completeDriver(){
   const { data: { user }, error: authError } =

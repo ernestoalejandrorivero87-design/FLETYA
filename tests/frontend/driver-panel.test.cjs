@@ -72,6 +72,52 @@ test('all inline JavaScript parses after conflict resolution', () => {
   for (const source of scripts) new vm.Script(source);
 });
 
+test('acceptance requires an unassigned requested row and a returned assignment', async () => {
+  const accepted = { id: 'requested-job', status: 'en_route', driver_id: 'driver-1', price: 100 };
+  const r = runtime([{ data: accepted }]);
+  r.run("state.active={id:'requested-job',status:'requested'}; state.jobs=[{id:'requested-job'}]; renderDriver=async()=>{};");
+  await r.run('acceptDriver()');
+  assert.equal(r.run('state.active.id'), 'requested-job');
+  assert.equal(r.run('state.active.status'), 'en_route');
+  assert.equal(r.run('state.accepted'), true);
+  assert.equal(r.run('state.jobs.length'), 0);
+  assert.deepEqual(r.queries[0].calls.filter(call => ['eq', 'is'].includes(call[0])),
+    [['eq', 'id', 'requested-job'], ['eq', 'status', 'requested'], ['is', 'driver_id', null]]);
+  assert.ok(r.messages.includes('Servicio aceptado correctamente.'));
+});
+
+test('losing an acceptance race refreshes availability without claiming success', async () => {
+  const r = runtime([{ data: null }]);
+  r.run("refreshes=0; state.active={id:'requested-job',status:'requested'}; state.accepted=false; renderDriver=async()=>{refreshes++};");
+  await r.run('acceptDriver()');
+  assert.equal(r.run('state.active.status'), 'requested');
+  assert.equal(r.run('state.accepted'), false);
+  assert.equal(r.run('refreshes'), 1);
+  assert.ok(r.messages.some(message => message.includes('ya no está disponible')));
+  assert.ok(!r.messages.some(message => message.includes('aceptado correctamente')));
+});
+
+test('acceptance permission errors do not mutate local assignment', async () => {
+  const r = runtime([{ error: { message: 'permission denied' } }]);
+  r.run("state.active={id:'requested-job',status:'requested'}; state.accepted=false;");
+  await r.run('acceptDriver()');
+  assert.equal(r.run('state.active.status'), 'requested');
+  assert.equal(r.run('state.accepted'), false);
+  assert.ok(r.messages.some(message => message.includes('permission denied')));
+});
+
+test('acceptance captures the selected job before awaiting authentication', async () => {
+  const r = runtime([{ data: { id: 'first-job', status: 'en_route', driver_id: 'driver-1' } }]);
+  let resumeAuth;
+  r.api.auth.getUser = () => new Promise(resolve => { resumeAuth = resolve; });
+  r.run("state.active={id:'first-job',status:'requested'}; renderDriver=async()=>{};");
+  const pending = r.run('acceptDriver()');
+  r.run("state.active={id:'another-job',status:'requested'};");
+  resumeAuth({ data: { user: { id: 'driver-1' } } });
+  await pending;
+  assert.ok(r.queries[0].calls.some(call => call[0] === 'eq' && call[1] === 'id' && call[2] === 'first-job'));
+});
+
 test('completion uses the database job despite stale local state and stops GPS', async () => {
   const r = runtime([{ data: { id: 'live-job', status: 'en_route' } },
     { data: { id: 'live-job', status: 'completed' } }]);
