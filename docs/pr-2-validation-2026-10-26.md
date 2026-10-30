@@ -80,3 +80,9 @@ A real unauthenticated signup request with admin metadata created a client appli
 - The entire exercise was enclosed in `BEGIN ... ROLLBACK`; no notification content or read state was persistently changed. No identifying user or notification IDs were recorded.
 - These are actual PostgreSQL privilege/RLS executions with **simulated claims**, not authenticated HTTP requests with real Supabase Auth access tokens. Cross-account negative HTTP tests remain outstanding.
 - The notification grant migration and static checker were updated in the PR branch; the CI checks on commit `22de47fce0d0d7402d1cda61d0029c762ed5094c` both passed and Vercel reported success.
+
+## October 30 follow-up — completed-job GPS negative SQL execution
+
+- In FLETYA-testing, found an existing completed job with a historical `driver_locations` row assigned to its driver. Using `SET LOCAL ROLE authenticated` and a simulated JWT subject of that same driver, attempted `UPDATE public.driver_locations SET latitude=latitude WHERE id=...`.
+- PostgreSQL rejected the update with SQLSTATE `42501` (insufficient privilege / RLS WITH CHECK rejection), as intended for a completed job. The test was inside `BEGIN ... ROLLBACK` and changed no persistent data.
+- This validates a real SQL operation under simulated claims; it **does not** close the outstanding real-token HTTP GPS-after-completion test.
