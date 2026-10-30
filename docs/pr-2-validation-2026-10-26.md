@@ -71,3 +71,12 @@ A real unauthenticated signup request with admin metadata created a client appli
 - Supabase security advisor still reports leaked-password protection disabled (one warning). No configuration changed.
 - Temporary diagnostics were removed from index.html and security-check.html on the PR branch. The test-only `public.fletya_session_permission_probe()` remains in FLETYA-testing pending final HTTP evidence; do not ship it to production.
 - Still required: negative real end-user HTTP mutation tests, production parity/deployment/rollback review, and post-cleanup smoke test. No production changes were made.
+
+## October 30 follow-up — notification column-permission execution test
+
+- After narrowing `authenticated` to `SELECT` plus `UPDATE(read)` on `public.notifications`, executed two SQL operations under `SET LOCAL ROLE authenticated` with a simulated JWT subject belonging to a real client/driver notification owner in FLETYA-testing.
+- `UPDATE public.notifications SET message=message WHERE id=...` was denied with insufficient privilege, as expected.
+- `UPDATE public.notifications SET read=read WHERE id=...` affected exactly one owned row, as expected.
+- The entire exercise was enclosed in `BEGIN ... ROLLBACK`; no notification content or read state was persistently changed. No identifying user or notification IDs were recorded.
+- These are actual PostgreSQL privilege/RLS executions with **simulated claims**, not authenticated HTTP requests with real Supabase Auth access tokens. Cross-account negative HTTP tests remain outstanding.
+- The notification grant migration and static checker were updated in the PR branch; the CI checks on commit `22de47fce0d0d7402d1cda61d0029c762ed5094c` both passed and Vercel reported success.
