@@ -28,7 +28,7 @@ const checks = [
   ['drivers cannot edit job details or payment flags', /new\.driver_paid is distinct from old\.driver_paid/i.test(sql.jobs) && /Drivers cannot edit job details or payment flags/i.test(sql.jobs)],
   ['admin payment changes require a completed unpaid job', /old\.status = 'completed' and coalesce\(old\.driver_paid, false\) = false and new\.driver_paid = true/i.test(sql.jobs)],
   ['anon table grants are revoked', /revoke all privileges on table public\.jobs from anon/i.test(sql.grants) && /revoke all privileges on table public\.profiles from anon/i.test(sql.grants)],
-  ['authenticated grants exclude notification insert', /grant select, update on table public\.notifications to authenticated/i.test(sql.grants) && !/grant select, insert, update on table public\.notifications to authenticated/i.test(sql.grants)],
+  ['authenticated grants exclude notification insert', /grant select on table public\.notifications to authenticated/i.test(sql.grants) && /grant update\s*\(\s*read\s*\)\s+on table public\.notifications to authenticated/i.test(sql.grants) && !/grant select,\s*(?:insert|update) on table public\.notifications to authenticated/i.test(sql.grants)],
   ['future default table and sequence grants are narrowed', /alter default privileges for role postgres in schema public\s+revoke all privileges on tables from anon, authenticated/i.test(sql.grants) && /alter default privileges for role postgres in schema public\s+revoke all privileges on sequences from anon, authenticated/i.test(sql.grants)],
 ];
 
