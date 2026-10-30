@@ -93,3 +93,9 @@ A real unauthenticated signup request with admin metadata created a client appli
 - The operation affected zero rows, consistent with the job's RLS restrictions. Test ran within `BEGIN ... ROLLBACK`, with no persistent data changes.
 - This is **not** a real end-user HTTP/PATCH test; the cross-driver real-token HTTP release gate remains open.
 - On preceding commit `015b4bf446dd1a1ee7a8c291da32972cac4c649b`, both GitHub security workflows and Vercel deployment reported success.
+
+## October 30 follow-up — completed-job GPS INSERT negative SQL execution
+
+- In FLETYA-testing, selected an existing completed job with an assigned driver. Under `SET LOCAL ROLE authenticated` and simulated JWT claims for that driver, attempted to insert a new `driver_locations` row against the completed job.
+- PostgreSQL rejected the insert with SQLSTATE `42501` as expected. The attempt ran inside `BEGIN ... ROLLBACK` and persisted no data.
+- Combined with the preceding UPDATE rejection, this provides SQL-level evidence that completed services reject new and changed GPS coordinates. Real-token HTTP INSERT/PATCH tests remain outstanding.
