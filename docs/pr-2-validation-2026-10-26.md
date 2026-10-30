@@ -99,3 +99,9 @@ A real unauthenticated signup request with admin metadata created a client appli
 - In FLETYA-testing, selected an existing completed job with an assigned driver. Under `SET LOCAL ROLE authenticated` and simulated JWT claims for that driver, attempted to insert a new `driver_locations` row against the completed job.
 - PostgreSQL rejected the insert with SQLSTATE `42501` as expected. The attempt ran inside `BEGIN ... ROLLBACK` and persisted no data.
 - Combined with the preceding UPDATE rejection, this provides SQL-level evidence that completed services reject new and changed GPS coordinates. Real-token HTTP INSERT/PATCH tests remain outstanding.
+
+## October 30 follow-up — public function EXECUTE grants audit
+
+- Read-only catalog audit of `pg_proc` and effective EXECUTE grants in FLETYA-testing: `guard_job_updates`, `guard_profile_role_changes`, `handle_new_user`, and `notify_drivers_new_job` are SECURITY DEFINER functions, but neither `anon` nor `authenticated` has direct EXECUTE privilege on them. This is an effective-permission check, not a claim about every trigger behavior.
+- The remaining test-only `fletya_session_permission_probe()` is SECURITY INVOKER, callable by `authenticated` but not `anon`; it must be dropped after final evidence is collected and before release. No functions or grants were changed during this audit.
+- Real-token HTTP negative coverage remains an open release gate. Do not mark it complete based on catalog inspection or simulated-claim SQL tests.
