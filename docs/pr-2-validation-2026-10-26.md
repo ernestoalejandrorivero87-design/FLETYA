@@ -62,3 +62,12 @@ The owner-confirmed post-integration service smoke test and normal fresh registr
 ## Public signup role check — October 28
 
 A real unauthenticated signup request with admin metadata created a client application profile. The temporary account was removed and baseline counts were restored. See [the public signup validation record](pr-2-signup-role-2026-10-28.md) for the confirmation-stage limit and sanitized evidence.
+
+## October 30 follow-up — read-only permissions audit
+
+- On FLETYA-testing, checked effective table privileges for anon and authenticated across profiles, jobs, notifications and driver_locations. All four tables have RLS enabled. Neither role has DELETE or TRUNCATE privileges; anon has no direct table privileges on these four tables.
+- Authenticated has SELECT/UPDATE on profiles and notifications, SELECT/INSERT/UPDATE on jobs and driver_locations. Importantly, authenticated does **not** have INSERT on notifications, even though a legacy INSERT policy exists; the policy alone does not confer table privileges. No migration is needed to remove that policy as an urgent security fix.
+- Inspected profiles, notifications and driver_locations RLS policy expressions. GPS insert/update WITH CHECK requires an assigned en_route job and the driver's own identity. These are policy-level observations, **not** completed negative cross-account HTTP tests.
+- Supabase security advisor still reports leaked-password protection disabled (one warning). No configuration changed.
+- Temporary diagnostics were removed from index.html and security-check.html on the PR branch. The test-only `public.fletya_session_permission_probe()` remains in FLETYA-testing pending final HTTP evidence; do not ship it to production.
+- Still required: negative real end-user HTTP mutation tests, production parity/deployment/rollback review, and post-cleanup smoke test. No production changes were made.
