@@ -11,9 +11,10 @@ const key = env.FLETYA_TEST_ANON_KEY;
 const email = env.FLETYA_CLIENT_A_EMAIL;
 const password = env.FLETYA_CLIENT_A_PASSWORD;
 const otherId = env.FLETYA_CLIENT_B_PROFILE_ID;
+const expectedActorId = env.FLETYA_CLIENT_A_PROFILE_ID;
 const fixtureConfirmed = env.FLETYA_DISPOSABLE_FIXTURES_CONFIRMED === 'YES';
-if (![url,key,email,password,otherId].every(Boolean) || !fixtureConfirmed) {
-  console.error('Missing test URL, key, disposable client A credentials, client B profile ID, or FLETYA_DISPOSABLE_FIXTURES_CONFIRMED=YES.');
+if (![url,key,email,password,otherId,expectedActorId].every(Boolean) || !fixtureConfirmed) {
+  console.error('Missing test URL, key, disposable client A credentials, client A and B profile IDs, or FLETYA_DISPOSABLE_FIXTURES_CONFIRMED=YES.');
   process.exit(2);
 }
 const origin = new URL(url).origin;
@@ -21,7 +22,8 @@ assert.match(origin, /^https:\/\//, 'HTTPS required');
 assert.match(origin, /supabase\.co$/, 'Only Supabase project URLs allowed');
 assert.equal(new URL(url).hostname.split('.')[0], 'ccdtpwvalqznasstnqxj', 'Refusing non-testing project');
 assert.match(otherId, /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i, 'Expected UUID');
-assert.match(email, /@example\.(com|org|net)$/i, 'Only disposable example-domain login accounts allowed');
+assert.match(expectedActorId, /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i, 'Expected client A UUID');
+// Use a working, independently controlled test mailbox; example.com cannot receive verification mail.
 
 async function request(path, token, options={}) {
   const response = await fetch(new URL(path,origin), {
@@ -45,6 +47,7 @@ const token=session.access_token;
 assert.ok(token,'No access token');
 const myId=session.user?.id;
 assert.ok(myId,'No authenticated user id');
+assert.equal(myId,expectedActorId,'Authenticated account is not the approved disposable client A fixture');
 assert.notEqual(myId,otherId,'Cross-account target must differ from actor');
 
 // Confirm that client A cannot read client B's profile, nor update it.
