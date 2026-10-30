@@ -11,8 +11,9 @@ const key = env.FLETYA_TEST_ANON_KEY;
 const email = env.FLETYA_CLIENT_A_EMAIL;
 const password = env.FLETYA_CLIENT_A_PASSWORD;
 const otherId = env.FLETYA_CLIENT_B_PROFILE_ID;
-if (![url,key,email,password,otherId].every(Boolean)) {
-  console.error('Missing test URL, key, disposable client A credentials, or client B profile ID.');
+const fixtureConfirmed = env.FLETYA_DISPOSABLE_FIXTURES_CONFIRMED === 'YES';
+if (![url,key,email,password,otherId].every(Boolean) || !fixtureConfirmed) {
+  console.error('Missing test URL, key, disposable client A credentials, client B profile ID, or FLETYA_DISPOSABLE_FIXTURES_CONFIRMED=YES.');
   process.exit(2);
 }
 const origin = new URL(url).origin;
@@ -20,6 +21,7 @@ assert.match(origin, /^https:\/\//, 'HTTPS required');
 assert.match(origin, /supabase\.co$/, 'Only Supabase project URLs allowed');
 assert.equal(new URL(url).hostname.split('.')[0], 'ccdtpwvalqznasstnqxj', 'Refusing non-testing project');
 assert.match(otherId, /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i, 'Expected UUID');
+assert.match(email, /@example\.(com|org|net)$/i, 'Only disposable example-domain login accounts allowed');
 
 async function request(path, token, options={}) {
   const response = await fetch(new URL(path,origin), {
