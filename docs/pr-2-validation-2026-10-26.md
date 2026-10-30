@@ -86,3 +86,10 @@ A real unauthenticated signup request with admin metadata created a client appli
 - In FLETYA-testing, found an existing completed job with a historical `driver_locations` row assigned to its driver. Using `SET LOCAL ROLE authenticated` and a simulated JWT subject of that same driver, attempted `UPDATE public.driver_locations SET latitude=latitude WHERE id=...`.
 - PostgreSQL rejected the update with SQLSTATE `42501` (insufficient privilege / RLS WITH CHECK rejection), as intended for a completed job. The test was inside `BEGIN ... ROLLBACK` and changed no persistent data.
 - This validates a real SQL operation under simulated claims; it **does not** close the outstanding real-token HTTP GPS-after-completion test.
+
+## October 30 follow-up — cross-driver job mutation negative SQL execution
+
+- In FLETYA-testing, selected two distinct existing driver identities and a completed or en-route job assigned to the second driver. Under `SET LOCAL ROLE authenticated` and simulated JWT claims for the first driver, attempted `UPDATE public.jobs SET status=status WHERE id=...` against the other driver's job.
+- The operation affected zero rows, consistent with the job's RLS restrictions. Test ran within `BEGIN ... ROLLBACK`, with no persistent data changes.
+- This is **not** a real end-user HTTP/PATCH test; the cross-driver real-token HTTP release gate remains open.
+- On preceding commit `015b4bf446dd1a1ee7a8c291da32972cac4c649b`, both GitHub security workflows and Vercel deployment reported success.
