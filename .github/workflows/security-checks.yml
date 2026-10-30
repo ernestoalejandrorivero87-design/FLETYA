@@ -44,6 +44,8 @@ jobs:
           node-version: 22
       - name: Check migration invariants
         run: node scripts/check-security-migrations.mjs
+      - name: Validate negative HTTP test script syntax (no network or secrets)
+        run: node --check tests/security/negative-http-smoke.mjs
 
   postgres-integration:
     runs-on: ubuntu-latest
