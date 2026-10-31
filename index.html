@@ -50,11 +50,15 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 </header>
 
 <main class="wrap">
+
 <section id="client">
 <div class="hero"><h1>Tu flete, en minutos.</h1><p>Simula una solicitud real de FLETYA desde tu navegador.</p></div>
 <div class="grid">
 <div class="card"><div class="card" id="authClient">
   <h2>Cuenta de cliente</h2>
+
+  <label>Nombre completo</label>
+  <input id="clientProfileName" placeholder="Tu nombre y apellidos">
 
   <label>Correo electrónico</label>
   <input id="authEmail" type="email" placeholder="tu@email.com">
@@ -64,8 +68,11 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 
   <button class="btn" onclick="registerClient()">Crear cuenta</button>
   <button class="btn" onclick="loginClient()">Iniciar sesión</button>
+  <button class="btn light" onclick="saveClientProfile()">Guardar nombre del perfil</button>
 
   <p id="authMessage" class="muted"></p>
+
+<p id="clientSessionIdentity" class="muted" style="display:none" aria-live="polite"></p>
 
 <button id="clientLogoutBtn" class="btn light" onclick="logoutClient()" style="display:none">
   🚪 Cerrar sesión de cliente
@@ -73,6 +80,9 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 </div>
   <div class="card" id="authDriver">
   <h2>Cuenta de fletero</h2>
+
+  <label>Nombre completo</label>
+  <input id="driverName" placeholder="Tu nombre y apellidos">
 
   <label>Correo electrónico</label>
   <input id="driverEmail" type="email" placeholder="fletero@email.com">
@@ -116,9 +126,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 <div class="card">
 <h2>Seguimiento</h2><div id="clientStatus"><span class="pill">Sin servicio activo</span></div>
 <div id="routeMap"></div>
-<div id="driverTracking" class="muted">
-  🚚 Buscando ubicación del fletero...
-</div>
+<div id="driverTracking" class="muted" hidden></div>
 <p id="routeInfo" class="muted">
   Introduce origen y destino para calcular la ruta.
 </p>
@@ -136,9 +144,10 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 <div class="hero"><h1>Panel del fletero</h1><p>Así verá el conductor las solicitudes y sus servicios.</p></div>
 <div class="grid">
 <div class="card">
-<h2>Mi perfil</h2><label>Nombre</label><input id="dname" value="Fletero Demo">
+<h2>Mi perfil</h2><label>Nombre completo</label><input id="dname" placeholder="Tu nombre y apellidos">
 <label>Vehículo</label><select id="dvehicle"><option>Pickup / Estaquita</option><option>Camioneta</option><option>Camión</option></select>
 <label>Placas</label><input id="plates" placeholder="ABC-123-D">
+<br><button class="btn light" onclick="saveDriverProfile()">Guardar nombre del perfil</button>
 <br><br><button class="btn light" onclick="driverLocation()">📍 Actualizar ubicación</button>
 <p id="gps" class="muted">Ubicación pendiente</p>
 </div>
@@ -316,6 +325,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 const state={jobs:[],active:null,accepted:false,status:'Pendiente'};
 const rate={pickup:35,camioneta:45,camion:65};
 function money(n){return n.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0})}
+function money2(n){return (Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function quote(){
  let km=+document.getElementById('km').value||1,v=document.getElementById('vehicle').value,h=+document.getElementById('helpers').value;
  let base=120, p=base+km*rate[v]+h*180;
@@ -325,6 +335,7 @@ function quote(){
  return p;
 }
 function show(id){
+ if(id !== 'driver' && typeof stopFletyaGps === 'function') stopFletyaGps();
  ['client','driver','admin'].forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==id));
  if(id==='admin')renderAdmin(); if(id==='driver')renderDriver();
 }
@@ -483,6 +494,25 @@ function initRouteMap() {
   }).addTo(routeMap);
 }
 
+function clearRouteOnMap() {
+  if (routeMap && routeLine) routeMap.removeLayer(routeLine);
+  if (routeMap && originMarker) routeMap.removeLayer(originMarker);
+  if (routeMap && destinationMarker) routeMap.removeLayer(destinationMarker);
+
+  routeLine = null;
+  originMarker = null;
+  destinationMarker = null;
+
+  if (routeMap) routeMap.setView([21.1619, -86.8515], 12);
+
+  const routeInfo = document.getElementById('routeInfo');
+  if (routeInfo) {
+    routeInfo.textContent = 'Introduce origen y destino para calcular la ruta.';
+  }
+
+  stopDriverTracking();
+}
+
 function drawRouteOnMap(polyline) {
   if (!polyline || !routeMap) return;
 
@@ -622,6 +652,54 @@ if (routeData.polyline) {
 }
   quote();
 }
+
+async function restoreRouteForJob(job, userId) {
+  if (!job || !['requested', 'en_route'].includes(job.status)) {
+    clearRouteOnMap();
+    return;
+  }
+
+  const originInput = document.getElementById('origin');
+  const destinationInput = document.getElementById('dest');
+  const routeInfo = document.getElementById('routeInfo');
+
+  if (originInput) originInput.value = job.origin || '';
+  if (destinationInput) destinationInput.value = job.destination || '';
+  if (routeInfo) routeInfo.textContent = '🔄 Recuperando la ruta de tu servicio...';
+
+  const origin = prepareRouteAddress(job.origin || '');
+  const destination = prepareRouteAddress(job.destination || '');
+
+  if (!origin || !destination) {
+    clearRouteOnMap();
+    if (routeInfo) routeInfo.textContent = 'No se pudo recuperar la ruta: falta el origen o el destino.';
+    return;
+  }
+
+  const { data: routeData, error: routeError } =
+    await supabaseClient.functions.invoke('fletya-routes', {
+      body: { origin, destination }
+    });
+
+  // Evita dibujar una ruta si el usuario cerró sesión o cambió de pedido
+  // mientras se calculaba la ruta.
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user || user.id !== userId || state.active?.id !== job.id) return;
+
+  if (routeError || !routeData?.polyline) {
+    clearRouteOnMap();
+    if (routeInfo) routeInfo.textContent = 'No se pudo recuperar la ruta. Comprueba el origen y el destino e inténtalo de nuevo.';
+    return;
+  }
+
+  drawRouteOnMap(routeData.polyline);
+  if (routeInfo) {
+    routeInfo.innerHTML =
+      `📍 <strong>${job.origin || ''}</strong> → <strong>${job.destination || ''}</strong><br>
+       📏 ${routeData.distance_km ?? job.distance_km ?? '—'} km · ⏱️ ${routeData.duration_text || 'Tiempo estimado'} · 🗺️ Ruta recuperada`;
+  }
+}
+
  async function requestJob(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
@@ -731,6 +809,8 @@ async function renderClient(){
     await supabaseClient.auth.getUser();
 
   if (authError || !user) {
+  state.active = null;
+  clearRouteOnMap();
   document.getElementById('clientStatus').innerHTML =
     '<span class="pill">Inicia sesión para ver tu servicio.</span>';
 
@@ -738,10 +818,35 @@ async function renderClient(){
     '<p class="muted">Inicia sesión para ver tu historial.</p>';
 
   document.getElementById('clientLogoutBtn').style.display = 'none';
+  setClientSessionIdentity(null);
+
+  const originInput = document.getElementById('origin');
+  const destinationInput = document.getElementById('dest');
+  if (originInput) originInput.value = '';
+  if (destinationInput) destinationInput.value = '';
+
+  if (driverTrackingTimer) {
+    clearInterval(driverTrackingTimer);
+    driverTrackingTimer = null;
+  }
 
   return;
   }
 document.getElementById('clientLogoutBtn').style.display = 'inline-block';
+  const { data: clientProfile } = await supabaseClient
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  setClientSessionIdentity(user, clientProfile?.full_name);
+
+  if (clientProfile?.full_name) {
+    document.getElementById('clientProfileName').value = clientProfile.full_name;
+    const requestName = document.getElementById('cname');
+    if (requestName && !requestName.value) requestName.value = clientProfile.full_name;
+  }
+
   const { data: jobs, error } = await supabaseClient
     .from('jobs')
     .select('*')
@@ -790,6 +895,17 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   if (!jobs || jobs.length === 0) {
 
     state.active = null;
+    clearRouteOnMap();
+
+    const originInput = document.getElementById('origin');
+    const destinationInput = document.getElementById('dest');
+    if (originInput) originInput.value = '';
+    if (destinationInput) destinationInput.value = '';
+
+    if (driverTrackingTimer) {
+      clearInterval(driverTrackingTimer);
+      driverTrackingTimer = null;
+    }
 
     document.getElementById('clientStatus').innerHTML =
       '<span class="pill">Sin servicio activo</span>';
@@ -800,6 +916,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   const j = jobs[0];
 
   state.active = j;
+  await restoreRouteForJob(j, user.id);
 
   document.getElementById('clientStatus').innerHTML =
     `<h3>${
@@ -817,6 +934,8 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
      </button>`;
    if (j.status === 'en_route') {
     startDriverTracking();
+   } else {
+    stopDriverTracking();
    }
 }
  async function updateDriverTracking(){
@@ -833,6 +952,9 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Ignora respuestas pendientes de un servicio que ya terminó o cambió.
+  if (state.active?.id !== activeJob.id || state.active?.status !== 'en_route') return;
 
   const box = document.getElementById('driverTracking');
 
@@ -866,7 +988,22 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
  }
  let driverTrackingTimer = null;
 
+function stopDriverTracking(){
+  if (driverTrackingTimer) clearInterval(driverTrackingTimer);
+  driverTrackingTimer = null;
+  const box = document.getElementById('driverTracking');
+  if (box) {
+    box.hidden = true;
+    box.textContent = '';
+  }
+}
+
 function startDriverTracking(){
+  const box = document.getElementById('driverTracking');
+  if (box && box.hidden) {
+    box.textContent = '🚚 Buscando ubicación del fletero...';
+    box.hidden = false;
+  }
   if (driverTrackingTimer) {
     clearInterval(driverTrackingTimer);
   }
@@ -943,7 +1080,7 @@ function startDriverPanelRefresh(userId) {
   const { data: profile, error: profileError } =
     await supabaseClient
       .from('profiles')
-      .select('role')
+      .select('role, full_name')
       .eq('id', user.id)
       .single();
 
@@ -953,6 +1090,7 @@ function startDriverPanelRefresh(userId) {
     return;
   }
 
+  document.getElementById('dname').value = profile.full_name || '';
   startDriverNotifications(user.id);
   startDriverPanelRefresh(user.id);
   const e = document.getElementById('jobCard');
@@ -974,15 +1112,17 @@ function startDriverPanelRefresh(userId) {
       .limit(1)
       .maybeSingle();
 
-  let html = '';
-
+  // Sincronizar el servicio recuperado con el estado usado por Completar servicio.
+  // No conservar un pedido anterior de otro usuario al cambiar de sesión.
   if (activeError) {
-    console.error(activeError);
+    console.error('No se pudo recuperar el servicio activo:', activeError);
+    return;
   }
-
-  // Mantener sincronizado el servicio consultado con el estado usado por los botones.
   state.active = activeJob || null;
-  state.accepted = !!activeJob && activeJob.status === 'en_route';
+  state.accepted = Boolean(activeJob);
+  syncFletyaGps(user.id, activeJob).catch(console.error);
+
+  let html = '';
 
   if (activeJob) {
     html += `
@@ -1032,6 +1172,52 @@ function startDriverPanelRefresh(userId) {
       <br>
     `;
   }
+
+  /* =========================
+     HISTORIAL DE MIS SERVICIOS
+     Solo consulta registros del fletero autenticado.
+     ========================= */
+
+  const { data: completedJobs, error: historyError } = await supabaseClient
+    .from('jobs')
+    .select('id, origin, destination, service_type, vehicle_type, price, status, created_at')
+    .eq('driver_id', user.id)
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  const safeText = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[ch]);
+
+  html += '<section class="card"><h3>📚 Mis servicios</h3><p class="muted">Historial de tus servicios completados.</p>';
+
+  if (historyError) {
+    console.error('Error cargando historial del fletero:', historyError);
+    html += '<p class="pill">No se pudo cargar tu historial. Inténtalo de nuevo.</p>';
+  } else if (!completedJobs || completedJobs.length === 0) {
+    html += '<p class="muted">Todavía no tienes servicios completados.</p>';
+  } else {
+    html += completedJobs.map(job => {
+      const date = job.created_at
+        ? new Date(job.created_at).toLocaleDateString('es-MX')
+        : 'Fecha no disponible';
+      return `<div class="card">
+        <h4>${safeText(job.origin || 'Origen no disponible')} → ${safeText(job.destination || 'Destino no disponible')}</h4>
+        <p><b>Servicio:</b> ${safeText(job.service_type || 'No especificado')}</p>
+        <p><b>Vehículo:</b> ${safeText(job.vehicle_type || 'No especificado')}</p>
+        <p><b>Fecha:</b> ${safeText(date)}</p>
+        <p><b>Importe:</b> ${(Number(job.price || 0)).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})} MXN</p>
+        <span class="pill">✅ Completado</span>
+      </div>`;
+    }).join('');
+  }
+
+  html += '</section><br>';
 
   /* =========================
      NUEVAS SOLICITUDES
@@ -1104,7 +1290,90 @@ function startDriverPanelRefresh(userId) {
 
   e.appendChild(logoutButton);
  }                         
+// GPS del fletero: seguimiento exclusivo del servicio activo y de la sesión actual.
+let fletyaGpsWatch = null;
+let fletyaGpsJobId = null;
+let fletyaGpsUserId = null;
+let fletyaGpsLastSent = 0;
+let fletyaGpsRestoreKey = '';
+
+function stopFletyaGps() {
+  if (fletyaGpsWatch !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(fletyaGpsWatch);
+  }
+  fletyaGpsWatch = null;
+  fletyaGpsJobId = null;
+  fletyaGpsUserId = null;
+  fletyaGpsLastSent = 0;
+  fletyaGpsRestoreKey = '';
+}
+
+async function syncFletyaGps(userId, activeJob) {
+  const gps = document.getElementById('gps');
+  if (!gps) return;
+  if (!activeJob || activeJob.status !== 'en_route') {
+    stopFletyaGps();
+    gps.textContent = 'Ubicación pendiente (sin servicio en ruta)';
+    return;
+  }
+  const key = userId + ':' + activeJob.id;
+  if (fletyaGpsRestoreKey !== key) {
+    fletyaGpsRestoreKey = key;
+    const { data, error } = await supabaseClient.from('driver_locations')
+      .select('latitude, longitude, updated_at')
+      .eq('driver_id', userId).eq('job_id', activeJob.id)
+      .maybeSingle();
+    if (fletyaGpsRestoreKey !== key) return;
+    if (error) {
+      console.error('Error recuperando GPS:', error);
+      gps.textContent = 'No se pudo recuperar el GPS';
+    } else if (data) {
+      gps.textContent = '📍 Última ubicación guardada: ' +
+        Number(data.latitude).toFixed(5) + ', ' + Number(data.longitude).toFixed(5);
+    } else {
+      gps.textContent = 'Ubicación pendiente';
+    }
+  }
+  if (fletyaGpsWatch !== null && fletyaGpsJobId === activeJob.id && fletyaGpsUserId === userId) return;
+  stopFletyaGps();
+  fletyaGpsRestoreKey = key;
+  if (!navigator.geolocation) {
+    gps.textContent = 'GPS no disponible en este navegador';
+    return;
+  }
+  fletyaGpsJobId = activeJob.id;
+  fletyaGpsUserId = userId;
+  const jobId = activeJob.id;
+  fletyaGpsWatch = navigator.geolocation.watchPosition(async position => {
+    if (fletyaGpsJobId !== jobId || fletyaGpsUserId !== userId ||
+        document.getElementById('driver')?.classList.contains('hidden')) return;
+    const now = Date.now();
+    if (now - fletyaGpsLastSent < 10000) return;
+    fletyaGpsLastSent = now;
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (user?.id !== userId || fletyaGpsJobId !== jobId) return;
+    const { error } = await supabaseClient.from('driver_locations').upsert({
+      driver_id: userId, job_id: jobId,
+      latitude: position.coords.latitude, longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy, updated_at: new Date().toISOString()
+    }, { onConflict: 'driver_id' });
+    if (fletyaGpsJobId !== jobId || fletyaGpsUserId !== userId) return;
+    if (error) {
+      console.error('Error guardando GPS:', error);
+      gps.textContent = 'No se pudo guardar la ubicación';
+    } else {
+      gps.textContent = '📍 GPS actualizado: ' +
+        position.coords.latitude.toFixed(5) + ', ' + position.coords.longitude.toFixed(5);
+    }
+  }, error => {
+    if (fletyaGpsJobId === jobId) {
+      gps.textContent = 'GPS no disponible: revisa el permiso de ubicación';
+      console.warn('GPS:', error.message);
+    }
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+}
 async function logoutDriver(){
+  stopFletyaGps();
   if (driverPanelRefreshTimer) clearInterval(driverPanelRefreshTimer);
   driverPanelRefreshTimer = null;
   driverPanelRefreshUserId = null;
@@ -1120,23 +1389,25 @@ async function logoutDriver(){
   }, 100);
 }async function acceptDriver(){
   if(!state.active) return;
+  const jobId = state.active.id;
 
-  const { data: { user } } = await supabaseClient.auth.getUser();
+  const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
 
-if (!user) {
+if (authError || !user) {
   toast('Debes iniciar sesión como fletero');
   return;
 }
-toast('ID fletero: ' + user.id);
-const jobId = state.active.id;
-
-const { error } = await supabaseClient
+const { data: acceptedJob, error } = await supabaseClient
   .from('jobs')
   .update({
     status: 'en_route',
     driver_id: user.id
   })
-  .eq('id', jobId);
+  .eq('id', jobId)
+  .eq('status', 'requested')
+  .is('driver_id', null)
+  .select('*')
+  .maybeSingle();
 
   if(error){
     console.error(error);
@@ -1144,14 +1415,20 @@ const { error } = await supabaseClient
     return;
   }
 
-  state.active.status = 'en_route';
+  if (!acceptedJob) {
+    toast('Este servicio ya no está disponible. Otro fletero pudo haberlo aceptado.');
+    await renderDriver();
+    return;
+  }
+
+  state.active = acceptedJob;
   state.accepted = true;
 
   state.jobs = state.jobs.filter(j => j.id !== jobId);
 
-  renderDriver();
+  await renderDriver();
 
-  toast('Servicio aceptado. Cliente notificado.');
+  toast('Servicio aceptado correctamente.');
 }
   async function completeDriver(){
   const { data: { user }, error: authError } =
@@ -1207,6 +1484,7 @@ const { error } = await supabaseClient
     return;
   }
 
+  stopFletyaGps();
   state.active = null;
   state.accepted = false;
   toast('✅ Servicio completado correctamente');
@@ -1449,21 +1727,33 @@ const filteredServices = services.filter(job => {
         job.status === 'completed'
     );
 
-    const total = driverJobs.reduce(
-      (sum, job) => sum + Number(job.price || 0),
+    // Contabilidad por servicio: trabajar en centavos enteros para evitar
+    // diferencias de coma flotante y asegurar que comisión + neto = precio.
+    const centsFor = amount => Math.round((Number(amount) || 0) * 100);
+    const jobCommissionCents = job => Math.round(centsFor(job.price) * 0.15);
+    const jobNetCents = job => centsFor(job.price) - jobCommissionCents(job);
+
+    const totalCents = driverJobs.reduce(
+      (sum, job) => sum + centsFor(job.price),
       0
     );
+    const commissionCents = driverJobs.reduce(
+      (sum, job) => sum + jobCommissionCents(job),
+      0
+    );
+    const netCents = totalCents - commissionCents;
+    const total = totalCents / 100;
+    const commission = commissionCents / 100;
+    const net = netCents / 100;
 
-    const commission = total * 0.15;
-    const net = total - commission;
-   const pendingJobs = driverJobs.filter(
-  job => job.driver_paid !== true
-);
-
-const pendingTotal = pendingJobs.reduce(
-  (sum, job) => sum + Number(job.price || 0) * 0.85,
-  0
-);
+    const pendingJobs = driverJobs.filter(
+      job => job.driver_paid !== true
+    );
+    const pendingCents = pendingJobs.reduce(
+      (sum, job) => sum + jobNetCents(job),
+      0
+    );
+    const pendingTotal = pendingCents / 100;
 
   return {
   ...driver,
@@ -1497,10 +1787,10 @@ const pendingTotal = pendingJobs.reduce(
             <tr>
               <td>${driver.full_name || 'Sin nombre'}</td>
               <td>${driver.jobs}</td>
-              <td>$${driver.total.toLocaleString('es-MX')}</td>
-              <td>$${driver.commission.toLocaleString('es-MX')}</td>
-              <td>$${driver.net.toLocaleString('es-MX')}
-              <td>$${driver.pendingTotal.toLocaleString('es-MX')}</td>
+              <td>$${money2(driver.total)}</td>
+              <td>$${money2(driver.commission)}</td>
+              <td>$${money2(driver.net)}
+              <td>$${money2(driver.pendingTotal)}</td>
               </td>
               <td>
   ${driver.pendingTotal > 0
@@ -1770,7 +2060,6 @@ document.getElementById('jobModal').classList.remove('hidden');
 setInterval(() => {
 
   const clientSection = document.getElementById('client');
-  const driverSection = document.getElementById('driver');
 
   if (
     clientSection &&
@@ -1779,20 +2068,18 @@ setInterval(() => {
     renderClient();
   }
 
-  if (
-    driverSection &&
-    !driverSection.classList.contains('hidden')
-  ) {
-    renderDriver();
-  }
-
 }, 10000);
 </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-const SUPABASE_URL = 'https://wsdfqscrvfygxripmrzi.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O';
+const IS_FLETYA_PRODUCTION_HOST = window.location.hostname === 'fletya.vercel.app';
+const SUPABASE_URL = IS_FLETYA_PRODUCTION_HOST
+  ? 'https://wsdfqscrvfygxripmrzi.supabase.co'
+  : 'https://ccdtpwvalqznasstnqxj.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = IS_FLETYA_PRODUCTION_HOST
+  ? 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O'
+  : 'sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
 
 const supabaseClient =
   window.supabase && window.supabase.createClient
@@ -1802,13 +2089,50 @@ const supabaseClient =
       )
     : null;
 
+function setClientSessionIdentity(user, fullName) {
+  const label = document.getElementById('clientSessionIdentity');
+  if (!label) return;
+  if (!user) {
+    label.textContent = '';
+    label.style.display = 'none';
+    return;
+  }
+  const name = fullName || user.user_metadata?.full_name || 'Cliente';
+  label.textContent = 'Sesión activa: ' + name + ' · ' + (user.email || 'Correo no disponible');
+  label.style.display = 'block';
+}
+
+async function restoreClientSessionOnLoad() {
+  if (!supabaseClient) return;
+  const { data: { user }, error } = await supabaseClient.auth.getUser();
+  if (error || !user) {
+    setClientSessionIdentity(null);
+    return;
+  }
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('profiles')
+    .select('role, full_name')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileError || profile?.role !== 'client') {
+    setClientSessionIdentity(null);
+    return;
+  }
+  setClientSessionIdentity(user, profile.full_name);
+  if (!document.getElementById('client').classList.contains('hidden')) {
+    await renderClient();
+  }
+}
+restoreClientSessionOnLoad();
+
 async function registerClient() {
+  const fullName = document.getElementById('clientProfileName').value.trim();
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   const message = document.getElementById('authMessage');
 
-  if (!email || !password) {
-    message.textContent = 'Escribe tu correo y contraseña.';
+  if (!fullName || !email || !password) {
+    message.textContent = 'Escribe tu nombre completo, correo y contraseña.';
     return;
   }
 
@@ -1822,6 +2146,7 @@ async function registerClient() {
     password: password,
     options: {
       data: {
+        full_name: fullName,
         role: 'client'
       }
     }
@@ -1836,12 +2161,13 @@ async function registerClient() {
 }
 
 async function registerDriver() {
+  const fullName = document.getElementById('driverName').value.trim();
   const email = document.getElementById('driverEmail').value.trim();
   const password = document.getElementById('driverPassword').value;
   const message = document.getElementById('driverMessage');
 
-  if (!email || !password) {
-    message.textContent = 'Escribe tu correo y contraseña.';
+  if (!fullName || !email || !password) {
+    message.textContent = 'Escribe tu nombre completo, correo y contraseña.';
     return;
   }
 
@@ -1855,6 +2181,7 @@ async function registerDriver() {
     password: password,
     options: {
       data: {
+        full_name: fullName,
         role: 'driver'
       }
     }
@@ -1867,6 +2194,55 @@ async function registerDriver() {
 
   message.textContent =
     'Cuenta de fletero creada. Revisa tu correo si Supabase solicita confirmación.';
+}
+
+async function saveProfileName(inputId, expectedRole) {
+  const nameInput = document.getElementById(inputId);
+  const fullName = nameInput?.value.trim() || '';
+  if (!fullName) {
+    toast('Escribe tu nombre completo.');
+    return;
+  }
+
+  const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+  if (authError || !user) {
+    toast('Inicia sesión antes de guardar tu nombre.');
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile || profile.role !== expectedRole) {
+    toast('No se pudo validar tu tipo de cuenta.');
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from('profiles')
+    .update({ full_name: fullName })
+    .eq('id', user.id);
+
+  if (error) {
+    console.error('Error guardando nombre del perfil:', error);
+    toast('No se pudo guardar el nombre: ' + error.message);
+    return;
+  }
+
+  const requestName = document.getElementById('cname');
+  if (expectedRole === 'client' && requestName) requestName.value = fullName;
+  toast('Nombre del perfil guardado.');
+}
+
+async function saveClientProfile() {
+  return saveProfileName('clientProfileName', 'client');
+}
+
+async function saveDriverProfile() {
+  return saveProfileName('dname', 'driver');
 }
 
 async function loginDriver() {
@@ -1974,9 +2350,16 @@ async function loginClient() {
   show('client');
   }
   async function logoutClient() {
-  await supabaseClient.auth.signOut();
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) {
+    toast('No se pudo cerrar sesión. Inténtalo de nuevo.');
+    return;
+  }
+  setClientSessionIdentity(null);
+  document.getElementById('clientLogoutBtn').style.display = 'none';
   show('client');
-  renderClient();
+  await renderClient();
   }
 </script>
+
 </body></html>
