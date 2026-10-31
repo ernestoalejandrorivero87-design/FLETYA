@@ -72,6 +72,8 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 
   <p id="authMessage" class="muted"></p>
 
+<p id="clientSessionIdentity" class="muted" style="display:none" aria-live="polite"></p>
+
 <button id="clientLogoutBtn" class="btn light" onclick="logoutClient()" style="display:none">
   🚪 Cerrar sesión de cliente
 </button>
@@ -816,6 +818,7 @@ async function renderClient(){
     '<p class="muted">Inicia sesión para ver tu historial.</p>';
 
   document.getElementById('clientLogoutBtn').style.display = 'none';
+  setClientSessionIdentity(null);
 
   const originInput = document.getElementById('origin');
   const destinationInput = document.getElementById('dest');
@@ -835,6 +838,8 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .select('full_name')
     .eq('id', user.id)
     .maybeSingle();
+
+  setClientSessionIdentity(user, clientProfile?.full_name);
 
   if (clientProfile?.full_name) {
     document.getElementById('clientProfileName').value = clientProfile.full_name;
@@ -2084,6 +2089,42 @@ const supabaseClient =
       )
     : null;
 
+function setClientSessionIdentity(user, fullName) {
+  const label = document.getElementById('clientSessionIdentity');
+  if (!label) return;
+  if (!user) {
+    label.textContent = '';
+    label.style.display = 'none';
+    return;
+  }
+  const name = fullName || user.user_metadata?.full_name || 'Cliente';
+  label.textContent = 'Sesión activa: ' + name + ' · ' + (user.email || 'Correo no disponible');
+  label.style.display = 'block';
+}
+
+async function restoreClientSessionOnLoad() {
+  if (!supabaseClient) return;
+  const { data: { user }, error } = await supabaseClient.auth.getUser();
+  if (error || !user) {
+    setClientSessionIdentity(null);
+    return;
+  }
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('profiles')
+    .select('role, full_name')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileError || profile?.role !== 'client') {
+    setClientSessionIdentity(null);
+    return;
+  }
+  setClientSessionIdentity(user, profile.full_name);
+  if (!document.getElementById('client').classList.contains('hidden')) {
+    await renderClient();
+  }
+}
+restoreClientSessionOnLoad();
+
 async function registerClient() {
   const fullName = document.getElementById('clientProfileName').value.trim();
   const email = document.getElementById('authEmail').value.trim();
@@ -2309,9 +2350,15 @@ async function loginClient() {
   show('client');
   }
   async function logoutClient() {
-  await supabaseClient.auth.signOut();
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) {
+    toast('No se pudo cerrar sesión. Inténtalo de nuevo.');
+    return;
+  }
+  setClientSessionIdentity(null);
+  document.getElementById('clientLogoutBtn').style.display = 'none';
   show('client');
-  renderClient();
+  await renderClient();
   }
 </script>
 
