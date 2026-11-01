@@ -43,9 +43,9 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 <header>
   <div class="logo">FLET<span>YA</span></div>
   <nav>
-    <button onclick="show('client')">Cliente</button>
-    <button onclick="show('driver')">Fletero</button>
-    <button onclick="show('admin')">Admin</button>
+    <button onclick="navigateToRole('client')">Cliente</button>
+    <button onclick="navigateToRole('driver')">Fletero</button>
+    <button onclick="navigateToRole('admin')">Admin</button>
   </nav>
 </header>
 
@@ -338,6 +338,28 @@ function show(id){
  if(id !== 'driver' && typeof stopFletyaGps === 'function') stopFletyaGps();
  ['client','driver','admin'].forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==id));
  if(id==='admin')renderAdmin(); if(id==='driver')renderDriver();
+}
+async function navigateToRole(target) {
+  if (!supabaseClient) { toast('No se pudo verificar la sesión'); return; }
+  const { data: { user }, error } = await supabaseClient.auth.getUser();
+  if (error || !user) {
+    if (target === 'client') { show('client'); return; }
+    toast('Debes iniciar sesión para acceder a esta sección');
+    return;
+  }
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('profiles').select('role').eq('id', user.id).maybeSingle();
+  if (profileError || !profile?.role) {
+    toast('No se pudo verificar el rol de la cuenta');
+    return;
+  }
+  if (profile.role !== target) {
+    toast(target === 'client' ? 'Esta sección es solo para clientes'
+      : target === 'driver' ? 'Esta sección es solo para fleteros'
+      : 'Esta sección es solo para administradores');
+    return;
+  }
+  show(target);
 }
 function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
 async function createNotification(userId, title, message, type = 'info'){
@@ -703,8 +725,11 @@ async function restoreRouteForJob(job, userId) {
  async function requestJob(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
+  const { data: roleProfile, error: roleError } = user && !authError
+    ? await supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle()
+    : { data: null, error: null };
 
-  if (authError || !user) {
+  if (authError || !user || roleError || roleProfile?.role !== 'client') {
     toast('Debes iniciar sesión como cliente.');
     return;
   }
