@@ -832,8 +832,11 @@ async function renderClient(){
 
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
+  const { data: roleProfile, error: roleError } = user && !authError
+    ? await supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle()
+    : { data: null, error: null };
 
-  if (authError || !user) {
+  if (authError || !user || roleError || roleProfile?.role !== 'client') {
   state.active = null;
   clearRouteOnMap();
   document.getElementById('clientStatus').innerHTML =
