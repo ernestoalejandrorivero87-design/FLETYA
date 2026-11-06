@@ -1,0 +1,32 @@
+name: Security migration static checks
+
+on:
+  push:
+    branches: [fix/security-profile-role]
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/check-security-migrations.mjs'
+      - '.github/workflows/security-static-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/check-security-migrations.mjs'
+      - '.github/workflows/security-static-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-security-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check security migration invariants
+        run: node scripts/check-security-migrations.mjs

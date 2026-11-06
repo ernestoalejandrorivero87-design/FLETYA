@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-28",
+  "environment": "FLETYA-testing",
+  "endpoint": "POST /auth/v1/signup",
+  "http_status": 200,
+  "submitted_metadata_role": "admin",
+  "returned_metadata_role": "admin",
+  "auth_role": "authenticated",
+  "trusted_app_role": null,
+  "profile_role": "client",
+  "access_token_returned": false,
+  "email_confirmed_at_inspection": false,
+  "admin_count_before": 1,
+  "admin_count_after": 1,
+  "cleanup": {
+    "auth_users": 7,
+    "profiles": 7,
+    "admins": 1,
+    "jobs": 10,
+    "notifications": 19,
+    "temporary_user_remaining": 0
+  },
+  "scope": "Actual public signup and persisted profile assignment before email confirmation; no confirmation link consumed"
+}

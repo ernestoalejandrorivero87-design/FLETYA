@@ -1,0 +1,70 @@
+{
+  "environment": "FLETYA-testing",
+  "unguarded": {
+    "passed": true,
+    "method": "Two real Auth sessions; simultaneous REST PATCH requests blocked behind one row lock",
+    "observed_blocked_backends": 2,
+    "outcomes": [
+      {
+        "worker": "A",
+        "status": 200,
+        "affected": 0,
+        "started": "2026-10-28T11:16:49.423473+00:00",
+        "finished": "2026-10-28T11:16:52.374347+00:00",
+        "elapsed_seconds": 2.950874
+      },
+      {
+        "worker": "B",
+        "status": 200,
+        "affected": 1,
+        "started": "2026-10-28T11:16:49.422843+00:00",
+        "finished": "2026-10-28T11:16:52.371335+00:00",
+        "elapsed_seconds": 2.948492
+      }
+    ],
+    "lock_window": {
+      "acquired": "2026-10-28T11:16:47.316616+00:00",
+      "released": "2026-10-28T11:16:52.325987+00:00"
+    },
+    "winner": "B",
+    "loser_can_read_assigned_job": false
+  },
+  "guarded": {
+    "passed": true,
+    "method": "Two real Auth sessions; guarded simultaneous REST PATCH requests blocked behind one row lock",
+    "observed_blocked_backends": 2,
+    "outcomes": [
+      {
+        "worker": "A",
+        "status": 200,
+        "affected": 1,
+        "started": "2026-10-28T11:17:36.232609+00:00",
+        "finished": "2026-10-28T11:17:41.238053+00:00",
+        "elapsed_seconds": 5.005444
+      },
+      {
+        "worker": "B",
+        "status": 200,
+        "affected": 0,
+        "started": "2026-10-28T11:17:36.232040+00:00",
+        "finished": "2026-10-28T11:17:41.241493+00:00",
+        "elapsed_seconds": 5.009453
+      }
+    ],
+    "lock_window": {
+      "acquired": "2026-10-28T11:17:36.186921+00:00",
+      "released": "2026-10-28T11:17:41.19215+00:00"
+    },
+    "winner": "A",
+    "loser_can_read_assigned_job": false
+  },
+  "cleanup": {
+    "jobs": 10,
+    "profiles": 7,
+    "notifications": 19,
+    "locations": 2,
+    "temporary_jobs": 0,
+    "temporary_users": 0,
+    "temporary_helpers": 0
+  }
+}
