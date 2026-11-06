@@ -58,8 +58,10 @@ confirm the actual dashboard setting separately rather than assuming its value.
 Commit 2445f63010e8a0b685f42f733310b9e5ac52ef7c passed all four Actions runs:
 42246501370, 42246501359, 42246510683 and 42246510575. This includes the new
 PostgreSQL signup-email assertion. The remaining prerequisite before requesting
-deployment approval is a verified production backup/recovery method and the
-Data API/Auth configuration review.
+deployment approval includes the Data API/Auth configuration review and confirmation
+of recovery for managed services. The downloaded production archive passed
+integrity checks and isolated application recovery/migration checks; see
+[backup validation and its limits](pr-2-backup-validation-2026-11-06.md).
 
 Use [release-catalog-inventory.sql](../tests/security/release-catalog-inventory.sql)
 to capture metadata from both projects. Compare column types/defaults, constraints,
@@ -77,7 +79,9 @@ bootstrap, archived preview probes or cleanup SQL to production.
    exists before the reconciled signup migration is applied.
 3. Verify a current backup and a usable restore method for production. Capture its
    prior function/policy/trigger/grant definitions for scoped recovery. Backup
-   existence and recovery capability have not yet been verified.
+   integrity and application recovery have been verified in isolation. Full
+   Supabase/Auth hosted recovery has not been exercised; retain the downloaded
+   archive and verify the operational recovery workflow before deployment.
 4. Review Auth leaked-password protection, currently disabled in testing. Confirm
    the production setting and available plan before changing it.
 5. Obtain approval for the concrete production migration and merge. Apply the six
