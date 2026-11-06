@@ -23,6 +23,8 @@ function runtime(responses = []) {
       style: {}, innerHTML: '', textContent: '', children: [],
       classList: {
         contains: name => classes.has(name),
+        add(name) { classes.add(name); },
+        remove(name) { classes.delete(name); },
         toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); }
       },
       appendChild(child) { this.children.push(child); },
@@ -318,4 +320,118 @@ test('a client poll started before logout cannot restore the old session', async
   assert.equal(r.queries.length, 0);
   assert.equal(r.run('state.active'), null);
   assert.equal(r.document.getElementById('clientLogoutBtn').style.display, 'none');
+});
+
+
+const paymentJob = { id: 'payment-job', origin: 'Plaza las Américas', destination: 'Playa del Carmen',
+  price: 2420.90, driver_id: 'driver-1', status: 'completed', driver_paid: false };
+function paymentRuntime(responses, confirmed = true) {
+  const r = runtime(responses);
+  r.context.window = { confirm: message => { r.confirmations.push(message); return confirmed; } };
+  r.confirmations = [];
+  r.run("currentJobDetailsId='payment-job'; adminRefreshes=0; detailRefreshes=0; renderAdmin=async()=>{adminRefreshes++}; viewJob=async()=>{detailRefreshes++};");
+  return r;
+}
+
+test('payment confirmation shows exact cents and updates only the selected unpaid completed job', async () => {
+  const r = paymentRuntime([{ data: { role: 'admin' } }, { data: paymentJob },
+    { data: { id: paymentJob.id, driver_paid: true } }]);
+  await r.run("markJobPaid('payment-job')");
+  assert.equal(r.confirmations.length, 1);
+  assert.match(r.confirmations[0], /2,057\.76/);
+  assert.match(r.confirmations[0], /363\.14/);
+  assert.match(r.confirmations[0], /no transfiere dinero/);
+  const update = r.queries.find(q => q.calls.some(c => c[0] === 'update'));
+  assert.deepEqual(update.calls.filter(c => c[0] === 'eq'), [
+    ['eq', 'id', paymentJob.id], ['eq', 'driver_id', 'driver-1'], ['eq', 'price', 2420.9],
+    ['eq', 'status', 'completed'], ['eq', 'driver_paid', false]
+  ]);
+  assert.equal(update.calls.find(c => c[0] === 'update')[1].driver_paid, true);
+  assert.equal(r.run('adminRefreshes'), 1);
+  assert.equal(r.run('detailRefreshes'), 1);
+  assert.ok(r.messages.includes('Pago registrado para este servicio.'));
+});
+
+test('cancelling payment confirmation sends no update', async () => {
+  const r = paymentRuntime([{ data: { role: 'admin' } }, { data: paymentJob }], false);
+  await r.run("markJobPaid('payment-job')");
+  assert.equal(r.queries.length, 2);
+  assert.equal(r.run('adminRefreshes'), 0);
+  assert.ok(!r.messages.includes('Pago registrado para este servicio.'));
+});
+
+test('clients and drivers cannot register payments through the handler', async () => {
+  for (const role of ['client', 'driver']) {
+    const r = paymentRuntime([{ data: { role } }]);
+    await r.run("markJobPaid('payment-job')");
+    assert.equal(r.queries.length, 1);
+    assert.equal(r.confirmations.length, 0);
+    assert.ok(r.messages.includes('Esta acción es solo para administradores'));
+  }
+});
+
+test('already paid, active, unassigned and invalid-price jobs cannot be marked paid', async () => {
+  for (const patch of [{ driver_paid: true }, { status: 'en_route' }, { driver_id: null },
+    { price: null }, { price: -1 }, { price: 'invalid' }]) {
+    const r = paymentRuntime([{ data: { role: 'admin' } }, { data: { ...paymentJob, ...patch } }]);
+    await r.run("markJobPaid('payment-job')");
+    assert.equal(r.queries.length, 2);
+    assert.equal(r.confirmations.length, 0);
+  }
+});
+
+test('zero-row and failed payment updates cannot claim success', async () => {
+  for (const response of [{ data: null }, { data: null, error: { message: 'denied' } }]) {
+    const r = paymentRuntime([{ data: { role: 'admin' } }, { data: paymentJob }, response]);
+    await r.run("markJobPaid('payment-job')");
+    assert.ok(!r.messages.includes('Pago registrado para este servicio.'));
+    assert.equal(r.run('adminRefreshes'), 0);
+    assert.equal(r.run('paymentJobsInFlight.size'), 0);
+  }
+});
+
+test('double tap starts just one payment operation', async () => {
+  const r = paymentRuntime([{ data: { role: 'admin' } }, { data: paymentJob }], false);
+  let finish;
+  r.api.auth.getUser = () => new Promise(resolve => { finish = resolve; });
+  const pending = r.run("markJobPaid('payment-job')");
+  await r.run("markJobPaid('payment-job')");
+  finish({ data: { user: { id: 'admin-1' } } });
+  await pending;
+  assert.equal(r.confirmations.length, 1);
+  assert.equal(r.run('paymentJobsInFlight.size'), 0);
+});
+
+test('closing details while payment validation is pending prevents confirmation and mutation', async () => {
+  const r = paymentRuntime([]);
+  let finish;
+  r.api.auth.getUser = () => new Promise(resolve => { finish = resolve; });
+  const pending = r.run("markJobPaid('payment-job')");
+  r.run('closeJobModal()');
+  finish({ data: { user: { id: 'admin-1' } } });
+  await pending;
+  assert.equal(r.confirmations.length, 0);
+  assert.equal(r.queries.length, 0);
+});
+
+test('details show pending or registered payment and only eligible jobs have an action', async () => {
+  for (const patch of [{}, { driver_paid: true }, { status: 'en_route' }]) {
+    const job = { ...paymentJob, ...patch };
+    const r = runtime([{ data: job }, { data: [] }]);
+    await r.run("viewJob('payment-job')");
+    const box = r.document.getElementById('jobModalContent').children[0];
+    assert.match(box.children[0].textContent, job.driver_paid ? /Registrado/ : /Pendiente/);
+    assert.match(box.children[1].textContent, /2,057\.76/);
+    const action = box.children.find(child => child.textContent === 'Registrar pago de este servicio');
+    assert.equal(Boolean(action), job.status === 'completed' && !job.driver_paid);
+  }
+  assert.doesNotMatch(html, /markDriverPaid/);
+});
+
+test('net plus commission always matches the service total in cents', () => {
+  const r = runtime();
+  for (const price of [2420.9, 0.03, 959.5, 411.2]) {
+    const amounts = r.run('driverPaymentFor({price:' + price + '})');
+    assert.equal(Math.round(amounts.net * 100) + Math.round(amounts.commission * 100), Math.round(price * 100));
+  }
 });
