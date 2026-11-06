@@ -52,14 +52,26 @@ Security advisors reported the three existing public SECURITY DEFINER functions
 executable by anon and authenticated, and disabled leaked-password protection.
 References: [function execution](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)
 and [password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
-The SQL-exposed authenticator role settings did not reveal Data API schemas;
-confirm the actual dashboard setting separately rather than assuming its value.
+The SQL-exposed authenticator role settings did not reveal Data API schemas.
+Subsequent owner screenshots of the production dashboard confirmed the Data API
+is enabled and its only exposed schemas are public and graphql_public. The
+automatically-expose-new-tables toggle is on; no setting was changed in this review.
+The new private schema must remain excluded after migration.
+
+The production Email provider screenshot confirmed email login and secure email
+change enabled; secure password change and requiring the current password on
+update disabled; minimum password length 6; email OTP expiration 3600 seconds and
+length 8. Leaked-password protection is disabled, and the dashboard states it is
+available only on Pro and above. This is a reviewed plan limitation, not a request
+to purchase a plan or a hidden prerequisite for this authorization release. No
+Auth setting or subscription was modified.
 
 Commit 2445f63010e8a0b685f42f733310b9e5ac52ef7c passed all four Actions runs:
 42246501370, 42246501359, 42246510683 and 42246510575. This includes the new
 PostgreSQL signup-email assertion. The remaining prerequisite before requesting
-deployment approval includes the Data API/Auth configuration review and confirmation
-of recovery for managed services. The downloaded production archive passed
+deployment approval must disclose the limited scope of managed-service recovery
+testing. Data API/Auth settings have now been reviewed from owner screenshots.
+The downloaded production archive passed
 integrity checks and isolated application recovery/migration checks; see
 [backup validation and its limits](pr-2-backup-validation-2026-11-06.md).
 
@@ -82,13 +94,19 @@ bootstrap, archived preview probes or cleanup SQL to production.
    integrity and application recovery have been verified in isolation. Full
    Supabase/Auth hosted recovery has not been exercised; retain the downloaded
    archive and verify the operational recovery workflow before deployment.
-4. Review Auth leaked-password protection, currently disabled in testing. Confirm
-   the production setting and available plan before changing it.
-5. Obtain approval for the concrete production migration and merge. Apply the six
-   reviewed security migrations in their filename order using a controlled change
-   process, with transaction boundaries chosen to avoid exposing intermediate
-   public admin helpers. Record the actual migration versions and check definitions
-   immediately afterward. Do not infer deployment merely from matching filenames.
+4. Data API/Auth settings are reviewed above. Retain the current plan and settings
+   for this release unless a separate change is explicitly approved. Recheck that
+   private is not exposed after migration. Full managed-service restore remains
+   untested; do not describe the application recovery check as full Auth recovery.
+5. Obtain approval for the concrete production migration and merge. Execute
+   [pr-2-production.sql](../scripts/release/pr-2-production.sql) through
+   apply_migration with name fletya_authorization_release. It embeds the six
+   reviewed source files in order inside one atomic DO statement, with a 5-second
+   lock timeout, baseline guards, data equality and final privilege checks. A
+   failed assertion rolls back the whole statement. Record the provider-generated
+   migration version as the consolidated release. Reconcile source-file migration
+   history before any future CLI db push; do not blindly reapply the six source
+   migrations after the consolidated release.
 6. Verify signup (client/driver/admin spoof), existing administrator access, service
    creation, acceptance, GPS, completion and payment restrictions using dedicated
    smoke-test accounts. Confirm advisors and remove these test fixtures afterward.
@@ -97,6 +115,12 @@ bootstrap, archived preview probes or cleanup SQL to production.
    deployed hostname and backend URL. The testing host must continue using testing.
 
 ## Recovery
+
+The exact atomic release was tested against the application's recovered backup
+in PGlite PostgreSQL 18.6. A forced error at the end of the DO block rolled back
+the newly installed functions and restored the old helper; the subsequent normal
+run succeeded. Full row equality held after the successful run. This is an
+isolated application migration/rollback test, not a full Supabase restore.
 
 - If a migration transaction fails before commit, roll it back; do not publish the
   new frontend against a partially applied schema.

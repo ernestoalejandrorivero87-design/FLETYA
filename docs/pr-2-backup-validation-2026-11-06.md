@@ -43,6 +43,13 @@ was 16. No hosted database was modified by this test.
 The database was closed after testing and the intermediate decoded row file was
 removed. The uploaded original remains unchanged.
 
+The exact consolidated production release in scripts/release/pr-2-production.sql
+was subsequently tested on a fresh recovered application instance. Injecting an
+intentional exception at its final step verified atomic rollback of the new
+functions and restoration of the original admin helper. The unchanged release
+then applied successfully, with every original application row preserved. The
+second temporary decoded-row file was also removed after testing.
+
 ## Limits and release decision
 
 This verifies archive integrity and recoverability of the application data/schema
