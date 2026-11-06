@@ -8,7 +8,7 @@ security definer
 set search_path = public
 as $function$
 begin
-  insert into public.profiles (id, full_name, phone, role)
+  insert into public.profiles (id, full_name, phone, role, email)
   values (
     new.id,
     new.raw_user_meta_data ->> 'full_name',
@@ -16,7 +16,8 @@ begin
     case
       when new.raw_user_meta_data ->> 'role' = 'driver' then 'driver'
       else 'client'
-    end
+    end,
+    new.email
   );
 
   return new;

@@ -19,13 +19,17 @@ begin
   end if;
 end $$;
 
-insert into auth.users(id, raw_user_meta_data) values
-('10000000-0000-0000-0000-000000000001', '{"full_name":"Client test","role":"client"}'),
-('20000000-0000-0000-0000-000000000002', '{"full_name":"Driver test","role":"driver"}'),
-('30000000-0000-0000-0000-000000000003', '{"full_name":"Admin spoof test","role":"admin"}');
+insert into auth.users(id, email, raw_user_meta_data) values
+('10000000-0000-0000-0000-000000000001', 'client@example.com', '{"full_name":"Client test","role":"client"}'),
+('20000000-0000-0000-0000-000000000002', 'driver@example.com', '{"full_name":"Driver test","role":"driver"}'),
+('30000000-0000-0000-0000-000000000003', 'spoof@example.com', '{"full_name":"Admin spoof test","role":"admin"}');
 
 do $$
 begin
+  if exists(select 1 from auth.users u join public.profiles p on p.id=u.id
+    where p.email is distinct from u.email) then
+    raise exception 'signup failed to preserve the account email in its profile';
+  end if;
   if (select role from public.profiles where id='10000000-0000-0000-0000-000000000001') <> 'client' then
     raise exception 'client signup role mismatch';
   end if;

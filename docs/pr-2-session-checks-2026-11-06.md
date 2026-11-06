@@ -74,13 +74,24 @@ evidence collection. The script is archived only as
 `tests/security/preview-permission-checks.js` for regression tests. It is not
 referenced by the application. The test-only RPC's EXECUTE grants were revoked
 from PUBLIC, anon and authenticated. Privilege read-back confirmed neither anon
-nor authenticated can execute it. The DROP request was not executed because its
-Supabase confirmation expired; removal of the disabled function remains pending.
+nor authenticated can execute it. The first DROP request was not executed because
+its Supabase confirmation expired. The subsequent authorized cleanup transaction
+successfully removed the function.
 
 The eight negative HTTP case categories in the runbook were exercised within the
 no-op, real-session and read-back limits above. This is not a blanket guarantee
 against all possible authorization vulnerabilities.
 
-Still pending: drop the disabled RPC; cleanup of disposable accounts/data; production parity
+## Cleanup confirmation
+
+The cleanup transaction removed the eight exact disposable identities, their five
+jobs, associated notifications/GPS and Auth refresh sessions. A snapshot comparison
+inside the transaction verified every non-fixture application row was preserved.
+Final counts: 7 users, 7 profiles, 10 jobs, 19 notifications and 2 GPS rows. A
+separate query confirmed zero matching disposable accounts or jobs and no
+diagnostic RPC. Existing access JWTs expire normally; cleanup does not claim
+immediate cryptographic invalidation of already-issued JWTs.
+
+Still pending: production parity
 review and deployment/rollback preparation. No production migration or merge was
 performed for this work.
