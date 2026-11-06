@@ -1659,6 +1659,9 @@ function clearSignedOutView() {
   state.status = 'Pendiente';
   localStorage.removeItem?.('fletya_jobs');
   clearRouteOnMap();
+  for (const id of ['origin', 'dest', 'km']) document.getElementById(id).value = '';
+  quote();
+  document.getElementById('locationFeedback').textContent = 'Puedes escribir una dirección o elegir un punto exacto. Los puntos del mapa se muestran como coordenadas.';
   setClientSessionIdentity(null);
   document.getElementById('clientLogoutBtn').style.display = 'none';
   document.getElementById('clientStatus').textContent = 'Inicia sesión para ver tu servicio.';

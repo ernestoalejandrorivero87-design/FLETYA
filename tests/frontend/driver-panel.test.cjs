@@ -674,3 +674,21 @@ test('completed-job polling preserves a new draft route and quote', async () => 
   assert.equal(r.document.getElementById('origin').value,'21.1, -86.8');
   assert.equal(r.document.getElementById('routeInfo').textContent,'New draft route');
 });
+
+
+test('signout removes selected coordinates and ignores an outstanding client GPS fix', async () => {
+  const r = runtime();
+  r.run("activeSessionRole='client'");
+  r.document.getElementById('origin').value='21.1, -86.8';
+  r.document.getElementById('dest').value='21.2, -86.9';
+  let finish;
+  r.context.navigator.geolocation.getCurrentPosition=ok=>{finish=ok};
+  const pending=r.run("useClientLocation('origin')");
+  r.run('clearSignedOutView()');
+  finish({coords:{latitude:21.15,longitude:-86.85,accuracy:10}});
+  await pending;
+  assert.equal(r.document.getElementById('origin').value,'');
+  assert.equal(r.document.getElementById('dest').value,'');
+  assert.equal(r.document.getElementById('km').value,'');
+  assert.equal(r.document.getElementById('locationPickerModal').classList.contains('hidden'),true);
+});
