@@ -28,3 +28,15 @@ test('permission diagnostics are disabled for production host and non-testing ba
   assert.equal(run('IS_FLETYA_PRODUCTION_HOST=true; permissionCheckEnvironment()'), false);
   assert.equal(run("IS_FLETYA_PRODUCTION_HOST=false; SUPABASE_URL='https://other.supabase.co'; permissionCheckEnvironment()"), false);
 });
+test('cross-account HTTP cases target the opposite pair and preserve assignment', () => {
+  const run = runtime();
+  for (const actor of ['clientA', 'driverA', 'clientB', 'driverB']) {
+    const oppositePair = actor.endsWith('A') ? 'B' : 'A';
+    const targets = JSON.parse(run(`JSON.stringify(crossAccountPermissionTargets('${actor}'))`));
+    assert.deepEqual(targets.map(target => target.table), ['jobs', 'driver_locations']);
+    for (const target of targets) {
+      assert.equal(target.driverId, run(`permissionTestAccounts.driver${oppositePair}`));
+      assert.match(target.id, /^[\da-f-]{36}$/);
+    }
+  }
+});
