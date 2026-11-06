@@ -323,6 +323,8 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 </div>
 <script>
 const state={jobs:[],active:null,accepted:false,status:'Pendiente'};
+let sessionRevision = 0;
+let logoutPending = false;
 const rate={pickup:35,camioneta:45,camion:65};
 function money(n){return n.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0})}
 function money2(n){return (Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
@@ -829,13 +831,17 @@ document.getElementById('km').value = routeData.distance_km;
   renderClient();
 }
 async function renderClient(){
+  if (logoutPending) return;
+  const revision = sessionRevision;
 
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
+  if (revision !== sessionRevision || logoutPending) return;
   const { data: roleProfile, error: roleError } = user && !authError
     ? await supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle()
     : { data: null, error: null };
 
+  if (revision !== sessionRevision || logoutPending) return;
   if (authError || !user || roleError || roleProfile?.role !== 'client') {
   state.active = null;
   clearRouteOnMap();
@@ -867,6 +873,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .eq('id', user.id)
     .maybeSingle();
 
+  if (revision !== sessionRevision || logoutPending) return;
   setClientSessionIdentity(user, clientProfile?.full_name);
 
   if (clientProfile?.full_name) {
@@ -883,6 +890,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .order('created_at', { ascending: false })
     .limit(1);
 
+  if (revision !== sessionRevision || logoutPending) return;
   if (error) {
     console.error(error);
 
@@ -898,6 +906,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
       .eq('client_id', user.id)
       .order('created_at', { ascending: false });
 
+  if (revision !== sessionRevision || logoutPending) return;
   if (!historyError) {
     const historyBox = document.getElementById('clientHistory');
 
@@ -939,6 +948,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
 
   state.active = j;
   await restoreRouteForJob(j, user.id);
+  if (revision !== sessionRevision || logoutPending) return;
 
   document.getElementById('clientStatus').innerHTML =
     `<h3>${
@@ -1394,22 +1404,69 @@ async function syncFletyaGps(userId, activeJob) {
     }
   }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
 }
-async function logoutDriver(){
+function clearSignedOutView() {
+  sessionRevision++;
   stopFletyaGps();
-  if (driverPanelRefreshTimer) clearInterval(driverPanelRefreshTimer);
+  stopDriverTracking();
+  for (const timer of [driverPanelRefreshTimer, driverNotificationsTimer]) {
+    if (timer) clearInterval(timer);
+  }
   driverPanelRefreshTimer = null;
+  driverNotificationsTimer = null;
   driverPanelRefreshUserId = null;
   driverPanelRefreshBusy = false;
-  await supabaseClient.auth.signOut();
-  toast('Sesión cerrada');
+  state.jobs = [];
+  state.active = null;
+  state.accepted = false;
+  state.status = 'Pendiente';
+  localStorage.removeItem?.('fletya_jobs');
+  clearRouteOnMap();
+  setClientSessionIdentity(null);
+  document.getElementById('clientLogoutBtn').style.display = 'none';
+  document.getElementById('clientStatus').textContent = 'Inicia sesión para ver tu servicio.';
+  document.getElementById('clientHistory').textContent = 'Inicia sesión para ver tu historial.';
+  document.getElementById('jobCard').textContent = '';
+  document.getElementById('adminTable').textContent = '';
+  for (const id of ['authPassword', 'driverPassword', 'adminPassword']) {
+    document.getElementById(id).value = '';
+  }
+  for (const id of ['authMessage', 'driverMessage', 'adminMessage']) {
+    document.getElementById(id).textContent = '';
+  }
   show('client');
-  setTimeout(() => {
-    document.getElementById('authDriver')?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center'
-    });
-  }, 100);
-}async function acceptDriver(){
+}
+
+async function logoutSession() {
+  if (logoutPending) return;
+  logoutPending = true;
+  sessionRevision++;
+  const revision = sessionRevision;
+  document.getElementById('authMessage').textContent = 'Cerrando sesión…';
+  toast('Cerrando sesión…');
+  try {
+    // Local scope clears this device first, even if server revocation fails.
+    const result = await supabaseClient.auth.signOut({ scope: 'local' });
+    const cleared = sessionRevision !== revision;
+    if (result?.error && !cleared) throw result.error;
+    if (!cleared) clearSignedOutView();
+    if (result?.error) {
+      document.getElementById('authMessage').textContent =
+        'Sesión cerrada en este dispositivo. No se pudo confirmar el cierre en el servidor.';
+    }
+    toast('Sesión cerrada');
+  } catch (error) {
+    console.error('Error cerrando sesión:', error);
+    document.getElementById('authMessage').textContent =
+      'No se pudo cerrar sesión. Revisa la conexión y vuelve a pulsar Cerrar sesión.';
+    toast('No se pudo cerrar sesión. Inténtalo de nuevo.');
+  } finally {
+    logoutPending = false;
+  }
+}
+async function logoutDriver(){
+  return logoutSession();
+}
+async function acceptDriver(){
   if(!state.active) return;
   const jobId = state.active.id;
 
@@ -2092,7 +2149,7 @@ setInterval(() => {
 
 }, 10000);
 </script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0"></script>
 
 <script>
 const IS_FLETYA_PRODUCTION_HOST = window.location.hostname === 'fletya.vercel.app';
@@ -2107,9 +2164,23 @@ const supabaseClient =
   window.supabase && window.supabase.createClient
     ? window.supabase.createClient(
         SUPABASE_URL,
-        SUPABASE_PUBLISHABLE_KEY
+        SUPABASE_PUBLISHABLE_KEY,
+        { global: { fetch: (url, options = {}) => {
+          // Bound only the best-effort logout request; leave other API calls alone.
+          const isLogout = String(url).includes('/auth/v1/logout');
+          return fetch(url, isLogout
+            ? { ...options, signal: AbortSignal.timeout(8000) }
+            : options);
+        } } }
       )
     : null;
+
+if (supabaseClient) {
+  // Synchronous: never await another Auth operation from this callback.
+  supabaseClient.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') clearSignedOutView();
+  });
+}
 
 function setClientSessionIdentity(user, fullName) {
   const label = document.getElementById('clientSessionIdentity');
@@ -2125,6 +2196,7 @@ function setClientSessionIdentity(user, fullName) {
 }
 
 async function restoreClientSessionOnLoad() {
+  const revision = sessionRevision;
   if (!supabaseClient) return;
   const { data: { user }, error } = await supabaseClient.auth.getUser();
   if (error || !user) {
@@ -2140,6 +2212,7 @@ async function restoreClientSessionOnLoad() {
     setClientSessionIdentity(null);
     return;
   }
+  if (revision !== sessionRevision || logoutPending) return;
   setClientSessionIdentity(user, profile.full_name);
   if (!document.getElementById('client').classList.contains('hidden')) {
     await renderClient();
@@ -2368,19 +2441,10 @@ async function loginClient() {
   show('admin');
   }
   async function logoutAdmin() {
-  await supabaseClient.auth.signOut();
-  show('client');
+    return logoutSession();
   }
   async function logoutClient() {
-  const { error } = await supabaseClient.auth.signOut();
-  if (error) {
-    toast('No se pudo cerrar sesión. Inténtalo de nuevo.');
-    return;
-  }
-  setClientSessionIdentity(null);
-  document.getElementById('clientLogoutBtn').style.display = 'none';
-  show('client');
-  await renderClient();
+    return logoutSession();
   }
 </script>
 

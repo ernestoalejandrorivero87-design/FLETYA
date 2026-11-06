@@ -63,6 +63,8 @@ function runtime(responses = []) {
     recordMessage(message) { messages.push(message); }
   });
   vm.runInContext(application, context);
+  const authScript = scripts.find(script => script.includes('async function logoutClient()'));
+  vm.runInContext(authScript.slice(authScript.indexOf('  async function logoutAdmin()')), context);
   vm.runInContext('toast = recordMessage', context);
   return { context, intervals, clearedWatches, queries, messages, document, api,
     run: code => vm.runInContext(code, context), get signOuts() { return signOuts; } };
@@ -254,4 +256,66 @@ test('render restores the active job, keeps history and starts automatic GPS', a
   assert.equal(r.run('restoredGps'), 'live-job');
   assert.match(r.document.getElementById('jobCard').innerHTML, /History A/);
   assert.equal(r.intervals.size, 2);
+});
+
+
+test('all logout buttons use local scope and clear identity and private views', async () => {
+  for (const action of ['logoutClient', 'logoutDriver', 'logoutAdmin']) {
+    const r = runtime();
+    r.run("setClientSessionIdentity=()=>{document.getElementById('clientSessionIdentity').textContent=''};");
+    let options;
+    r.api.auth.signOut = async value => { options = value; return { error: null }; };
+    r.document.getElementById('clientSessionIdentity').textContent = 'Sesión activa';
+    r.document.getElementById('clientHistory').textContent = 'Private history';
+    r.run("state.active={id:'private-job'}; state.jobs=[state.active];");
+    await r.run(action + '()');
+    assert.equal(options.scope, 'local');
+    assert.equal(r.run('state.active'), null);
+    assert.equal(r.run('state.jobs.length'), 0);
+    assert.equal(r.document.getElementById('clientLogoutBtn').style.display, 'none');
+    assert.equal(r.document.getElementById('clientSessionIdentity').textContent, '');
+    assert.equal(r.document.getElementById('clientHistory').textContent, 'Inicia sesión para ver tu historial.');
+  }
+});
+
+test('failed logout does not claim success and can be retried', async () => {
+  const r = runtime();
+  r.api.auth.signOut = async () => ({ error: new Error('storage unavailable') });
+  await r.run('logoutClient()');
+  assert.ok(!r.messages.includes('Sesión cerrada'));
+  assert.match(r.document.getElementById('authMessage').textContent, /No se pudo cerrar/);
+  assert.equal(r.run('logoutPending'), false);
+});
+
+test('local SIGNED_OUT clears the screen before a slow revocation finishes', async () => {
+  const r = runtime();
+  r.run('setClientSessionIdentity=()=>{}');
+  let finish;
+  r.api.auth.signOut = () => {
+    r.run('clearSignedOutView()');
+    return new Promise(resolve => { finish = resolve; });
+  };
+  const closing = r.run('logoutClient()');
+  assert.equal(r.document.getElementById('clientLogoutBtn').style.display, 'none');
+  assert.equal(r.run('state.active'), null);
+  // A second tap must not start a second signout.
+  await r.run('logoutClient()');
+  finish({ error: new Error('network offline') });
+  await closing;
+  assert.ok(r.messages.includes('Sesión cerrada'));
+  assert.match(r.document.getElementById('authMessage').textContent, /No se pudo confirmar/);
+});
+
+test('a client poll started before logout cannot restore the old session', async () => {
+  const r = runtime();
+  r.run('setClientSessionIdentity=()=>{}');
+  let finishAuth;
+  r.api.auth.getUser = () => new Promise(resolve => { finishAuth = resolve; });
+  const pending = r.run('renderClient()');
+  r.run('clearSignedOutView()');
+  finishAuth({ data: { user: { id: 'previous-client' } } });
+  await pending;
+  assert.equal(r.queries.length, 0);
+  assert.equal(r.run('state.active'), null);
+  assert.equal(r.document.getElementById('clientLogoutBtn').style.display, 'none');
 });
