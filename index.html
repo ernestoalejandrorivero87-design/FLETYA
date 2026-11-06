@@ -2384,4 +2384,93 @@ async function loginClient() {
   }
 </script>
 
+<section id="permissionChecks" class="wrap hidden">
+  <div class="card">
+    <h2>Prueba de permisos</h2>
+    <p class="muted">Solo para las cuatro cuentas temporales de FLETYA-testing. Usa tu sesión actual; no requiere compartir contraseñas.</p>
+    <button id="permissionChecksButton" class="btn" onclick="runSessionPermissionChecks()">Comprobar permisos</button>
+    <pre id="permissionChecksResult" style="white-space:pre-wrap" aria-live="polite"></pre>
+  </div>
+</section>
+<script>
+// Temporary preview-only HTTP checks. Remove before production (PR #2).
+const permissionTestAccounts = {
+  clientA: '487e7dec-ea89-4969-83e4-459b9331645c',
+  clientB: '271b51f1-affd-4ffd-9247-114e65917ff8',
+  driverA: '6b42a407-93ef-42e3-a0a9-e2b096a0ded2',
+  driverB: 'fa8c0e2e-5477-493c-9740-03f3a3c1b139'
+};
+function permissionCheckEnvironment() {
+  return !IS_FLETYA_PRODUCTION_HOST &&
+    SUPABASE_URL === 'https://ccdtpwvalqznasstnqxj.supabase.co';
+}
+function deniedPermissionResponse(result) {
+  // A transport error or an unexpected server error is not proof of authorization.
+  return result.error ? result.error.code === '42501'
+    : Array.isArray(result.data) && result.data.length === 0;
+}
+async function refreshPermissionChecks() {
+  if (!supabaseClient || !permissionCheckEnvironment()) return;
+  const { data: { user }, error } = await supabaseClient.auth.getUser();
+  document.getElementById('permissionChecks').classList.toggle('hidden',
+    Boolean(error) || !Object.values(permissionTestAccounts).includes(user?.id));
+}
+async function runSessionPermissionChecks() {
+  const button = document.getElementById('permissionChecksButton');
+  const output = document.getElementById('permissionChecksResult');
+  if (button.disabled || !permissionCheckEnvironment()) return;
+  button.disabled = true;
+  output.textContent = 'Comprobando permisos con la sesión actual...';
+  try {
+    const { data: { user }, error } = await supabaseClient.auth.getUser();
+    const account = Object.keys(permissionTestAccounts).find(key => permissionTestAccounts[key] === user?.id);
+    if (error || !account) throw new Error('Inicia sesión con una de las cuatro cuentas temporales.');
+    const lines = ['Cuenta de prueba: ' + account];
+    const probe = await supabaseClient.rpc('fletya_session_permission_probe');
+    if (probe.error || !Array.isArray(probe.data?.tests)) {
+      throw new Error('No se pudo ejecutar la comprobación del servidor. Código: ' + (probe.error?.code || 'respuesta inesperada'));
+    }
+    for (const check of probe.data.tests) {
+      lines.push((check.passed === true ? 'PASA: ' : 'FALLA: ') + check.name);
+    }
+    lines.push('Servicio probado: ' + (probe.data.tested_job_status || 'sin servicio propio'));
+    lines.push('Cambios del diagnóstico: revertidos por el servidor');
+    let passed = probe.data.all_passed === true && probe.data.writes_rolled_back === true;
+    const other = account.startsWith('client')
+      ? permissionTestAccounts[account === 'clientA' ? 'clientB' : 'clientA']
+      : permissionTestAccounts[account === 'driverA' ? 'driverB' : 'driverA'];
+    // No-op PATCH, restricted to the known null value: never overwrite a name.
+    const profileResult = await supabaseClient.from('profiles')
+      .update({ full_name: null }).eq('id', other).is('full_name', null).select('id');
+    const profilePassed = deniedPermissionResponse(profileResult);
+    passed = passed && profilePassed;
+    lines.push((profilePassed ? 'PASA: ' : 'FALLA: ') + 'PATCH de perfil ajeno bloqueado');
+    if (account.startsWith('driver')) {
+      const notification = account === 'driverA'
+        ? '61675e33-6ff4-4daf-a42d-fe207b4258a6'
+        : '39b843f3-4ce4-4428-b616-30eafa9329a4';
+      const result = await supabaseClient.from('notifications')
+        .update({ read: false }).eq('id', notification).eq('user_id', other)
+        .eq('read', false).select('id');
+      const notificationPassed = deniedPermissionResponse(result);
+      passed = passed && notificationPassed;
+      lines.push((notificationPassed ? 'PASA: ' : 'FALLA: ') + 'PATCH de notificación ajena bloqueado');
+    }
+    lines.push(passed ? 'Resultado: PASA las comprobaciones ejecutadas' : 'Resultado: REVISAR; no aprobar todavía');
+    lines.push('Esta prueba no completa todos los casos HTTP pendientes del PR #2.');
+    output.textContent = lines.join('\n');
+  } catch (error) {
+    output.textContent = 'No se completó la prueba: ' + error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+if (supabaseClient && permissionCheckEnvironment()) {
+  refreshPermissionChecks();
+  supabaseClient.auth.onAuthStateChange(() => {
+    document.getElementById('permissionChecksResult').textContent = '';
+    setTimeout(refreshPermissionChecks, 0);
+  });
+}
+</script>
 </body></html>
