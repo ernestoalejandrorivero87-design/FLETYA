@@ -4,8 +4,12 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
-const script = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)]
-  .map(match => match[1]).find(source => source.includes('const permissionTestAccounts'));
+const script = fs.readFileSync(path.join(__dirname, '../security/preview-permission-checks.js'), 'utf8');
+test('application no longer exposes the temporary permission diagnostics', () => {
+  assert.ok(!html.includes('permissionChecks'));
+  assert.ok(!html.includes('fletya_session_permission_probe'));
+  assert.ok(!html.includes('preview-permission-checks.js'));
+});
 function runtime() {
   const context = vm.createContext({ supabaseClient: null, IS_FLETYA_PRODUCTION_HOST: false,
     SUPABASE_URL: 'https://ccdtpwvalqznasstnqxj.supabase.co' });

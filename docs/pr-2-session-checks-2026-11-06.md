@@ -59,15 +59,28 @@ services appeared completed in tracking/history, without route lines or GPS
 tracking text. The base map remained visible.
 
 Two disposable client notifications were created for the remaining notification
-checks, with marker `FLETYA HTTP fixture 2026-11-06`. The v4 client checks are
-prepared, not yet execution evidence: direct PATCH of the other client's unread
+checks, with marker `FLETYA HTTP fixture 2026-11-06`. Owner screenshots confirmed
+both clients passed the v4 checks: direct PATCH of the other client's unread
 notification, direct no-op PATCH of the owner's notification content, and direct
 PATCH attempting role=admin with independent client-side role read-back. If a
 role change unexpectedly persists, the probe stops for privileged investigation.
-These notification fixtures must be included in test cleanup.
+Final privileged read-back confirmed both roles remained client, both notification
+contents/read flags remained unchanged, both jobs were completed with original
+owners/drivers/prices and unpaid flags, and neither historical GPS timestamp moved
+after completion. These notification fixtures must be included in test cleanup.
 
-Still pending: remaining negative HTTP cases in the runbook (including
-v4 client notification/role requests); final independent read-back;
-cleanup of disposable accounts/data and the diagnostic UI/RPC; production parity
+The preview panel and its executable application script were removed after
+evidence collection. The script is archived only as
+`tests/security/preview-permission-checks.js` for regression tests. It is not
+referenced by the application. The test-only RPC's EXECUTE grants were revoked
+from PUBLIC, anon and authenticated. Privilege read-back confirmed neither anon
+nor authenticated can execute it. The DROP request was not executed because its
+Supabase confirmation expired; removal of the disabled function remains pending.
+
+The eight negative HTTP case categories in the runbook were exercised within the
+no-op, real-session and read-back limits above. This is not a blanket guarantee
+against all possible authorization vulnerabilities.
+
+Still pending: drop the disabled RPC; cleanup of disposable accounts/data; production parity
 review and deployment/rollback preparation. No production migration or merge was
 performed for this work.
