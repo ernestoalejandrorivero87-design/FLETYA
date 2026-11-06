@@ -52,10 +52,22 @@ The v3 preview prepares completed-service GPS PATCH and INSERT probes with an
 immediate historical-row read-back. INSERT must fail with SQLSTATE 42501; a
 duplicate-driver constraint error is inconclusive and fails the check. The
 existing unique driver constraint prevents the INSERT from persisting a second
-row if the RLS rule unexpectedly regresses. These v3 requests await owner execution.
+row if the RLS rule unexpectedly regresses. Owner screenshots confirmed both
+drivers passed these v3 requests after completing their respective services,
+including unchanged historical GPS read-back. Client screenshots confirmed both
+services appeared completed in tracking/history, without route lines or GPS
+tracking text. The base map remained visible.
+
+Two disposable client notifications were created for the remaining notification
+checks, with marker `FLETYA HTTP fixture 2026-11-06`. The v4 client checks are
+prepared, not yet execution evidence: direct PATCH of the other client's unread
+notification, direct no-op PATCH of the owner's notification content, and direct
+PATCH attempting role=admin with independent client-side role read-back. If a
+role change unexpectedly persists, the probe stops for privileged investigation.
+These notification fixtures must be included in test cleanup.
 
 Still pending: remaining negative HTTP cases in the runbook (including
-client notifications and v3 GPS writes after completion); independent read-back;
+v4 client notification/role requests); final independent read-back;
 cleanup of disposable accounts/data and the diagnostic UI/RPC; production parity
 review and deployment/rollback preparation. No production migration or merge was
 performed for this work.

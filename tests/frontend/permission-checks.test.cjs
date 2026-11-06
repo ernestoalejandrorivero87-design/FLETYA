@@ -82,3 +82,32 @@ test('completed GPS cases are skipped on active jobs and fail on missing fixture
   run.context.api = gpsApi([{ data: { status: 'completed' } }, { data: null }]);
   await assert.rejects(run("checkCompletedGps(api,'driverA','driver')"), /histórico/);
 });
+function clientResults(roleWrite, finalRole = 'client') {
+  const notification = { id: 'own', message: 'FLETYA HTTP fixture 2026-11-06', read: false };
+  return [
+    { data: notification }, { data: [] }, { data: [] },
+    { error: { code: '42501' } }, { data: { ...notification } },
+    { data: { role: 'client' } }, roleWrite, { data: { role: finalRole } }
+  ];
+}
+test('client HTTP checks verify notification read-back and explicit role rejection', async () => {
+  const run = runtime();
+  run.context.api = gpsApi(clientResults({ error: { code: 'P0001', message: 'Only an administrator can change profile roles' } }));
+  const result = await run("checkClientHttpPermissions(api,'clientA',permissionTestAccounts.clientA)");
+  assert.equal(result.length, 4);
+  assert.ok(result.every(check => check.passed));
+});
+test('client HTTP role checks reject unexpected errors and stop on elevated role', async () => {
+  const run = runtime();
+  run.context.api = gpsApi(clientResults({ error: { code: 'P0001', message: 'unrelated error' } }));
+  const result = await run("checkClientHttpPermissions(api,'clientB',permissionTestAccounts.clientB)");
+  assert.equal(result[3].passed, false);
+  run.context.api = gpsApi(clientResults({ data: [{ role: 'admin' }] }, 'admin'));
+  await assert.rejects(run("checkClientHttpPermissions(api,'clientA',permissionTestAccounts.clientA)"), /Detener/);
+});
+test('client HTTP checks cannot run without an existing fixture or for another user', async () => {
+  const run = runtime();
+  run.context.api = gpsApi([{ data: null }]);
+  await assert.rejects(run("checkClientHttpPermissions(api,'clientA',permissionTestAccounts.clientA)"), /notificación/);
+  await assert.rejects(run("checkClientHttpPermissions(api,'clientA','wrong-user')"), /Cuenta no válida/);
+});

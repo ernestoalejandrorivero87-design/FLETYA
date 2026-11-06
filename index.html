@@ -2455,6 +2455,52 @@ async function checkCompletedGps(api, account, userId) {
     { name: 'GPS histórico sin cambios tras las peticiones', passed: Boolean(unchanged) }
   ];
 }
+async function checkClientHttpPermissions(api, account, userId) {
+  if (!account.startsWith('client') || permissionTestAccounts[account] !== userId) {
+    throw new Error('Cuenta no válida para la prueba de cliente.');
+  }
+  const notificationIds = {
+    clientA: '39c7c64d-6eed-4ba1-9862-5307448bd81f',
+    clientB: '34c1433c-d897-4d30-97ae-18710da04f8e'
+  };
+  const otherAccount = account === 'clientA' ? 'clientB' : 'clientA';
+  const own = await api.from('notifications').select('*')
+    .eq('id', notificationIds[account]).eq('user_id', userId).maybeSingle();
+  if (own.error || own.data?.message !== 'FLETYA HTTP fixture 2026-11-06') {
+    throw new Error('Falta la notificación propia de prueba; casos no ejecutados.');
+  }
+  const otherRead = await api.from('notifications').select('id')
+    .eq('id', notificationIds[otherAccount]);
+  const otherWrite = await api.from('notifications').update({ read: false })
+    .eq('id', notificationIds[otherAccount])
+    .eq('user_id', permissionTestAccounts[otherAccount]).eq('read', false).select('id');
+  const contentWrite = await api.from('notifications').update({ message: own.data.message })
+    .eq('id', notificationIds[account]).eq('user_id', userId)
+    .eq('message', own.data.message).select('id');
+  const ownAfter = await api.from('notifications').select('*')
+    .eq('id', notificationIds[account]).eq('user_id', userId).maybeSingle();
+  const roleBefore = await api.from('profiles').select('role').eq('id', userId).maybeSingle();
+  if (roleBefore.error || roleBefore.data?.role !== 'client') {
+    throw new Error('El perfil no tiene el rol de cliente esperado; prueba detenida.');
+  }
+  // This disposable account's role change must fail. Stop if it unexpectedly
+  // succeeds; do not execute further probes with elevated privileges.
+  const roleWrite = await api.from('profiles').update({ role: 'admin' })
+    .eq('id', userId).select('id,role');
+  const roleAfter = await api.from('profiles').select('role').eq('id', userId).maybeSingle();
+  const roleUnchanged = !roleAfter.error && roleAfter.data?.role === 'client';
+  if (!roleUnchanged) throw new Error('FALLA: no se confirmó el rol de cliente tras el intento. Detener y revisar esta cuenta.');
+  const roleDenied = deniedPermissionResponse(roleWrite) ||
+    (roleWrite.error?.code === 'P0001' && roleWrite.error.message === 'Only an administrator can change profile roles');
+  return [
+    { name: 'GET/PATCH de notificación de otro cliente bloqueado',
+      passed: deniedPermissionResponse(otherRead) && deniedPermissionResponse(otherWrite) },
+    { name: 'PATCH del contenido de notificación propia bloqueado', passed: deniedPermissionResponse(contentWrite) },
+    { name: 'Notificación propia sin cambios', passed: !ownAfter.error && Boolean(ownAfter.data) &&
+      ['id','user_id','title','message','type','read','created_at','job_id'].every(key => ownAfter.data[key] === own.data[key]) },
+    { name: 'PATCH directo a administrador bloqueado; rol sigue client', passed: roleDenied && roleUnchanged }
+  ];
+}
 async function runSessionPermissionChecks() {
   const button = document.getElementById('permissionChecksButton');
   const output = document.getElementById('permissionChecksResult');
@@ -2465,7 +2511,7 @@ async function runSessionPermissionChecks() {
     const { data: { user }, error } = await supabaseClient.auth.getUser();
     const account = Object.keys(permissionTestAccounts).find(key => permissionTestAccounts[key] === user?.id);
     if (error || !account) throw new Error('Inicia sesión con una de las cuatro cuentas temporales.');
-    const lines = ['Prueba HTTP v3', 'Cuenta de prueba: ' + account];
+    const lines = ['Prueba HTTP v4', 'Cuenta de prueba: ' + account];
     const probe = await supabaseClient.rpc('fletya_session_permission_probe');
     if (probe.error || !Array.isArray(probe.data?.tests)) {
       throw new Error('No se pudo ejecutar la comprobación del servidor. Código: ' + (probe.error?.code || 'respuesta inesperada'));
@@ -2522,6 +2568,12 @@ async function runSessionPermissionChecks() {
         }
       } else {
         lines.push('PENDIENTE: GPS tras completar; este servicio sigue activo');
+      }
+    }
+    if (account.startsWith('client')) {
+      for (const check of await checkClientHttpPermissions(supabaseClient, account, user.id)) {
+        passed = passed && check.passed;
+        lines.push((check.passed ? 'PASA: ' : 'FALLA: ') + check.name);
       }
     }
     lines.push(passed ? 'Resultado: PASA las comprobaciones ejecutadas' : 'Resultado: REVISAR; no aprobar todavía');
