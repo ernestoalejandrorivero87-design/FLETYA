@@ -20,7 +20,9 @@ function runtime(responses = []) {
     const classes = new Set(id === 'client' ? ['hidden'] : []);
     return {
       value: id === 'vehicle' ? 'pickup' : id === 'km' ? '8' : '0',
-      style: {}, innerHTML: '', textContent: '', children: [],
+      style: {}, innerHTML: '', textContent: '', children: [], attributes: {},
+      setAttribute(name,value) { this.attributes[name]=value; },
+      removeAttribute(name) { delete this.attributes[name]; },
       classList: {
         contains: name => classes.has(name),
         add(name) { classes.add(name); },
@@ -66,7 +68,7 @@ function runtime(responses = []) {
   });
   vm.runInContext(application, context);
   const authScript = scripts.find(script => script.includes('async function logoutClient()'));
-  vm.runInContext(authScript.slice(authScript.indexOf('  async function logoutAdmin()')), context);
+  vm.runInContext(authScript.slice(authScript.indexOf('function setClientSessionIdentity')).replace("showAccess('client');\nrestoreRoleSession();", ''), context);
   vm.runInContext('toast = recordMessage', context);
   return { context, intervals, clearedWatches, queries, messages, document, api,
     run: code => vm.runInContext(code, context), get signOuts() { return signOuts; } };
@@ -433,5 +435,113 @@ test('net plus commission always matches the service total in cents', () => {
   for (const price of [2420.9, 0.03, 959.5, 411.2]) {
     const amounts = r.run('driverPaymentFor({price:' + price + '})');
     assert.equal(Math.round(amounts.net * 100) + Math.round(amounts.commission * 100), Math.round(price * 100));
+  }
+});
+
+
+test('guest role navigation shows exactly one access form and no service panels', async () => {
+  const r = runtime();
+  r.api.auth.getUser = async () => ({ data: { user: null } });
+  for (const role of ['client', 'driver', 'admin']) {
+    await r.run("navigateToRole('" + role + "')");
+    for (const [key, id] of Object.entries({ client: 'authClient', driver: 'authDriver', admin: 'authAdmin' })) {
+      assert.equal(r.document.getElementById(id).classList.contains('hidden'), key !== role);
+      assert.equal(r.document.getElementById(key).classList.contains('hidden'), true);
+    }
+    assert.equal(r.document.getElementById('access').classList.contains('hidden'), false);
+    assert.equal(r.document.getElementById('nav-' + role).attributes['aria-current'], 'page');
+  }
+});
+
+test('switching to another role preserves the signed-in account and visible panel', async () => {
+  const r = runtime([{ data: { role: 'driver', full_name: 'Fletero' } }]);
+  r.run("activeSessionRole='driver'; show('client'); document.getElementById('client').classList.add('hidden'); document.getElementById('driver').classList.remove('hidden');");
+  await r.run("navigateToRole('admin')");
+  assert.equal(r.signOuts, 0);
+  assert.equal(r.run('activeSessionRole'), 'driver');
+  assert.equal(r.document.getElementById('driver').classList.contains('hidden'), false);
+  assert.equal(r.document.getElementById('admin').classList.contains('hidden'), true);
+  assert.match(r.messages.at(-1), /Cierra sesión/);
+});
+
+test('login opens only the database-validated role and clears passwords', async () => {
+  const ids = { client: ['authEmail', 'authPassword'], driver: ['driverEmail', 'driverPassword'], admin: ['adminEmail', 'adminPassword'] };
+  for (const role of Object.keys(ids)) {
+    const r = runtime([{ data: { role, full_name: 'Ernesto' } }]);
+    r.run('renderClient=async()=>{}; renderDriver=async()=>{}; renderAdmin=async()=>{};');
+    r.document.getElementById(ids[role][0]).value = role + '@example.com';
+    r.document.getElementById(ids[role][1]).value = 'synthetic-password';
+    r.api.auth.signInWithPassword = async () => ({ data: { user: { id: 'verified-user' } } });
+    await r.run("loginForRole('" + role + "')");
+    assert.equal(r.run('activeSessionRole'), role);
+    assert.equal(r.document.getElementById('access').classList.contains('hidden'), true);
+    assert.equal(r.document.getElementById('sessionBar').classList.contains('hidden'), false);
+    for (const key of Object.keys(ids)) {
+      assert.equal(r.document.getElementById(key).classList.contains('hidden'), key !== role);
+      assert.equal(r.document.getElementById(ids[key][1]).value, '');
+    }
+  }
+});
+
+test('login with a mismatched role signs out locally and keeps the expected access form', async () => {
+  const r = runtime([{ data: { role: 'driver' } }]);
+  r.api.auth.signInWithPassword = async () => ({ data: { user: { id: 'driver-1' } } });
+  let scope;
+  r.api.auth.signOut = async options => { scope = options.scope; return { error: null }; };
+  r.document.getElementById('authEmail').value = 'driver@example.com';
+  r.document.getElementById('authPassword').value = 'synthetic-password';
+  await r.run("loginClient()");
+  assert.equal(scope, 'local');
+  assert.equal(r.run('activeSessionRole'), null);
+  assert.equal(r.document.getElementById('authClient').classList.contains('hidden'), false);
+  assert.equal(r.document.getElementById('driver').classList.contains('hidden'), true);
+});
+
+test('reloading restores all three roles from the profile, without signing in again', async () => {
+  for (const role of ['client', 'driver', 'admin']) {
+    const r = runtime([{ data: { role, full_name: 'Ernesto' } }]);
+    r.run('renderClient=async()=>{}; renderDriver=async()=>{}; renderAdmin=async()=>{};');
+    await r.run('restoreRoleSession()');
+    assert.equal(r.run('activeSessionRole'), role);
+    assert.equal(r.document.getElementById(role).classList.contains('hidden'), false);
+    assert.equal(r.document.getElementById('access').classList.contains('hidden'), true);
+    assert.equal(r.signOuts, 0);
+  }
+});
+
+test('signout returns to the client access form and hides all private panels', async () => {
+  const r = runtime();
+  r.run("activeSessionRole='admin'; clearSignedOutView()");
+  assert.equal(r.run('activeSessionRole'), null);
+  assert.equal(r.document.getElementById('access').classList.contains('hidden'), false);
+  for (const role of ['client', 'driver', 'admin']) {
+    assert.equal(r.document.getElementById(role).classList.contains('hidden'), true);
+  }
+  assert.equal(r.document.getElementById('sessionBar').classList.contains('hidden'), true);
+});
+
+test('a delayed role restore cannot reopen a panel after signout', async () => {
+  const r = runtime();
+  let finish;
+  r.api.auth.getUser = () => new Promise(resolve => { finish = resolve; });
+  const pending = r.run('restoreRoleSession()');
+  r.run('clearSignedOutView()');
+  finish({ data: { user: { id: 'old-user' } } });
+  await pending;
+  assert.equal(r.run('activeSessionRole'), null);
+  assert.equal(r.queries.length, 0);
+});
+
+test('stale driver and admin renders stop after signout', async () => {
+  for (const fn of ['renderDriver', 'renderAdmin']) {
+    const r = runtime();
+    let finish;
+    r.api.auth.getUser = () => new Promise(resolve => { finish = resolve; });
+    const pending = r.run(fn + '()');
+    r.run('clearSignedOutView()');
+    finish({ data: { user: { id: 'old-user' } } });
+    await pending;
+    assert.equal(r.queries.length, 0);
+    assert.equal(r.run('activeSessionRole'), null);
   }
 });
