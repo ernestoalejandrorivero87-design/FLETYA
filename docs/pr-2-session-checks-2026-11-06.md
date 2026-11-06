@@ -33,13 +33,29 @@ filter values before these tests; the no-op checks should not be reused after
 fixtures are deleted or altered without a new preflight.
 
 The v2 preview adds direct GET/PATCH checks for the opposite pair's exact job and
-GPS row. These are prepared, not yet owner-executed evidence in this document.
+GPS row. Owner screenshots confirmed all four sessions passed these checks.
 The PATCH assigns the existing driver ID constrained by that same ID in the
 filter, so it cannot reassign a service or alter coordinates even if unauthorized
 access unexpectedly succeeds. A returned row is a failed check.
 
-Still pending: v2 runs; remaining negative HTTP cases in the runbook (including
-client notifications and GPS writes after completion); independent read-back;
+Independent privileged read-back after all v2 runs confirmed both services stayed
+in route with their original clients, drivers and prices (959.50 and 2506.30),
+both payment flags stayed false, profile roles/names stayed unchanged, and GPS
+records retained their original driver/job associations.
+
+The owner then completed only pair A's service. A privileged query confirmed A
+completed and B still in route. Two subsequent GPS reads for driver A returned
+the same updated_at, `2026-11-06T15:10:27.609Z`, consistent with stopped updates
+over the observed interval. This does not prove background tracking behavior.
+
+The v3 preview prepares completed-service GPS PATCH and INSERT probes with an
+immediate historical-row read-back. INSERT must fail with SQLSTATE 42501; a
+duplicate-driver constraint error is inconclusive and fails the check. The
+existing unique driver constraint prevents the INSERT from persisting a second
+row if the RLS rule unexpectedly regresses. These v3 requests await owner execution.
+
+Still pending: remaining negative HTTP cases in the runbook (including
+client notifications and v3 GPS writes after completion); independent read-back;
 cleanup of disposable accounts/data and the diagnostic UI/RPC; production parity
 review and deployment/rollback preparation. No production migration or merge was
 performed for this work.

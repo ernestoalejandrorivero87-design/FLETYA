@@ -2425,6 +2425,36 @@ async function refreshPermissionChecks() {
   document.getElementById('permissionChecks').classList.toggle('hidden',
     Boolean(error) || !Object.values(permissionTestAccounts).includes(user?.id));
 }
+async function checkCompletedGps(api, account, userId) {
+  const jobId = account === 'driverA'
+    ? 'eea869cb-db09-4d5f-963b-25e5f02fe2a1' : '4ab8dfcb-f060-49b5-a5c2-0950f3ab6e2d';
+  const job = await api.from('jobs').select('id,status')
+    .eq('id', jobId).eq('driver_id', userId).maybeSingle();
+  if (job.error || !job.data) throw new Error('No se pudo verificar el servicio propio para probar el GPS.');
+  if (job.data.status !== 'completed') return null;
+  const before = await api.from('driver_locations').select('*')
+    .eq('driver_id', userId).eq('job_id', jobId).maybeSingle();
+  if (before.error || !before.data) throw new Error('Falta el registro histórico de GPS; prueba no ejecutada.');
+  const location = before.data;
+  const patch = await api.from('driver_locations').update({ driver_id: userId })
+    .eq('id', location.id).eq('driver_id', userId).eq('job_id', jobId).select('id');
+  // A unique driver_id already exists. A duplicate-key error is inconclusive,
+  // not a pass: INSERT must be rejected specifically by row-level security.
+  const insert = await api.from('driver_locations').insert({
+    driver_id: userId, job_id: jobId, latitude: location.latitude,
+    longitude: location.longitude, accuracy: location.accuracy
+  }).select('id');
+  const after = await api.from('driver_locations').select('*')
+    .eq('driver_id', userId).eq('job_id', jobId).maybeSingle();
+  const unchanged = !after.error && after.data &&
+    ['id','driver_id','job_id','latitude','longitude','accuracy','updated_at']
+      .every(key => after.data[key] === location[key]);
+  return [
+    { name: 'PATCH de GPS propio tras completar bloqueado', passed: deniedPermissionResponse(patch) },
+    { name: 'POST de GPS propio tras completar bloqueado por RLS', passed: insert.error?.code === '42501' },
+    { name: 'GPS histórico sin cambios tras las peticiones', passed: Boolean(unchanged) }
+  ];
+}
 async function runSessionPermissionChecks() {
   const button = document.getElementById('permissionChecksButton');
   const output = document.getElementById('permissionChecksResult');
@@ -2435,7 +2465,7 @@ async function runSessionPermissionChecks() {
     const { data: { user }, error } = await supabaseClient.auth.getUser();
     const account = Object.keys(permissionTestAccounts).find(key => permissionTestAccounts[key] === user?.id);
     if (error || !account) throw new Error('Inicia sesión con una de las cuatro cuentas temporales.');
-    const lines = ['Prueba HTTP v2', 'Cuenta de prueba: ' + account];
+    const lines = ['Prueba HTTP v3', 'Cuenta de prueba: ' + account];
     const probe = await supabaseClient.rpc('fletya_session_permission_probe');
     if (probe.error || !Array.isArray(probe.data?.tests)) {
       throw new Error('No se pudo ejecutar la comprobación del servidor. Código: ' + (probe.error?.code || 'respuesta inesperada'));
@@ -2482,6 +2512,17 @@ async function runSessionPermissionChecks() {
       passed = passed && blocked;
       lines.push((blocked ? 'PASA: ' : 'FALLA: ') +
         'GET/PATCH de ' + target.label + ' ajeno bloqueado');
+    }
+    if (account.startsWith('driver')) {
+      const gpsChecks = await checkCompletedGps(supabaseClient, account, user.id);
+      if (gpsChecks) {
+        for (const check of gpsChecks) {
+          passed = passed && check.passed;
+          lines.push((check.passed ? 'PASA: ' : 'FALLA: ') + check.name);
+        }
+      } else {
+        lines.push('PENDIENTE: GPS tras completar; este servicio sigue activo');
+      }
     }
     lines.push(passed ? 'Resultado: PASA las comprobaciones ejecutadas' : 'Resultado: REVISAR; no aprobar todavía');
     lines.push('Esta prueba no completa todos los casos HTTP pendientes del PR #2.');

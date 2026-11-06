@@ -10,7 +10,9 @@ function runtime() {
   const context = vm.createContext({ supabaseClient: null, IS_FLETYA_PRODUCTION_HOST: false,
     SUPABASE_URL: 'https://ccdtpwvalqznasstnqxj.supabase.co' });
   vm.runInContext(script, context);
-  return code => vm.runInContext(code, context);
+  const run = code => vm.runInContext(code, context);
+  run.context = context;
+  return run;
 }
 test('HTTP permission results do not treat network or unexpected server errors as a pass', () => {
   const run = runtime();
@@ -39,4 +41,44 @@ test('cross-account HTTP cases target the opposite pair and preserve assignment'
       assert.match(target.id, /^[\da-f-]{36}$/);
     }
   }
+});
+function gpsApi(results) {
+  return { from() {
+    const result = results.shift();
+    assert.ok(result, 'Unexpected GPS probe query');
+    const query = {};
+    for (const method of ['select', 'eq', 'update', 'insert']) query[method] = () => query;
+    query.maybeSingle = async () => result;
+    query.then = (resolve, reject) => Promise.resolve(result).then(resolve, reject);
+    return query;
+  } };
+}
+const gps = { id: 'location', driver_id: 'driver', job_id: 'job', latitude: 21,
+  longitude: -86, accuracy: 10, updated_at: '2026-11-06T15:10:27Z' };
+test('completed GPS probes require policy denial and unchanged historical data', async () => {
+  const run = runtime();
+  run.context.api = gpsApi([
+    { data: { status: 'completed' } }, { data: gps },
+    { error: { code: '42501' } }, { error: { code: '42501' } }, { data: { ...gps } }
+  ]);
+  const result = await run("checkCompletedGps(api,'driverA','driver')");
+  assert.equal(result.length, 3);
+  assert.ok(result.every(check => check.passed));
+});
+test('a duplicate key does not prove that completed GPS INSERT is protected', async () => {
+  const run = runtime();
+  run.context.api = gpsApi([
+    { data: { status: 'completed' } }, { data: gps },
+    { data: [{ id: gps.id }] }, { error: { code: '23505' } },
+    { data: { ...gps, updated_at: 'changed' } }
+  ]);
+  const result = await run("checkCompletedGps(api,'driverA','driver')");
+  assert.ok(result.every(check => check.passed === false));
+});
+test('completed GPS cases are skipped on active jobs and fail on missing fixtures', async () => {
+  const run = runtime();
+  run.context.api = gpsApi([{ data: { status: 'en_route' } }]);
+  assert.equal(await run("checkCompletedGps(api,'driverB','driver')"), null);
+  run.context.api = gpsApi([{ data: { status: 'completed' } }, { data: null }]);
+  await assert.rejects(run("checkCompletedGps(api,'driverA','driver')"), /histórico/);
 });
