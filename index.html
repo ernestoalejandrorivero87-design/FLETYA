@@ -38,6 +38,10 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
   margin-top: 12px;
 }
 
+.location-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.location-actions .btn{font-size:13px}
+.location-modal{position:fixed;inset:0;background:#10282caa;z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px}
+.location-picker-card{width:100%;max-width:680px;max-height:92vh;overflow-y:auto}.location-picker-card .row{justify-content:space-between}.location-picker-card h2{margin:0}
+#locationPickerMap{height:44vh;min-height:240px;max-height:420px;border-radius:12px;overflow:hidden;margin-top:14px}.btn:disabled{opacity:.55;cursor:wait}
 /* Touch-friendly panels; tablet/desktop-mode phones also use one content column. */
 .card,.grid>*,section{min-width:0}.card h2{margin-top:0}
 .btn,nav button{min-height:44px}.btn:focus-visible,nav button:focus-visible,summary:focus-visible{outline:3px solid #efb447;outline-offset:3px}
@@ -68,7 +72,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 </style>
 </head>
 <body>
-<header>
+<header id="appHeader">
   <div class="logo">FLET<span>YA</span></div>
   <nav aria-label="Tipo de cuenta">
     <button id="nav-client" type="button" onclick="navigateToRole('client')">Cliente</button>
@@ -77,7 +81,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
   </nav>
 </header>
 
-<main class="wrap">
+<main id="appMain" class="wrap">
 
 <section id="access" aria-labelledby="accessTitle">
   <div class="hero access-hero"><p class="eyebrow">FLETYA · Cancún</p>
@@ -145,9 +149,12 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <div class="card">
 <h2>Solicitar flete</h2>
 <label>Nombre</label><input id="cname" placeholder="Tu nombre">
-<label>Origen</label><input id="origin"onchange="calculateRoute()" placeholder="Ej. Plaza Las Américas">
-<label>Destino</label><input id="dest" onchange="calculateRoute()"placeholder="Ej. Región 102">
-<label>Distancia real (km)</label><input id="km" type="number" value="8" min="1" oninput="quote()">
+<label for="origin">Origen</label><input id="origin" oninput="routeInputChanged('origin')" onchange="calculateRoute()" placeholder="Dirección o punto en el mapa">
+<div class="location-actions"><button id="originGpsBtn" class="btn light" type="button" onclick="useClientLocation('origin')">Usar mi ubicación</button><button id="originMapBtn" class="btn light" type="button" onclick="openLocationPicker('origin')">Elegir origen en mapa</button></div>
+<label for="dest">Destino</label><input id="dest" oninput="routeInputChanged('dest')" onchange="calculateRoute()" placeholder="Dirección o punto en el mapa">
+<div class="location-actions"><button id="destGpsBtn" class="btn light" type="button" onclick="useClientLocation('dest')">Usar mi ubicación</button><button id="destMapBtn" class="btn light" type="button" onclick="openLocationPicker('dest')">Elegir destino en mapa</button></div>
+<p id="locationFeedback" class="muted" role="status" aria-live="polite">Puedes escribir una dirección o elegir un punto exacto. Los puntos del mapa se muestran como coordenadas.</p>
+<label for="km">Distancia real (km)</label><input id="km" type="number" value="" step="0.01" readonly aria-describedby="breakdown">
 <label>Vehículo</label><select id="vehicle" onchange="quote()"><option value="pickup">Pickup / Estaquita</option><option value="camioneta">Camioneta</option><option value="camion">Camión</option></select>
 <label>Ayudantes</label><select id="helpers" onchange="quote()"><option value="0">Sin ayudante</option><option value="1">1 ayudante</option><option value="2">2 ayudantes</option></select>
 <label>Servicio</label><select id="service"><option>Mudanza</option><option>Flete de muebles</option><option>Materiales</option><option>Paquetería</option></select>
@@ -305,6 +312,15 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
  </div>
 </section>
 </main>
+<div id="locationPickerModal" class="location-modal hidden" role="dialog" aria-modal="true" aria-labelledby="locationPickerTitle" tabindex="-1" onkeydown="if(event.key==='Escape') closeLocationPicker()">
+  <div class="card location-picker-card">
+    <div class="row"><h2 id="locationPickerTitle">Elegir ubicación</h2><button class="btn light" type="button" onclick="closeLocationPicker()" aria-label="Cerrar selector de ubicación">Cerrar</button></div>
+    <p class="muted" id="locationPickerHelp">Toca el mapa o arrastra el pin hasta el punto exacto. Acerca el mapa para afinarlo.</p>
+    <div id="locationPickerMap" aria-label="Mapa para elegir ubicación"></div>
+    <p id="locationPickerCoordinates" class="muted" aria-live="polite"></p>
+    <div class="location-actions"><button class="btn light" type="button" onclick="centerLocationPin()">Colocar pin en el centro</button><button class="btn" type="button" onclick="confirmLocationPicker()">Usar este punto</button><button class="btn light" type="button" onclick="closeLocationPicker()">Cancelar</button></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <div id="jobModal" class="hidden" style="
   position:fixed;
@@ -360,6 +376,11 @@ const rate={pickup:35,camioneta:45,camion:65};
 function money(n){return n.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0})}
 function money2(n){return (Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function quote(){
+ if (!(Number(document.getElementById('km').value) > 0)) {
+  document.getElementById('price').textContent = '$0 MXN';
+  document.getElementById('breakdown').textContent = 'Elige origen y destino para calcular el precio.';
+  return 0;
+ }
  let km=+document.getElementById('km').value||1,v=document.getElementById('vehicle').value,h=+document.getElementById('helpers').value;
  let base=120, p=base+km*rate[v]+h*180;
  if(v==='camioneta')p+=100;if(v==='camion')p+=300;
@@ -529,6 +550,8 @@ function startDriverNotifications(userId) {
     return '';
   }
 
+  if (parseRouteCoordinates(address)) return address;
+
   const normalized = address
     .toLowerCase()
     .normalize('NFD')
@@ -566,6 +589,160 @@ function startDriverNotifications(userId) {
   // asumimos Cancún como contexto
   return address + ', Cancún, Quintana Roo, México';
  }
+function parseRouteCoordinates(value) {
+  const match = String(value).trim().match(/^([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const lat = Number(match[1]), lng = Number(match[2]);
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+    ? { lat, lng } : null;
+}
+let routeDraftRevision = 0;
+let routeCalculationRevision = 0;
+let locationPickerMap = null;
+let locationPickerMarker = null;
+let locationPickerTarget = null;
+let locationPickerSessionRevision = 0;
+
+function canEditClientLocations() {
+  return activeSessionRole === 'client' && !logoutPending &&
+    !['requested', 'en_route'].includes(state.active?.status);
+}
+function updateLocationControls() {
+  const locked = !canEditClientLocations();
+  for (const id of ['originGpsBtn', 'originMapBtn', 'destGpsBtn', 'destMapBtn']) {
+    document.getElementById(id).disabled = locked;
+  }
+  for (const id of ['origin', 'dest']) document.getElementById(id).readOnly = locked;
+}
+function invalidateDraftQuote() {
+  routeCalculationRevision++;
+  document.getElementById('km').value = '';
+  quote();
+  if (routeLine && routeMap) routeMap.removeLayer(routeLine);
+  routeLine = null;
+}
+function routeInputChanged(target) {
+  if (!canEditClientLocations()) return;
+  routeDraftRevision++;
+  invalidateDraftQuote();
+  const marker = target === 'origin' ? originMarker : destinationMarker;
+  if (marker && routeMap) routeMap.removeLayer(marker);
+  if (target === 'origin') originMarker = null; else destinationMarker = null;
+  document.getElementById('locationFeedback').textContent = 'Elige ambos puntos para calcular la nueva ruta.';
+}
+function showDraftLocation(target, point) {
+  if (!routeMap) return;
+  const previous = target === 'origin' ? originMarker : destinationMarker;
+  if (previous) routeMap.removeLayer(previous);
+  const marker = L.marker([point.lat, point.lng]).addTo(routeMap)
+    .bindPopup(target === 'origin' ? 'Origen elegido' : 'Destino elegido');
+  if (target === 'origin') originMarker = marker; else destinationMarker = marker;
+  routeMap.setView([point.lat, point.lng], 16);
+}
+async function setClientLocation(target, point) {
+  if (!['origin', 'dest'].includes(target) || !canEditClientLocations()) return;
+  const value = Number(point.lat).toFixed(6) + ', ' + Number(point.lng).toFixed(6);
+  if (!parseRouteCoordinates(value)) return;
+  routeDraftRevision++;
+  document.getElementById(target).value = value;
+  invalidateDraftQuote();
+  showDraftLocation(target, point);
+  document.getElementById('locationFeedback').textContent =
+    (target === 'origin' ? 'Origen' : 'Destino') + ' seleccionado como punto exacto: ' + value;
+  await calculateRoute();
+}
+async function useClientLocation(target) {
+  if (!['origin', 'dest'].includes(target) || !canEditClientLocations()) {
+    toast('Puedes elegir ubicaciones cuando no tengas un servicio activo.'); return;
+  }
+  if (!navigator.geolocation) { toast('Este navegador no ofrece ubicación. Elige el punto en el mapa.'); return; }
+  const revision = sessionRevision;
+  const draftRevision = ++routeDraftRevision;
+  const button = document.getElementById(target + 'GpsBtn');
+  button.disabled = true;
+  const feedback = document.getElementById('locationFeedback');
+  feedback.textContent = 'Buscando tu ubicación…';
+  try {
+    const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject,
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }));
+    if (revision !== sessionRevision || draftRevision !== routeDraftRevision || !canEditClientLocations()) return;
+    const appliedRevision = routeDraftRevision + 1;
+    await setClientLocation(target, { lat: position.coords.latitude, lng: position.coords.longitude });
+    if (revision === sessionRevision && appliedRevision === routeDraftRevision && canEditClientLocations()) {
+      feedback.textContent = (target === 'origin' ? 'Origen' : 'Destino') +
+        ' obtenido con tu ubicación. Precisión aproximada: ' + Math.round(position.coords.accuracy) +
+        ' m. Revisa el pin y ajústalo en el mapa si hace falta.';
+    }
+  } catch (error) {
+    if (revision !== sessionRevision || draftRevision !== routeDraftRevision) return;
+    feedback.textContent = error?.code === 1
+      ? 'Permiso de ubicación denegado. Puedes escribir la dirección o elegirla en el mapa.'
+      : 'No se pudo obtener tu ubicación. Intenta de nuevo o elige un punto en el mapa.';
+  } finally {
+    button.disabled = !canEditClientLocations();
+  }
+}
+function updateLocationPickerCoordinates() {
+  if (!locationPickerMarker) return;
+  const point = locationPickerMarker.getLatLng();
+  document.getElementById('locationPickerCoordinates').textContent =
+    'Punto seleccionado: ' + point.lat.toFixed(6) + ', ' + point.lng.toFixed(6);
+}
+function openLocationPicker(target) {
+  if (!['origin', 'dest'].includes(target) || !canEditClientLocations()) {
+    toast('Puedes elegir ubicaciones cuando no tengas un servicio activo.'); return;
+  }
+  locationPickerTarget = target;
+  locationPickerSessionRevision = sessionRevision;
+  const chosenMarker = target === 'origin' ? originMarker : destinationMarker;
+  const point = parseRouteCoordinates(document.getElementById(target).value) ||
+    chosenMarker?.getLatLng() || routeMap?.getCenter() || { lat: 21.1619, lng: -86.8515 };
+  document.getElementById('locationPickerTitle').textContent = target === 'origin' ? 'Elegir origen' : 'Elegir destino';
+  document.getElementById('locationPickerModal').classList.remove('hidden');
+  document.getElementById('appMain').inert = true;
+  document.getElementById('appHeader').inert = true;
+  document.getElementById('locationPickerModal').focus?.();
+  if (!locationPickerMap) {
+    locationPickerMap = L.map('locationPickerMap').setView([point.lat, point.lng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(locationPickerMap);
+    locationPickerMarker = L.marker([point.lat, point.lng], { draggable: true, title: 'Arrastra para elegir el punto' }).addTo(locationPickerMap);
+    locationPickerMarker.on('dragend', updateLocationPickerCoordinates);
+    locationPickerMap.on('click', event => {
+      locationPickerMarker.setLatLng(event.latlng);
+      updateLocationPickerCoordinates();
+    });
+  } else {
+    locationPickerMap.setView([point.lat, point.lng], 16);
+    locationPickerMarker.setLatLng(point);
+  }
+  updateLocationPickerCoordinates();
+  setTimeout(() => locationPickerMap.invalidateSize(), 0);
+}
+function centerLocationPin() {
+  if (!locationPickerTarget || !locationPickerMap) return;
+  locationPickerMarker.setLatLng(locationPickerMap.getCenter());
+  updateLocationPickerCoordinates();
+}
+function closeLocationPicker() {
+  document.getElementById('locationPickerModal').classList.add('hidden');
+  document.getElementById('appMain').inert = false;
+  document.getElementById('appHeader').inert = false;
+  const target = locationPickerTarget;
+  locationPickerTarget = null;
+  if (target) document.getElementById(target + 'MapBtn').focus?.();
+}
+async function confirmLocationPicker() {
+  const target = locationPickerTarget;
+  if (!target || !canEditClientLocations() || locationPickerSessionRevision !== sessionRevision) {
+    closeLocationPicker(); return;
+  }
+  const point = locationPickerMarker.getLatLng();
+  closeLocationPicker();
+  await setClientLocation(target, point);
+}
+
 let routeMap = null;
 let routeLine = null;
 let originMarker = null;
@@ -627,11 +804,13 @@ function drawRouteOnMap(polyline) {
     weight: 5
   }).addTo(routeMap);
 
-  originMarker = L.marker(points[0])
+  const draftOrigin = canEditClientLocations() && parseRouteCoordinates(document.getElementById('origin').value);
+  const draftDestination = canEditClientLocations() && parseRouteCoordinates(document.getElementById('dest').value);
+  originMarker = L.marker(draftOrigin ? [draftOrigin.lat, draftOrigin.lng] : points[0])
     .addTo(routeMap)
     .bindPopup('📍 Origen');
 
-  destinationMarker = L.marker(points[points.length - 1])
+  destinationMarker = L.marker(draftDestination ? [draftDestination.lat, draftDestination.lng] : points[points.length - 1])
     .addTo(routeMap)
     .bindPopup('🏁 Destino');
 
@@ -687,59 +866,38 @@ function decodePolyline(encoded) {
 
 initRouteMap();
 async function calculateRoute(){
-  const originInput =
-    document.getElementById('origin').value;
-
-  const destinationInput =
-    document.getElementById('dest').value;
-
-  if(!originInput.trim() || !destinationInput.trim()){
-    return;
-  }
-
+  if (!canEditClientLocations()) return;
+  const originInput = document.getElementById('origin').value;
+  const destinationInput = document.getElementById('dest').value;
+  const requestRevision = ++routeCalculationRevision;
+  const revision = sessionRevision;
+  if (!originInput.trim() || !destinationInput.trim()) return;
   const origin = prepareRouteAddress(originInput);
   const destination = prepareRouteAddress(destinationInput);
-
   document.getElementById('km').value = '';
-  document.getElementById('breakdown').textContent =
-    '🔄 Calculando ruta real...';
-
-  const { data: routeData, error: routeError } =
-    await supabaseClient.functions.invoke(
-      'fletya-routes',
-      {
-        body: {
-          origin: origin,
-          destination: destination
-        }
-      }
-    );
-
-  if(routeError || !routeData?.distance_km){
-    document.getElementById('km').value = '';
-    document.getElementById('price').textContent = '$0 MXN';
-    document.getElementById('breakdown').textContent =
-      '❌ No se pudo calcular la ruta real.';
-    toast('No se pudo calcular la distancia real.');
-    return;
-  }
-
-  document.getElementById('km').value =
-    routeData.distance_km;
-if (routeData.polyline) {
-  drawRouteOnMap(routeData.polyline);
-
-  const originText =
-    document.getElementById('origin').value;
-
-  const destinationText =
-    document.getElementById('dest').value;
-
-  document.getElementById('routeInfo').innerHTML =
-    `📍 <strong>${originText}</strong> → <strong>${destinationText}</strong><br>
-     📏 ${routeData.distance_km} km · ⏱️ ${routeData.duration_text || 'Tiempo estimado'} · 🗺️ Ruta calculada`;
-}
   quote();
+  document.getElementById('breakdown').textContent = 'Calculando ruta real…';
+  try {
+    const { data: routeData, error: routeError } = await supabaseClient.functions.invoke(
+      'fletya-routes', { body: { origin, destination } });
+    if (requestRevision !== routeCalculationRevision || revision !== sessionRevision ||
+        originInput !== document.getElementById('origin').value ||
+        destinationInput !== document.getElementById('dest').value || !canEditClientLocations()) return;
+    if (routeError || !Number.isFinite(Number(routeData?.distance_km)) || !(routeData.distance_km > 0)) {
+      throw new Error('route_not_found');
+    }
+    document.getElementById('km').value = routeData.distance_km;
+    if (routeData.polyline) drawRouteOnMap(routeData.polyline);
+    document.getElementById('routeInfo').textContent = originInput + ' → ' + destinationInput +
+      ' · ' + routeData.distance_km + ' km · ' + (routeData.duration_text || 'Tiempo estimado');
+    quote();
+  } catch (error) {
+    if (requestRevision !== routeCalculationRevision || revision !== sessionRevision || !canEditClientLocations()) return;
+    document.getElementById('km').value = '';
+    quote();
+    document.getElementById('breakdown').textContent = 'No se pudo calcular la ruta. Revisa ambos puntos e inténtalo de nuevo.';
+    toast('No se pudo calcular la distancia real.');
+  }
 }
 
 async function restoreRouteForJob(job, userId) {
@@ -790,6 +948,7 @@ async function restoreRouteForJob(job, userId) {
 }
 
  async function requestJob(){
+  const revision = sessionRevision;
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
   const { data: roleProfile, error: roleError } = user && !authError
@@ -838,6 +997,11 @@ const { data: routeData, error: routeError } =
     }
   }); 
 
+if (revision !== sessionRevision || logoutPending) return;
+if (originInput !== document.getElementById('origin').value.trim() ||
+    destinationInput !== document.getElementById('dest').value.trim()) {
+  toast('La ruta cambió. Revisa el precio y vuelve a solicitar.'); return;
+}
 if (routeError || !routeData?.distance_km) {
   toast('No se pudo calcular la distancia real.');
   return;
@@ -998,6 +1162,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     const hadActiveService = state.active &&
       ['requested', 'en_route'].includes(state.active.status);
     state.active = null;
+    updateLocationControls();
     // El sondeo del estado no debe borrar el borrador de una nueva solicitud.
     // Solo retirar la ruta si pertenecía a un servicio que dejó de estar activo.
     if (hadActiveService) clearRouteOnMap();
@@ -1011,8 +1176,11 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
 
   const j = jobs[0];
 
+  const previousActive = state.active && ['requested', 'en_route'].includes(state.active.status);
   state.active = j;
-  await restoreRouteForJob(j, user.id);
+  updateLocationControls();
+  if (['requested', 'en_route'].includes(j.status)) await restoreRouteForJob(j, user.id);
+  else if (previousActive) clearRouteOnMap();
   if (revision !== sessionRevision || logoutPending) return;
 
   document.getElementById('clientStatus').innerHTML =
@@ -1472,6 +1640,9 @@ async function syncFletyaGps(userId, activeJob) {
 }
 function clearSignedOutView() {
   sessionRevision++;
+  routeDraftRevision++;
+  routeCalculationRevision++;
+  closeLocationPicker();
   closeJobModal();
   stopFletyaGps();
   stopDriverTracking();
@@ -1488,6 +1659,9 @@ function clearSignedOutView() {
   state.status = 'Pendiente';
   localStorage.removeItem?.('fletya_jobs');
   clearRouteOnMap();
+  for (const id of ['origin', 'dest', 'km']) document.getElementById(id).value = '';
+  quote();
+  document.getElementById('locationFeedback').textContent = 'Puedes escribir una dirección o elegir un punto exacto. Los puntos del mapa se muestran como coordenadas.';
   setClientSessionIdentity(null);
   document.getElementById('clientLogoutBtn').style.display = 'none';
   document.getElementById('clientStatus').textContent = 'Inicia sesión para ver tu servicio.';
@@ -2353,6 +2527,7 @@ function setClientSessionIdentity(user, fullName) {
 
 async function activateRoleSession(user, profile) {
   activeSessionRole = profile.role;
+  updateLocationControls();
   document.getElementById('sessionRoleLabel').textContent = roleTitles[profile.role];
   document.getElementById('sessionName').textContent = profile.full_name || user.email || '';
   document.getElementById('authPassword').value = '';
