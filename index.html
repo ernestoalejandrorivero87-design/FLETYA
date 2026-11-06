@@ -921,19 +921,13 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
       : '<p class="muted">Todavía no tienes servicios.</p>';
   }
   if (!jobs || jobs.length === 0) {
-
+    const hadActiveService = state.active &&
+      ['requested', 'en_route'].includes(state.active.status);
     state.active = null;
-    clearRouteOnMap();
-
-    const originInput = document.getElementById('origin');
-    const destinationInput = document.getElementById('dest');
-    if (originInput) originInput.value = '';
-    if (destinationInput) destinationInput.value = '';
-
-    if (driverTrackingTimer) {
-      clearInterval(driverTrackingTimer);
-      driverTrackingTimer = null;
-    }
+    // El sondeo del estado no debe borrar el borrador de una nueva solicitud.
+    // Solo retirar la ruta si pertenecía a un servicio que dejó de estar activo.
+    if (hadActiveService) clearRouteOnMap();
+    stopDriverTracking();
 
     document.getElementById('clientStatus').innerHTML =
       '<span class="pill">Sin servicio activo</span>';

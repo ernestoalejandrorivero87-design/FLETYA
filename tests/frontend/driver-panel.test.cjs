@@ -72,6 +72,51 @@ test('all inline JavaScript parses after conflict resolution', () => {
   for (const source of scripts) new vm.Script(source);
 });
 
+test('client polling preserves draft addresses and quoted route before the first job', async () => {
+  const noJobs = () => [
+    { data: { role: 'client' } }, { data: { full_name: 'Cliente A' } },
+    { data: [] }, { data: [] }
+  ];
+  const r = runtime([...noJobs(), ...noJobs(), ...noJobs()]);
+  r.run('setClientSessionIdentity=()=>{}; routeClears=0; clearRouteOnMap=()=>{routeClears++};');
+  r.document.getElementById('client').classList.toggle('hidden', false);
+  const poll = [...r.intervals.values()][0];
+  r.document.getElementById('origin').value = 'Plaza Las Américas';
+  r.document.getElementById('dest').value = '';
+  poll();
+  // Drain the asynchronous auth/profile/jobs/history chain started by the timer.
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(r.document.getElementById('origin').value, 'Plaza Las Américas');
+  r.document.getElementById('dest').value = 'Región 102';
+  r.document.getElementById('km').value = '12.5';
+  r.document.getElementById('routeInfo').textContent = 'Ruta calculada';
+  r.run('quote()');
+  const price = r.document.getElementById('price').textContent;
+  for (let i = 0; i < 2; i++) {
+    poll();
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.equal(r.document.getElementById('origin').value, 'Plaza Las Américas');
+  assert.equal(r.document.getElementById('dest').value, 'Región 102');
+  assert.equal(r.document.getElementById('km').value, '12.5');
+  assert.equal(r.document.getElementById('price').textContent, price);
+  assert.equal(r.document.getElementById('routeInfo').textContent, 'Ruta calculada');
+  assert.equal(r.run('routeClears'), 0);
+  assert.equal(r.run('state.active'), null);
+});
+
+test('losing an active client job still clears its route and stops tracking', async () => {
+  const r = runtime([
+    { data: { role: 'client' } }, { data: {} }, { data: [] }, { data: [] }
+  ]);
+  r.run("setClientSessionIdentity=()=>{}; routeClears=0; clearRouteOnMap=()=>{routeClears++}; state.active={id:'old-job',status:'en_route'}; driverTrackingTimer=setInterval(()=>{},5000);");
+  await r.run('renderClient()');
+  assert.equal(r.run('routeClears'), 1);
+  assert.equal(r.run('driverTrackingTimer'), null);
+  assert.equal(r.document.getElementById('driverTracking').hidden, true);
+  assert.equal(r.run('state.active'), null);
+});
+
 test('acceptance requires an unassigned requested row and a returned assignment', async () => {
   const accepted = { id: 'requested-job', status: 'en_route', driver_id: 'driver-1', price: 100 };
   const r = runtime([{ data: accepted }]);
