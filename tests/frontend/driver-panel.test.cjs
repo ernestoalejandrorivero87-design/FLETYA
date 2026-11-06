@@ -56,12 +56,25 @@ function runtime(responses = []) {
       return builder;
     }
   };
-  const map = { setView() { return this; } };
+  const map = {
+    center: { lat: 21.1619, lng: -86.8515 }, events: {},
+    setView(point) { this.center = Array.isArray(point) ? {lat:point[0],lng:point[1]} : point; return this; },
+    getCenter() { return this.center; }, on(event, handler) { this.events[event]=handler; return this; },
+    removeLayer() {}, fitBounds() {}, invalidateSize() {}
+  };
+  function marker(point, options = {}) {
+    return { point: Array.isArray(point) ? { lat: point[0], lng: point[1] } : point, options, events: {},
+      addTo() { return this; }, bindPopup() { return this; },
+      getLatLng() { return this.point; },
+      setLatLng(value) { this.point = Array.isArray(value) ? {lat:value[0],lng:value[1]} : value; return this; },
+      on(event,handler) { this.events[event]=handler; return this; }
+    };
+  }
   const context = vm.createContext({
     document, console: { error() {}, warn() {}, log() {} }, supabaseClient: api,
     navigator: { geolocation: { clearWatch(id) { clearedWatches.push(id); } } },
     localStorage: { getItem() { return null; } },
-    L: { map() { return map; }, tileLayer() { return { addTo() {} }; } },
+    L: { map() { return map; }, marker, polyline() { return { addTo() {return this;}, getBounds() {return [];} }; }, tileLayer() { return { addTo() {} }; } },
     setInterval(callback) { intervals.set(++timerId, callback); return timerId; },
     clearInterval(id) { intervals.delete(id); }, setTimeout() {},
     recordMessage(message) { messages.push(message); }
@@ -544,4 +557,120 @@ test('stale driver and admin renders stop after signout', async () => {
     assert.equal(r.queries.length, 0);
     assert.equal(r.run('activeSessionRole'), null);
   }
+});
+
+
+test('coordinates stay exact while written addresses retain the local context', () => {
+  const r = runtime();
+  assert.equal(r.run("prepareRouteAddress('21.161900, -86.851500')"), '21.161900, -86.851500');
+  assert.equal(r.run("prepareRouteAddress('Plaza Las Américas')"), 'Plaza Las Américas, Cancún, Quintana Roo, México');
+  assert.equal(r.run("parseRouteCoordinates('91, -86')"), null);
+});
+
+test('cancelled map selection preserves draft fields and quote', () => {
+  const r = runtime();
+  r.run("activeSessionRole='client'");
+  r.document.getElementById('origin').value = '21.1, -86.8';
+  r.document.getElementById('dest').value = 'Original destination';
+  r.document.getElementById('price').textContent = '$400';
+  r.run("openLocationPicker('origin'); locationPickerMarker.setLatLng({lat:21.2,lng:-86.9}); closeLocationPicker();");
+  assert.equal(r.document.getElementById('origin').value, '21.1, -86.8');
+  assert.equal(r.document.getElementById('dest').value, 'Original destination');
+  assert.equal(r.document.getElementById('price').textContent, '$400');
+});
+
+test('confirming a draggable map pin changes only the chosen endpoint and recalculates', async () => {
+  const r = runtime();
+  r.run("activeSessionRole='client'");
+  r.document.getElementById('origin').value = 'Plaza Las Américas';
+  let body;
+  r.api.functions = { invoke: async (name, options) => { body=options.body; return {data:{distance_km:8.22,duration_text:'22 min'}}; } };
+  r.run("openLocationPicker('dest'); locationPickerMarker.setLatLng({lat:21.16,lng:-86.88}); locationPickerMarker.events.dragend();");
+  assert.equal(r.run('locationPickerMarker.options.draggable'), true);
+  await r.run('confirmLocationPicker()');
+  assert.equal(r.document.getElementById('dest').value, '21.160000, -86.880000');
+  assert.equal(r.document.getElementById('origin').value, 'Plaza Las Américas');
+  assert.equal(body.destination, '21.160000, -86.880000');
+  assert.equal(r.document.getElementById('km').value, 8.22);
+  assert.equal(r.document.getElementById('locationPickerModal').classList.contains('hidden'), true);
+});
+
+test('GPS runs only on explicit request, handles denied permission and preserves typed locations', async () => {
+  const r = runtime();
+  let requests=0;
+  r.context.navigator.geolocation.getCurrentPosition = (ok, fail) => { requests++; fail({code:1}); };
+  r.run("activeSessionRole='client'");
+  r.document.getElementById('origin').value = 'Written origin';
+  assert.equal(requests, 0);
+  await r.run("useClientLocation('origin')");
+  assert.equal(requests, 1);
+  assert.equal(r.document.getElementById('origin').value, 'Written origin');
+  assert.match(r.document.getElementById('locationFeedback').textContent, /denegado/);
+  assert.equal(r.document.getElementById('originGpsBtn').disabled, false);
+});
+
+test('GPS selects one exact point without using a continuous location watch', async () => {
+  const r = runtime();
+  r.run("activeSessionRole='client'");
+  r.document.getElementById('dest').value = '';
+  r.context.navigator.geolocation.getCurrentPosition = ok => ok({coords:{latitude:21.1619,longitude:-86.8515,accuracy:12}});
+  await r.run("useClientLocation('origin')");
+  assert.equal(r.document.getElementById('origin').value, '21.161900, -86.851500');
+  assert.equal(r.document.getElementById('dest').value, '');
+  assert.equal(r.run('fletyaGpsWatch'), null);
+  assert.match(r.document.getElementById('locationFeedback').textContent, /12 m/);
+});
+
+test('late GPS cannot replace an address edited while location was pending', async () => {
+  const r = runtime();
+  r.run("activeSessionRole='client'");
+  let finish;
+  r.context.navigator.geolocation.getCurrentPosition = ok => { finish=ok; };
+  const pending=r.run("useClientLocation('origin')");
+  r.document.getElementById('origin').value='A more recent address';
+  r.run("routeInputChanged('origin')");
+  finish({coords:{latitude:21.1,longitude:-86.8,accuracy:10}});
+  await pending;
+  assert.equal(r.document.getElementById('origin').value,'A more recent address');
+});
+
+test('active services block map and GPS edits', async () => {
+  const r=runtime();
+  r.run("activeSessionRole='client';state.active={status:'en_route'};updateLocationControls()");
+  let requests=0;
+  r.context.navigator.geolocation.getCurrentPosition=()=>{requests++};
+  r.run("openLocationPicker('origin')");
+  await r.run("useClientLocation('origin')");
+  assert.equal(requests,0);
+  assert.equal(r.run('locationPickerTarget'),null);
+  assert.equal(r.document.getElementById('originGpsBtn').disabled,true);
+});
+
+test('only the latest quote response can update distance after endpoint edits', async () => {
+  const r=runtime();
+  r.run("activeSessionRole='client'");
+  r.document.getElementById('origin').value='Origin A';
+  r.document.getElementById('dest').value='Destination';
+  const pending=[];
+  r.api.functions={invoke:()=>new Promise(resolve=>pending.push(resolve))};
+  const first=r.run('calculateRoute()');
+  r.document.getElementById('origin').value='Origin B';
+  r.run("routeInputChanged('origin')");
+  const second=r.run('calculateRoute()');
+  pending[1]({data:{distance_km:8}}); await second;
+  pending[0]({data:{distance_km:99}}); await first;
+  assert.equal(r.document.getElementById('km').value,8);
+  assert.match(r.document.getElementById('routeInfo').textContent,/Origin B/);
+});
+
+test('completed-job polling preserves a new draft route and quote', async () => {
+  const r=runtime([{data:{role:'client'}},{data:{}},{data:[{id:'old',status:'completed',price:400}]},{data:[]}]);
+  r.run("activeSessionRole='client';state.active={id:'old',status:'completed'};routeClears=0;clearRouteOnMap=()=>{routeClears++};");
+  r.document.getElementById('origin').value='21.1, -86.8';
+  r.document.getElementById('dest').value='21.2, -86.9';
+  r.document.getElementById('routeInfo').textContent='New draft route';
+  await r.run('renderClient()');
+  assert.equal(r.run('routeClears'),0);
+  assert.equal(r.document.getElementById('origin').value,'21.1, -86.8');
+  assert.equal(r.document.getElementById('routeInfo').textContent,'New draft route');
 });
