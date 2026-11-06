@@ -26,10 +26,40 @@ different from the repository filenames; compare definitions, not version names 
 ## Production inspection
 
 Production project: wsdfqscrvfygxripmrzi; testing: ccdtpwvalqznasstnqxj.
-Production was inactive and a read-only SQL attempt returned database inaccessible.
-The restore request was accepted so its catalog could be inspected. While it is
-COMING_UP, parity cannot be certified. No production schema/data migrations or PR
-merge have been performed.
+Production was inactive. It was restored for a metadata-only review, reached
+ACTIVE_HEALTHY, and was paused again after inspection because the security
+migrations remain unapplied. No production schema/data migrations or PR merge
+were performed.
+
+The live comparison found identical application column definitions (37) and
+constraints (13) across the two projects. Production has 17 policies, including
+the legacy profile INSERT policy explicitly dropped by migration 01000. Its named
+policy differences are covered by the reviewed migrations. Production has only
+the two original application triggers; the PR adds the profile/job guards.
+Its Auth profile trigger exists under the expected name and profiles.email exists.
+
+Production still grants 56 table privileges to anon/authenticated, including
+DELETE/TRUNCATE/TRIGGER/REFERENCES, versus 9 table grants plus the column-scoped
+notification read update in testing. It still has unrestricted signup-role
+metadata assignment and the public admin helper. The six migration files address
+these differences; no unexpected legacy policy name was found in the snapshot.
+This confirms baseline compatibility, not the result of applying migrations to
+production. Production migration history is empty; it must be recorded correctly
+when the reviewed change is deployed.
+
+Metadata snapshots are under docs/security-evidence for both environments.
+Security advisors reported the three existing public SECURITY DEFINER functions
+executable by anon and authenticated, and disabled leaked-password protection.
+References: [function execution](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)
+and [password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+The SQL-exposed authenticator role settings did not reveal Data API schemas;
+confirm the actual dashboard setting separately rather than assuming its value.
+
+Commit 2445f63010e8a0b685f42f733310b9e5ac52ef7c passed all four Actions runs:
+42246501370, 42246501359, 42246510683 and 42246510575. This includes the new
+PostgreSQL signup-email assertion. The remaining prerequisite before requesting
+deployment approval is a verified production backup/recovery method and the
+Data API/Auth configuration review.
 
 Use [release-catalog-inventory.sql](../tests/security/release-catalog-inventory.sql)
 to capture metadata from both projects. Compare column types/defaults, constraints,

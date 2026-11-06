@@ -92,6 +92,6 @@ separate query confirmed zero matching disposable accounts or jobs and no
 diagnostic RPC. Existing access JWTs expire normally; cleanup does not claim
 immediate cryptographic invalidation of already-issued JWTs.
 
-Still pending: production parity
-review and deployment/rollback preparation. No production migration or merge was
-performed for this work.
+The subsequent production metadata comparison and deployment/recovery gates are
+recorded in [release preparation](pr-2-release-preparation-2026-11-06.md).
+No production migration or merge was performed for this work.
