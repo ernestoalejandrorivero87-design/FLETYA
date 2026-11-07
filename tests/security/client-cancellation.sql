@@ -5,7 +5,7 @@ set local lock_timeout = '3s';
 set local statement_timeout = '20s';
 create temporary table cancellation_cases(label text primary key, id uuid default gen_random_uuid(), before_row jsonb) on commit drop;
 insert into cancellation_cases(label) values
- ('own'),('other'),('assigned'),('active'),('completed'),('paid'),('edit'),('cancel_first'),('accept_first');
+ ('own'),('other'),('assigned'),('active'),('picked_up'),('completed'),('paid'),('edit'),('cancel_first'),('accept_first');
 select set_config('fletya.cancel_client', (select id::text from public.profiles where role='client' order by id limit 1), true);
 select set_config('fletya.cancel_driver', (select id::text from public.profiles where role='driver' order by id limit 1), true);
 select set_config('fletya.cancel_admin', (select id::text from public.profiles where role='admin' order by id limit 1), true);
@@ -19,9 +19,9 @@ select set_config('request.jwt.claim.role','service_role',true);
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 insert into public.jobs(id,origin,destination,distance_km,vehicle_type,helpers,service_type,description,price,status,client_id,driver_id,driver_paid)
 select c.id,'Cancellation test origin','Cancellation test destination',5,'pickup',0,'Mudanza','Rollback-only cancellation validation',100,
- case c.label when 'active' then 'en_route' when 'completed' then 'completed' else 'requested' end,
+ case c.label when 'active' then 'en_route' when 'picked_up' then 'picked_up' when 'completed' then 'completed' else 'requested' end,
  (case when c.label='other' then current_setting('fletya.cancel_admin') else current_setting('fletya.cancel_client') end)::uuid,
- case when c.label in ('assigned','active','completed') then current_setting('fletya.cancel_driver')::uuid else null end,
+ case when c.label in ('assigned','active','picked_up','completed') then current_setting('fletya.cancel_driver')::uuid else null end,
  c.label='paid'
 from cancellation_cases c;
 update cancellation_cases c set before_row=to_jsonb(j) from public.jobs j where j.id=c.id;
@@ -42,7 +42,7 @@ begin
  update public.jobs set status='requested' where id=(ids->>'own')::uuid;
  get diagnostics n=row_count;
  if n<>0 then raise exception 'Cancelled job was reopened'; end if;
- foreach label in array array['other','assigned','active','completed','paid'] loop
+ foreach label in array array['other','assigned','active','picked_up','completed','paid'] loop
   update public.jobs set status='cancelled' where id=(ids->>label)::uuid;
   get diagnostics n=row_count;
   if n<>0 then raise exception 'Client cancelled forbidden case %',label; end if;
@@ -85,7 +85,7 @@ begin
   update public.jobs set status='cancelled' where id=(ids->>'active')::uuid;
   raise exception 'TESTFAIL: driver cancelled own active service';
  exception when raise_exception then
-  if sqlerrm not like 'Drivers may only accept available jobs%' then raise; end if;
+  if sqlerrm not like 'Drivers may only accept%' then raise; end if;
  end;
 end $$;
 select set_config('request.jwt.claim.sub',current_setting('fletya.cancel_client'),true);

@@ -15,7 +15,12 @@ const sql = Object.fromEntries(
   Object.entries(files).map(([key, path]) => [key, readFileSync(join(root, path), 'utf8')])
 );
 
+const release = readFileSync(join(root, 'supabase/migrations/20261107022645_allow_driver_release_before_pickup.sql'),'utf8');
 const checks = [
+  ['release requires a reason and preserves job details', /char_length\(btrim\(coalesce\(new.release_reason/.test(release) && /Drivers cannot edit job details or payment flags/.test(release)],
+  ['completion requires cargo pickup', /old.status = 'picked_up' and new.status = 'completed'/.test(release)],
+  ['release audit is read-only to authenticated users', /revoke all on public.job_driver_releases from public,anon,authenticated/.test(release) && /grant select on public.job_driver_releases to authenticated/.test(release)],
+  ['GPS follows only the currently assigned driver', /j.driver_id=driver_locations.driver_id/.test(release) && /j.status in \('en_route','picked_up'\)/.test(release)],
   ['client cancellation RLS checks owner, role and both row states', /create policy "Clients can cancel unassigned requests"/i.test(sql.cancellation) && /using\s*\([\s\S]*status = 'requested'/i.test(sql.cancellation) && /with check\s*\([\s\S]*status = 'cancelled'/i.test(sql.cancellation) && /client_id = \(select auth.uid\(\)\)/i.test(sql.cancellation) && /p.role = 'client'/i.test(sql.cancellation)],
   ['cancellation trigger permits only the status column to change', /to_jsonb\(new\) - 'status'/i.test(sql.cancellation) && /old.driver_id is not null/i.test(sql.cancellation) && /new.status is distinct from 'cancelled'/i.test(sql.cancellation)],
   ['cancellation keeps existing function execution restricted', /revoke all on function public.guard_job_updates\(\) from public, anon, authenticated/i.test(sql.cancellation) && /private.is_admin\(\)/i.test(sql.cancellation)],

@@ -12,7 +12,7 @@ nav button,.btn{border:0;border-radius:12px;padding:11px 15px;font-weight:800;cu
 nav button{background:#eef5f5;margin-left:5px}.btn{background:#087f8c;color:white}.btn.dark{background:#172126}.btn.light{background:#e9f2f2;color:#087f8c}
 .wrap{max-width:1120px;margin:auto;padding:22px}.hero{background:linear-gradient(135deg,#0b8794,#12343c);color:#fff;border-radius:24px;padding:30px;margin-bottom:20px}
 .hero h1{font-size:34px;margin:0 0 8px}.hero p{margin:0;opacity:.9}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card{background:#fff;border:1px solid #e4eaec;border-radius:18px;padding:20px;box-shadow:0 6px 20px #17323a0c}
-label{display:block;font-size:13px;font-weight:800;margin:12px 0 6px}input,select{width:100%;padding:12px;border:1px solid #ccd8db;border-radius:10px;font-size:15px;background:#fff}
+label{display:block;font-size:13px;font-weight:800;margin:12px 0 6px}input,select,textarea{width:100%;padding:12px;border:1px solid #ccd8db;border-radius:10px;font-size:15px;background:#fff}
 .price{font-size:34px;font-weight:900;margin:10px 0;color:#087f8c}.muted{color:#66777d;font-size:13px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.pill{display:inline-block;padding:7px 10px;border-radius:999px;background:#edf5f5;color:#087f8c;font-size:12px;font-weight:800}
 table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
  #adminTable{overflow-x:auto;width:100%} th,td{padding:10px;border-bottom:1px solid #e8eeee;text-align:left}.hidden{display:none !important}.status{font-weight:900}.ok{color:#087f8c}.warn{color:#a66b00}.danger{color:#b43a3a}
@@ -293,7 +293,8 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 >
   <option value="">Todos los estados</option>
   <option value="requested">Solicitado</option>
-  <option value="en_route">En camino</option>
+  <option value="en_route">En camino a recoger</option>
+  <option value="picked_up">Carga recogida</option>
   <option value="completed">Completado</option>
   <option value="cancelled">Cancelado</option>
  </select>
@@ -315,6 +316,16 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
  </div>
 </section>
 </main>
+<div id="driverReleaseModal" class="location-modal hidden" role="dialog" aria-modal="true" aria-labelledby="driverReleaseTitle" tabindex="-1" onkeydown="if(event.key==='Escape') closeDriverRelease()">
+ <form class="card location-picker-card" onsubmit="event.preventDefault(); releaseDriverJob()">
+  <h2 id="driverReleaseTitle">Liberar antes de recoger</h2>
+  <p>La solicitud volverá a estar disponible para los fleteros. Esta acción solo está permitida antes de confirmar la recogida.</p>
+  <label for="driverReleaseReason">Motivo de la liberación</label>
+  <textarea id="driverReleaseReason" minlength="10" maxlength="300" rows="4" required placeholder="Explica el motivo (de 10 a 300 caracteres)"></textarea>
+  <p id="driverReleaseMessage" class="muted" aria-live="polite"></p>
+  <div class="location-actions"><button id="driverReleaseConfirm" class="btn" type="submit">Liberar servicio</button><button class="btn light" type="button" onclick="closeDriverRelease()">Volver</button></div>
+ </form>
+</div>
 <div id="locationPickerModal" class="location-modal hidden" role="dialog" aria-modal="true" aria-labelledby="locationPickerTitle" tabindex="-1" onkeydown="if(event.key==='Escape') closeLocationPicker()">
   <div class="card location-picker-card">
     <div class="row"><h2 id="locationPickerTitle">Elegir ubicación</h2><button class="btn light" type="button" onclick="closeLocationPicker()" aria-label="Cerrar selector de ubicación">Cerrar</button></div>
@@ -376,8 +387,10 @@ let activeSessionRole = null;
 let selectedAccessRole = 'client';
 const roleTitles = { client: 'Cliente', driver: 'Fletero', admin: 'Administrador' };
 const rate={pickup:35,camioneta:45,camion:65};
+function isDriverActiveStatus(status) { return ['en_route','picked_up'].includes(status); }
+function escapeText(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function jobStatusLabel(status) {
- return {requested:'🟡 Solicitado',en_route:'🔵 En camino',completed:'🟢 Completado',cancelled:'⚪ Cancelado'}[status] || status || 'Sin estado';
+ return {requested:'🟡 Solicitado',en_route:'🔵 En camino a recoger',picked_up:'🔵 Carga recogida',completed:'🟢 Completado',cancelled:'⚪ Cancelado'}[status] || status || 'Sin estado';
 }
 function money(n){return n.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0})}
 function money2(n){return (Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
@@ -611,7 +624,7 @@ let locationPickerSessionRevision = 0;
 
 function canEditClientLocations() {
   return activeSessionRole === 'client' && !logoutPending &&
-    !['requested', 'en_route'].includes(state.active?.status);
+    !['requested', 'en_route', 'picked_up'].includes(state.active?.status);
 }
 function updateLocationControls() {
   const locked = !canEditClientLocations();
@@ -907,7 +920,7 @@ async function calculateRoute(){
 }
 
 async function restoreRouteForJob(job, userId) {
-  if (!job || !['requested', 'en_route'].includes(job.status)) {
+  if (!job || !['requested', 'en_route', 'picked_up'].includes(job.status)) {
     clearRouteOnMap();
     return;
   }
@@ -969,7 +982,7 @@ const { data: activeJobs, error: activeJobsError } = await supabaseClient
   .from('jobs')
   .select('id')
   .eq('client_id', user.id)
-  .in('status', ['requested', 'en_route'])
+  .in('status', ['requested', 'en_route', 'picked_up'])
   .limit(1);
 
 if (activeJobsError) {
@@ -1121,7 +1134,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .from('jobs')
     .select('*')
     .eq('client_id', user.id)
-    .in('status', ['requested', 'en_route', 'completed', 'cancelled'])
+    .in('status', ['requested', 'en_route', 'picked_up', 'completed', 'cancelled'])
     .order('created_at', { ascending: false })
     .limit(1);
 
@@ -1163,7 +1176,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   }
   if (!jobs || jobs.length === 0) {
     const hadActiveService = state.active &&
-      ['requested', 'en_route'].includes(state.active.status);
+      ['requested', 'en_route', 'picked_up'].includes(state.active.status);
     state.active = null;
     updateLocationControls();
     // El sondeo del estado no debe borrar el borrador de una nueva solicitud.
@@ -1179,10 +1192,10 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
 
   const j = jobs[0];
 
-  const previousActive = state.active && ['requested', 'en_route'].includes(state.active.status);
+  const previousActive = state.active && ['requested', 'en_route', 'picked_up'].includes(state.active.status);
   state.active = j;
   updateLocationControls();
-  if (['requested', 'en_route'].includes(j.status)) await restoreRouteForJob(j, user.id);
+  if (['requested', 'en_route', 'picked_up'].includes(j.status)) await restoreRouteForJob(j, user.id);
   else if (previousActive) clearRouteOnMap();
   if (revision !== sessionRevision || logoutPending) return;
 
@@ -1191,6 +1204,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   jobStatusLabel(j.status)
 }</h3>
      <p>${j.origin} → ${j.destination}</p>
+     ${j.status === 'requested' && j.release_reason ? '<p class="muted">El fletero liberó el servicio. Buscando otro fletero. Motivo: ' + escapeText(j.release_reason) + '</p>' : ''}
      <p class="status-ok">
        ${money(j.price)} · ${j.service_type || 'Servicio'}
      </p>
@@ -1198,7 +1212,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
        Actualizar estado
      </button>
      ${j.status === 'requested' && !j.driver_id ? '<button id="clientCancelBtn" class="btn light" type="button" onclick="cancelClientRequest()">Cancelar solicitud</button>' : ''}`;
-   if (j.status === 'en_route') {
+   if (isDriverActiveStatus(j.status)) {
     startDriverTracking();
    } else {
     stopDriverTracking();
@@ -1271,7 +1285,7 @@ async function cancelClientRequest() {
  async function updateDriverTracking(){
   const activeJob = state.active;
 
-  if (!activeJob || activeJob.status !== 'en_route') {
+  if (!activeJob || !isDriverActiveStatus(activeJob.status)) {
     return;
   }
 
@@ -1279,12 +1293,13 @@ async function cancelClientRequest() {
     .from('driver_locations')
     .select('latitude, longitude, accuracy, updated_at')
     .eq('job_id', activeJob.id)
+    .eq('driver_id', activeJob.driver_id)
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   // Ignora respuestas pendientes de un servicio que ya terminó o cambió.
-  if (state.active?.id !== activeJob.id || state.active?.status !== 'en_route') return;
+  if (state.active?.id !== activeJob.id || !isDriverActiveStatus(state.active?.status)) return;
 
   const box = document.getElementById('driverTracking');
 
@@ -1358,7 +1373,7 @@ function advance(){
 
   renderClient();
 
-  if (j.status === 'en_route') {
+  if (isDriverActiveStatus(j.status)) {
     startDriverTracking();
   }
  }
@@ -1441,7 +1456,7 @@ function startDriverPanelRefresh(userId) {
       .from('jobs')
       .select('*')
       .eq('driver_id', user.id)
-      .eq('status', 'en_route')
+      .in('status', ['en_route','picked_up'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -1495,13 +1510,13 @@ function startDriverPanelRefresh(userId) {
         </p>
 
         <span class="pill">
-          🟢 ${activeJob.status === 'en_route' ? 'En ruta' : 'Aceptado'}
+          ${jobStatusLabel(activeJob.status)}
         </span>
         ${activeJob.status === 'en_route' ? `
-  <br><br>
-  <button class="btn" onclick="completeDriver()">
-    ✅ Completar servicio
-  </button>
+  <div class="location-actions"><button class="btn" type="button" onclick="markCargoPickedUp()">Carga recogida</button>
+  <button class="btn light" type="button" onclick="openDriverRelease()">Liberar antes de recoger</button></div>
+` : activeJob.status === 'picked_up' ? `
+  <br><br><button class="btn" type="button" onclick="completeDriver()">Completar servicio</button>
 ` : ''}
       </div>
       <br>
@@ -1611,7 +1626,7 @@ function startDriverPanelRefresh(userId) {
         <br><br>
 
         <button class="btn"
-          onclick='state.active = ${JSON.stringify(job)}; acceptDriver();'>
+          onclick="acceptAvailableJob('${job.id}')">
           🚚 Aceptar servicio
         </button>
       </div>`
@@ -1619,6 +1634,22 @@ function startDriverPanelRefresh(userId) {
   }
 
   e.innerHTML = html;
+  const { data: releasedJobs, error: releaseHistoryError } = await supabaseClient
+    .from('job_driver_releases').select('job_id, origin, destination, reason, created_at')
+    .eq('driver_id', user.id).order('created_at', { ascending: false }).limit(10);
+  if (revision !== sessionRevision || logoutPending) return;
+  const releasedBox = document.createElement('section');
+  releasedBox.className = 'card';
+  if (releaseHistoryError) {
+    releasedBox.textContent = 'No se pudo cargar el historial de servicios liberados.';
+  } else if (releasedJobs?.length) {
+    releasedBox.innerHTML = '<h3>Servicios liberados</h3><p class="muted">Liberados antes de recoger la carga. No generan pago al fletero.</p>' +
+      releasedJobs.map(item => '<div class="card"><strong>' + escapeText(item.origin) + ' → ' + escapeText(item.destination) +
+        '</strong><p>Motivo: ' + escapeText(item.reason) + '</p><p class="muted">' +
+        escapeText(new Date(item.created_at).toLocaleString('es-MX')) + '</p></div>').join('');
+  }
+  if (releaseHistoryError || releasedJobs?.length) e.appendChild(releasedBox);
+
 
  }                         
 // GPS del fletero: seguimiento exclusivo del servicio activo y de la sesión actual.
@@ -1642,7 +1673,7 @@ function stopFletyaGps() {
 async function syncFletyaGps(userId, activeJob) {
   const gps = document.getElementById('gps');
   if (!gps) return;
-  if (!activeJob || activeJob.status !== 'en_route') {
+  if (!activeJob || !isDriverActiveStatus(activeJob.status)) {
     stopFletyaGps();
     gps.textContent = 'Ubicación pendiente (sin servicio en ruta)';
     return;
@@ -1708,6 +1739,7 @@ function clearSignedOutView() {
   routeDraftRevision++;
   routeCalculationRevision++;
   closeLocationPicker();
+  closeDriverRelease();
   closeJobModal();
   stopFletyaGps();
   stopDriverTracking();
@@ -1775,6 +1807,11 @@ async function logoutSession() {
 async function logoutDriver(){
   return logoutSession();
 }
+async function acceptAvailableJob(jobId) {
+  if (isDriverActiveStatus(state.active?.status)) { toast('Completa o libera tu servicio actual antes de aceptar otro.'); return; }
+  state.active = { id: jobId, status: 'requested' };
+  return acceptDriver();
+}
 async function acceptDriver(){
   if(!state.active) return;
   const jobId = state.active.id;
@@ -1818,6 +1855,87 @@ const { data: acceptedJob, error } = await supabaseClient
 
   toast('Servicio aceptado correctamente.');
 }
+let driverTransitionPending = false;
+let driverReleaseJobId = null;
+let driverReleaseSessionRevision = 0;
+function openDriverRelease() {
+  if (activeSessionRole !== 'driver' || state.active?.status !== 'en_route' || logoutPending) return;
+  driverReleaseJobId = state.active.id;
+  driverReleaseSessionRevision = sessionRevision;
+  document.getElementById('driverReleaseReason').value = '';
+  document.getElementById('driverReleaseMessage').textContent = '';
+  document.getElementById('driverReleaseModal').classList.remove('hidden');
+  document.getElementById('appMain').inert = true;
+  document.getElementById('appHeader').inert = true;
+  document.getElementById('driverReleaseReason').focus?.();
+}
+function closeDriverRelease() {
+  driverReleaseJobId = null;
+  document.getElementById('driverReleaseModal').classList.add('hidden');
+  document.getElementById('driverReleaseReason').value = '';
+  document.getElementById('appMain').inert = false;
+  document.getElementById('appHeader').inert = false;
+}
+async function markCargoPickedUp() {
+  const jobId = state.active?.id;
+  if (!jobId || state.active.status !== 'en_route' || driverTransitionPending || logoutPending) return;
+  if (!window.confirm('¿Confirmas que ya recogiste la carga? Después de confirmar, este servicio deberá completarse y ya no podrá liberarse.')) return;
+  driverTransitionPending = true;
+  const revision = sessionRevision;
+  try {
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (revision !== sessionRevision || logoutPending) return;
+    if (authError || !user) { toast('Inicia sesión como fletero.'); return; }
+    const { data: job, error } = await supabaseClient.from('jobs').update({ status: 'picked_up' })
+      .eq('id', jobId).eq('driver_id', user.id).eq('status', 'en_route')
+      .select('id, status, driver_id').maybeSingle();
+    if (revision !== sessionRevision || logoutPending) return;
+    if (error || job?.id !== jobId || job?.status !== 'picked_up' || job?.driver_id !== user.id) {
+      toast('No se pudo confirmar la recogida. Actualizando estado…');
+      await renderDriver(); return;
+    }
+    state.active = job;
+    toast('Carga recogida. El seguimiento continúa hasta completar el servicio.');
+    await renderDriver();
+  } catch (error) {
+    if (revision === sessionRevision && !logoutPending) toast('No se pudo confirmar la recogida. Actualiza el panel para comprobar el estado.');
+  } finally { driverTransitionPending = false; }
+}
+async function releaseDriverJob() {
+  const jobId = driverReleaseJobId;
+  const reason = document.getElementById('driverReleaseReason').value.trim();
+  const message = document.getElementById('driverReleaseMessage');
+  if (!jobId || driverTransitionPending || logoutPending || driverReleaseSessionRevision !== sessionRevision) return;
+  if (reason.length < 10 || reason.length > 300) { message.textContent = 'Escribe un motivo de 10 a 300 caracteres.'; return; }
+  driverTransitionPending = true;
+  document.getElementById('driverReleaseConfirm').disabled = true;
+  const revision = sessionRevision;
+  try {
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (revision !== sessionRevision || logoutPending || driverReleaseJobId !== jobId) return;
+    if (authError || !user) { message.textContent = 'Inicia sesión como fletero.'; return; }
+    const { data: job, error } = await supabaseClient.from('jobs')
+      .update({ status: 'requested', driver_id: null, release_reason: reason })
+      .eq('id', jobId).eq('driver_id', user.id).eq('status', 'en_route').eq('driver_paid', false)
+      .select('id, status, driver_id').maybeSingle();
+    if (revision !== sessionRevision || logoutPending) return;
+    if (error || job?.id !== jobId || job?.status !== 'requested' || job?.driver_id != null) {
+      message.textContent = 'No se pudo confirmar la liberación. Cierra esta ventana y actualiza el panel para comprobar el estado.';
+      return;
+    }
+    closeDriverRelease();
+    stopFletyaGps();
+    state.active = null;
+    state.accepted = false;
+    toast('Servicio liberado. La solicitud vuelve a estar disponible.');
+    await renderDriver();
+  } catch (error) {
+    if (revision === sessionRevision && !logoutPending) message.textContent = 'Revisa la conexión y actualiza el panel para comprobar el estado del servicio.';
+  } finally {
+    driverTransitionPending = false;
+    document.getElementById('driverReleaseConfirm').disabled = false;
+  }
+}
   async function completeDriver(){
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
@@ -1832,7 +1950,7 @@ const { data: acceptedJob, error } = await supabaseClient
     .from('jobs')
     .select('id, status')
     .eq('driver_id', user.id)
-    .eq('status', 'en_route')
+    .eq('status', 'picked_up')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -1846,7 +1964,7 @@ const { data: acceptedJob, error } = await supabaseClient
   if(!activeJob){
     state.active = null;
     state.accepted = false;
-    toast('No se encontró un servicio en ruta para completar.');
+    toast('Primero confirma la recogida de la carga para completar el servicio.');
     await renderDriver();
     return;
   }
@@ -1856,7 +1974,7 @@ const { data: acceptedJob, error } = await supabaseClient
     .update({ status: 'completed' })
     .eq('id', activeJob.id)
     .eq('driver_id', user.id)
-    .eq('status', 'en_route')
+    .eq('status', 'picked_up')
     .select('id, status')
     .maybeSingle();
 
@@ -1893,7 +2011,7 @@ async function driverLocation(){
       .from('jobs')
       .select('id')
       .eq('driver_id', user.id)
-      .eq('status', 'en_route')
+      .in('status', ['en_route','picked_up'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -2284,7 +2402,7 @@ const filteredServices = services.filter(job => {
     services.filter(job => job.status === 'requested').length;
 
   document.getElementById('enRouteCount').textContent =
-    services.filter(job => job.status === 'en_route').length;
+    services.filter(job => isDriverActiveStatus(job.status)).length;
 
   document.getElementById('completedCount').textContent =
     services.filter(job => job.status === 'completed').length;
@@ -2371,7 +2489,7 @@ const requestedCount = services.filter(
 ).length;
 
 const enRouteCount = services.filter(
-  job => job.status === 'en_route'
+  job => isDriverActiveStatus(job.status)
 ).length;
 
 const completedCount = services.filter(
@@ -2515,6 +2633,22 @@ if (job.status === 'completed' && job.driver_paid === false && job.driver_id) {
 }
 }
 document.getElementById('jobModalContent').appendChild(paymentBox);
+if (job.release_reason) {
+ const { data: releases, error: releasesError } = await supabaseClient.from('job_driver_releases')
+  .select('driver_id, reason, created_at').eq('job_id', job.id).order('created_at', { ascending: false });
+ if (revision !== sessionRevision || detailsRevision !== jobDetailsRevision || logoutPending) return;
+ const audit = document.createElement('div');
+ audit.className = 'card';
+ audit.innerHTML = '<h3>Historial de liberaciones</h3>';
+ if (releasesError) audit.textContent = 'No se pudo cargar el historial de liberaciones.';
+ else for (const item of releases || []) {
+  const entry = document.createElement('p');
+  entry.textContent = (profiles?.find(p=>p.id===item.driver_id)?.full_name || 'Fletero') +
+   ' · ' + new Date(item.created_at).toLocaleString('es-MX') + ' · ' + item.reason;
+  audit.appendChild(entry);
+ }
+ document.getElementById('jobModalContent').appendChild(audit);
+}
 document.getElementById('jobModal').classList.remove('hidden');
   }
   function closeJobModal(){
