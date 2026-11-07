@@ -86,6 +86,8 @@ end $$;
 -- Fletero can write GPS only for their own active job.
 insert into public.driver_locations(driver_id,job_id,latitude,longitude)
 values (auth.uid(),'40000000-0000-0000-0000-000000000004',19.4,-99.1);
+update public.jobs set status='picked_up' where id='40000000-0000-0000-0000-000000000004';
+update public.driver_locations set latitude=19.41 where driver_id=auth.uid();
 update public.jobs set status='completed' where id='40000000-0000-0000-0000-000000000004';
 reset role;
 

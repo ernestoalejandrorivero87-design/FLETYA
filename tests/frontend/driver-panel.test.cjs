@@ -183,7 +183,7 @@ test('acceptance captures the selected job before awaiting authentication', asyn
 });
 
 test('completion uses the database job despite stale local state and stops GPS', async () => {
-  const r = runtime([{ data: { id: 'live-job', status: 'en_route' } },
+  const r = runtime([{ data: { id: 'live-job', status: 'picked_up' } },
     { data: { id: 'live-job', status: 'completed' } }]);
   r.run("state.active={id:'stale-job'}; state.accepted=true; fletyaGpsWatch=0; renderDriver=async()=>{};");
   await r.run('completeDriver()');
@@ -191,12 +191,12 @@ test('completion uses the database job despite stale local state and stops GPS',
   assert.equal(r.run('state.accepted'), false);
   assert.deepEqual(r.clearedWatches, [0]);
   const filters = r.queries[1].calls.filter(call => call[0] === 'eq');
-  assert.deepEqual(filters, [['eq', 'id', 'live-job'], ['eq', 'driver_id', 'driver-1'], ['eq', 'status', 'en_route']]);
+  assert.deepEqual(filters, [['eq', 'id', 'live-job'], ['eq', 'driver_id', 'driver-1'], ['eq', 'status', 'picked_up']]);
   assert.ok(r.messages.some(message => message.includes('completado correctamente')));
 });
 
 test('zero-row completion reports failure rather than a false success', async () => {
-  const r = runtime([{ data: { id: 'live-job', status: 'en_route' } }, { data: null }]);
+  const r = runtime([{ data: { id: 'live-job', status: 'picked_up' } }, { data: null }]);
   r.run('refreshes=0; renderDriver=async()=>{refreshes++}; fletyaGpsWatch=7;');
   await r.run('completeDriver()');
   assert.equal(r.run('refreshes'), 1);
@@ -264,7 +264,7 @@ test('render restores the active job, keeps history and starts automatic GPS', a
     { data: { role: 'driver', full_name: 'Driver' } },
     { data: { id: 'live-job', status: 'en_route', price: 100, origin: 'A', destination: 'B' } },
     { data: [{ id: 'old-job', status: 'completed', price: 50, origin: 'History A', destination: 'History B' }] },
-    { data: [] }
+    { data: [] }, {data:[]} 
   ]);
   r.run('startDriverNotifications=()=>{}; syncFletyaGps=async(user,job)=>{restoredGps=job.id}');
   await r.run('renderDriver()');
@@ -790,4 +790,65 @@ test('cancelled services are excluded from admin financial amounts and counted s
  assert.equal(r.document.getElementById('reportJobs').textContent,2);
  assert.equal(r.document.getElementById('cancelledCount').textContent,1);
  assert.match(r.document.getElementById('adminTable').innerHTML,/Cancelado/);
+});
+
+function releaseRuntime(responses=[], status='en_route') {
+ const r=runtime(responses);
+ r.context.window={confirm:()=>true};
+ r.run(`activeSessionRole='driver';state.active={id:'release-job',status:'${status}',driver_id:'driver-1'};refreshes=0;gpsStops=0;renderDriver=async()=>{refreshes++};stopFletyaGps=()=>{gpsStops++};`);
+ r.run('openDriverRelease()');
+ r.document.getElementById('driverReleaseReason').value='  Vehicle needs a repair  ';
+ return r;
+}
+test('release returns only the selected own pre-pickup job to the pool and stops GPS',async()=>{
+ const r=releaseRuntime([{data:{id:'release-job',status:'requested',driver_id:null}}]);
+ await r.run('releaseDriverJob()');
+ const q=r.queries[0];
+ assert.deepEqual(JSON.parse(JSON.stringify(q.calls.find(c=>c[0]==='update')[1])),{status:'requested',driver_id:null,release_reason:'Vehicle needs a repair'});
+ assert.deepEqual(q.calls.filter(c=>c[0]==='eq'),[['eq','id','release-job'],['eq','driver_id','driver-1'],['eq','status','en_route'],['eq','driver_paid',false]]);
+ assert.equal(r.run('state.active'),null);assert.equal(r.run('gpsStops'),1);assert.equal(r.run('refreshes'),1);
+ assert.equal(r.document.getElementById('driverReleaseModal').classList.contains('hidden'),true);
+});
+test('release rejects short reasons, cancellation and cargo already picked up without a write',async()=>{
+ for(const scenario of ['short','cancel','picked_up']){
+  const r=releaseRuntime([],scenario==='picked_up'?'picked_up':'en_route');
+  if(scenario==='short')r.document.getElementById('driverReleaseReason').value='short';
+  if(scenario==='cancel')r.run('closeDriverRelease()');
+  await r.run('releaseDriverJob()');
+  assert.equal(r.queries.length,0);assert.equal(r.run('gpsStops'),0);
+ }
+});
+test('a failed or zero-row release preserves active job and GPS without false success',async()=>{
+ for(const result of [{data:null},{data:null,error:{message:'denied'}}]){
+  const r=releaseRuntime([result]);await r.run('releaseDriverJob()');
+  assert.equal(r.run('state.active.id'),'release-job');assert.equal(r.run('gpsStops'),0);
+  assert.match(r.document.getElementById('driverReleaseMessage').textContent,/No se pudo/);
+  assert.equal(r.messages.length,0);
+ }
+});
+test('pickup updates only an assigned en-route job after confirmation and preserves GPS',async()=>{
+ const r=releaseRuntime([{data:{id:'release-job',status:'picked_up',driver_id:'driver-1'}}]);
+ r.run('closeDriverRelease()');await r.run('markCargoPickedUp()');
+ assert.deepEqual(r.queries[0].calls.filter(c=>c[0]==='eq'),[['eq','id','release-job'],['eq','driver_id','driver-1'],['eq','status','en_route']]);
+ assert.equal(r.run('state.active.status'),'picked_up');assert.equal(r.run('gpsStops'),0);
+ r.run('openDriverRelease()');assert.equal(r.run('driverReleaseJobId'),null);
+});
+test('declining pickup sends no mutation',async()=>{
+ const r=releaseRuntime();r.context.window.confirm=()=>false;
+ await r.run('markCargoPickedUp()');assert.equal(r.queries.length,0);
+});
+test('double release taps cannot start two updates',async()=>{
+ const r=releaseRuntime([{data:{id:'release-job',status:'requested',driver_id:null}}]);
+ let finish;r.api.auth.getUser=()=>new Promise(resolve=>{finish=resolve});
+ const pending=r.run('releaseDriverJob()');await r.run('releaseDriverJob()');
+ finish({data:{user:{id:'driver-1'}}});await pending;assert.equal(r.queries.length,1);
+});
+test('signout during release authentication prevents a write',async()=>{
+ const r=releaseRuntime();let finish;r.api.auth.getUser=()=>new Promise(resolve=>{finish=resolve});
+ const pending=r.run('releaseDriverJob()');r.run('clearSignedOutView()');
+ finish({data:{user:{id:'driver-1'}}});await pending;
+ assert.equal(r.queries.length,0);assert.equal(r.run('driverReleaseJobId'),null);
+});
+test('release reason rendering escapes markup and apostrophes',()=>{
+ const r=runtime();assert.equal(r.run(`escapeText("<script>'&</script>")`),'&lt;script&gt;&#39;&amp;&lt;/script&gt;');
 });
