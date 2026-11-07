@@ -82,5 +82,11 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018003000_guard_job_update_columns.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018004000_restrict_table_privileges.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261022090000_move_is_admin_to_private_schema.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107015407_allow_client_requested_job_cancellation.sql
       - name: Run security regression checks
         run: psql -v ON_ERROR_STOP=1 -f tests/security/integration.sql
+
+      - name: Check client cancellation permissions and state transitions
+        run: psql -v ON_ERROR_STOP=1 -f tests/security/client-cancellation.sql
+      - name: Check simultaneous cancellation and acceptance
+        run: node tests/security/cancellation-race.mjs

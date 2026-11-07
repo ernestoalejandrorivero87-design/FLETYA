@@ -692,3 +692,102 @@ test('signout removes selected coordinates and ignores an outstanding client GPS
   assert.equal(r.document.getElementById('km').value,'');
   assert.equal(r.document.getElementById('locationPickerModal').classList.contains('hidden'),true);
 });
+
+const requestedForCancellation = { id:'cancel-job', client_id:'driver-1', driver_id:null,
+  status:'requested', origin:'A', destination:'B', price:400 };
+function cancellationRuntime(responses, confirmed=true) {
+ const r=runtime(responses); r.confirmations=[];
+ r.context.window={confirm:message=>{r.confirmations.push(message);return confirmed;}};
+ r.run("activeSessionRole='client';state.active="+JSON.stringify(requestedForCancellation)+";refreshes=0;renderClient=async()=>{refreshes++};");
+ return r;
+}
+test('client cancellation requires confirmation and updates only the selected own unassigned request', async () => {
+ const r=cancellationRuntime([{data:{role:'client'}},{data:requestedForCancellation},
+  {data:{id:'cancel-job',status:'cancelled',client_id:'driver-1',driver_id:null}}]);
+ await r.run('cancelClientRequest()');
+ const update=r.queries.find(q=>q.calls.some(c=>c[0]==='update'));
+ assert.deepEqual(JSON.parse(JSON.stringify(update.calls.find(c=>c[0]==='update')[1])),{status:'cancelled'});
+ assert.deepEqual(update.calls.filter(c=>['eq','is'].includes(c[0])),[
+  ['eq','id','cancel-job'],['eq','client_id','driver-1'],['eq','status','requested'],['is','driver_id',null]
+ ]);
+ assert.equal(r.confirmations.length,1);
+ assert.equal(r.run('state.active.status'),'cancelled');
+ assert.equal(r.document.getElementById('originMapBtn').disabled,false);
+ assert.equal(r.document.getElementById('origin').value,'');
+ assert.ok(r.messages.includes('Solicitud cancelada.'));
+});
+test('declining cancellation sends no update and preserves the active request', async () => {
+ const r=cancellationRuntime([{data:{role:'client'}},{data:requestedForCancellation}],false);
+ await r.run('cancelClientRequest()');
+ assert.equal(r.queries.length,2);
+ assert.equal(r.run('state.active.status'),'requested');
+ assert.equal(r.run('refreshes'),0);
+});
+test('acceptance race or failed cancellation cannot report false success', async () => {
+ for (const result of [{data:null},{data:null,error:{message:'denied'}}]) {
+  const r=cancellationRuntime([{data:{role:'client'}},{data:requestedForCancellation},result]);
+  await r.run('cancelClientRequest()');
+  assert.ok(!r.messages.includes('Solicitud cancelada.'));
+  assert.equal(r.run('refreshes'),1);
+  assert.equal(r.run('state.active.status'),'requested');
+ }
+});
+test('a request already accepted on the server cannot reach cancellation confirmation', async () => {
+ const r=cancellationRuntime([{data:{role:'client'}},{data:{...requestedForCancellation,status:'en_route',driver_id:'driver-2'}}]);
+ await r.run('cancelClientRequest()');
+ assert.equal(r.confirmations.length,0);
+ assert.equal(r.queries.length,2);
+ assert.equal(r.run('refreshes'),1);
+});
+test('non-client accounts and non-requested jobs cannot use client cancellation', async () => {
+ for (const role of ['driver','admin']) {
+  const r=cancellationRuntime([{data:{role}}]);
+  await r.run('cancelClientRequest()');
+  assert.equal(r.confirmations.length,0);
+  assert.equal(r.queries.length,1);
+ }
+ for (const status of ['en_route','completed','cancelled']) {
+  const r=cancellationRuntime([]);r.run("state.active.status='"+status+"'");
+  await r.run('cancelClientRequest()');assert.equal(r.queries.length,0);
+ }
+});
+test('double cancellation taps start only one validation', async () => {
+ const r=cancellationRuntime([{data:{role:'client'}},{data:requestedForCancellation}],false);
+ let finish;r.api.auth.getUser=()=>new Promise(resolve=>{finish=resolve});
+ const pending=r.run('cancelClientRequest()');await r.run('cancelClientRequest()');
+ finish({data:{user:{id:'driver-1'}}});await pending;
+ assert.equal(r.confirmations.length,1);
+ assert.equal(r.run('clientCancellationPending'),false);
+});
+test('signout during cancellation validation prevents any mutation', async () => {
+ const r=cancellationRuntime([]);let finish;
+ r.api.auth.getUser=()=>new Promise(resolve=>{finish=resolve});
+ const pending=r.run('cancelClientRequest()');r.run('clearSignedOutView()');
+ finish({data:{user:{id:'driver-1'}}});await pending;
+ assert.equal(r.queries.length,0);assert.equal(r.confirmations.length,0);
+});
+test('client history includes cancelled requests and offers cancellation only before acceptance', async () => {
+ for (const status of ['requested','en_route','completed','cancelled']) {
+  const job={...requestedForCancellation,status};
+  const r=runtime([{data:{role:'client'}},{data:{}},{data:[job]},{data:[job]}]);
+  r.run("activeSessionRole='client';restoreRouteForJob=async()=>{};startDriverTracking=()=>{};");
+  await r.run('renderClient()');
+  assert.equal(r.document.getElementById('clientStatus').innerHTML.includes('Cancelar solicitud'),status==='requested');
+  if(status==='cancelled')assert.match(r.document.getElementById('clientHistory').innerHTML,/Cancelado/);
+  assert.ok(r.queries.some(q=>q.calls.some(c=>c[0]==='in'&&c[2].includes('cancelled'))));
+ }
+});
+test('cancelled services are excluded from admin financial amounts and counted separately', async () => {
+ const jobs=[{id:'cancelled',status:'cancelled',price:100,created_at:new Date().toISOString()},
+  {id:'completed',status:'completed',price:200,driver_id:'driver-1',created_at:new Date().toISOString()},
+  {id:'requested',status:'requested',price:300,created_at:new Date().toISOString()}];
+ const r=runtime([{data:{role:'admin'}},{data:jobs},{data:[{id:'driver-1',role:'driver',full_name:'Driver'}]},{data:[]}]);
+ for(const id of ['adminSearch','adminUsersSearch','adminStatusFilter'])r.document.getElementById(id).value='';
+ r.document.getElementById('adminReportPeriod').value='all';
+ await r.run('renderAdmin()');
+ assert.equal(r.document.getElementById('sales').textContent,r.run('money(500)'));
+ assert.equal(r.document.getElementById('reportSales').textContent,r.run('money(500)'));
+ assert.equal(r.document.getElementById('reportJobs').textContent,2);
+ assert.equal(r.document.getElementById('cancelledCount').textContent,1);
+ assert.match(r.document.getElementById('adminTable').innerHTML,/Cancelado/);
+});

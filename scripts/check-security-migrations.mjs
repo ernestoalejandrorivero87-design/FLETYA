@@ -9,12 +9,18 @@ const files = {
   jobs: 'supabase/migrations/20261018003000_guard_job_update_columns.sql',
   grants: 'supabase/migrations/20261018004000_restrict_table_privileges.sql',
   privateAdmin: 'supabase/migrations/20261022090000_move_is_admin_to_private_schema.sql',
+  cancellation: 'supabase/migrations/20261107015407_allow_client_requested_job_cancellation.sql',
 };
 const sql = Object.fromEntries(
   Object.entries(files).map(([key, path]) => [key, readFileSync(join(root, path), 'utf8')])
 );
 
 const checks = [
+  ['client cancellation RLS checks owner, role and both row states', /create policy "Clients can cancel unassigned requests"/i.test(sql.cancellation) && /using\s*\([\s\S]*status = 'requested'/i.test(sql.cancellation) && /with check\s*\([\s\S]*status = 'cancelled'/i.test(sql.cancellation) && /client_id = \(select auth.uid\(\)\)/i.test(sql.cancellation) && /p.role = 'client'/i.test(sql.cancellation)],
+  ['cancellation trigger permits only the status column to change', /to_jsonb\(new\) - 'status'/i.test(sql.cancellation) && /old.driver_id is not null/i.test(sql.cancellation) && /new.status is distinct from 'cancelled'/i.test(sql.cancellation)],
+  ['cancellation keeps existing function execution restricted', /revoke all on function public.guard_job_updates\(\) from public, anon, authenticated/i.test(sql.cancellation) && /private.is_admin\(\)/i.test(sql.cancellation)],
+  ['cancellation migration does not modify job records', /jobs_before is distinct from/i.test(sql.cancellation) && !/update public.jobs set/i.test(sql.cancellation)],
+
   ['signup metadata cannot assign admin', /when new\.raw_user_meta_data ->> 'role' = 'driver' then 'driver'\s+else 'client'/i.test(sql.profiles)],
   ['profile role changes are guarded', /before insert or update of role on public\.profiles/i.test(sql.profiles)],
   ['clients can only create their own requested jobs', /auth\.uid\(\) = client_id/i.test(sql.rls) && /p\.role = 'client'/i.test(sql.rls) && /driver_id is null/i.test(sql.rls)],
