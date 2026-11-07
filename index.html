@@ -215,6 +215,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
  <div class="card"><h3>🟡 Solicitados</h3><div class="price" id="requestedCount">0</div><span class="muted">servicios pendientes</span></div>
 <div class="card"><h3>🔵 En camino</h3><div class="price" id="enRouteCount">0</div><span class="muted">servicios activos</span></div>
 <div class="card"><h3>🟢 Completados</h3><div class="price" id="completedCount">0</div><span class="muted">servicios terminados</span></div>
+<div class="card"><h3>⚪ Cancelados</h3><div class="price" id="cancelledCount">0</div><span class="muted">solicitudes canceladas</span></div>
  <div class="card"><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">ventas realizadas</span></div>
 
 <div class="card"><h3>🚚 Servicios del mes</h3><div class="price" id="monthlyJobs">0</div><span class="muted">servicios registrados</span></div>
@@ -223,7 +224,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 </div>
  <div class="card" style="margin-top:18px">
   <h2>📊 Reporte financiero</h2>
-  <p class="muted">Consulta el rendimiento de FLETYA por período.</p>
+  <p class="muted">Consulta el rendimiento de FLETYA por período. Los importes excluyen solicitudes canceladas.</p>
 <p class="muted" id="reportPeriodLabel">📅 Período: Este mes</p>
   <select
     id="adminReportPeriod"
@@ -273,6 +274,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
       <strong>🟢 Completados</strong>
       <div class="price" id="summaryCompleted">0</div>
     </div>
+    <div><strong>⚪ Cancelados</strong><div class="price" id="summaryCancelled">0</div></div>
   </div>
   </div>
  </div>
@@ -293,6 +295,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
   <option value="requested">Solicitado</option>
   <option value="en_route">En camino</option>
   <option value="completed">Completado</option>
+  <option value="cancelled">Cancelado</option>
  </select>
   <div id="adminTable"></div></div>
  <div class="card" style="margin-top:18px">
@@ -373,6 +376,9 @@ let activeSessionRole = null;
 let selectedAccessRole = 'client';
 const roleTitles = { client: 'Cliente', driver: 'Fletero', admin: 'Administrador' };
 const rate={pickup:35,camioneta:45,camion:65};
+function jobStatusLabel(status) {
+ return {requested:'🟡 Solicitado',en_route:'🔵 En camino',completed:'🟢 Completado',cancelled:'⚪ Cancelado'}[status] || status || 'Sin estado';
+}
 function money(n){return n.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0})}
 function money2(n){return (Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function quote(){
@@ -1115,7 +1121,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .from('jobs')
     .select('*')
     .eq('client_id', user.id)
-    .in('status', ['requested', 'en_route', 'completed'])
+    .in('status', ['requested', 'en_route', 'completed', 'cancelled'])
     .order('created_at', { ascending: false })
     .limit(1);
 
@@ -1147,10 +1153,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
             <p>${money(Number(job.price || 0))}</p>
             <p class="muted">
               ${
-  job.status === 'requested' ? '🟡 Solicitado' :
-  job.status === 'en_route' ? '🔵 En camino' :
-  job.status === 'completed' ? '🟢 Completado' :
-  job.status || 'Sin estado'
+  jobStatusLabel(job.status)
               }
               · ${new Date(job.created_at).toLocaleDateString('es-MX')}
             </p>
@@ -1185,10 +1188,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
 
   document.getElementById('clientStatus').innerHTML =
     `<h3>${
-  j.status === 'requested' ? '🟡 Solicitado' :
-  j.status === 'en_route' ? '🔵 En camino' :
-  j.status === 'completed' ? '🟢 Completado' :
-  j.status
+  jobStatusLabel(j.status)
 }</h3>
      <p>${j.origin} → ${j.destination}</p>
      <p class="status-ok">
@@ -1196,12 +1196,77 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
      </p>
      <button class="btn light" onclick="renderClient()">
        Actualizar estado
-     </button>`;
+     </button>
+     ${j.status === 'requested' && !j.driver_id ? '<button id="clientCancelBtn" class="btn light" type="button" onclick="cancelClientRequest()">Cancelar solicitud</button>' : ''}`;
    if (j.status === 'en_route') {
     startDriverTracking();
    } else {
     stopDriverTracking();
    }
+}
+let clientCancellationPending = false;
+async function cancelClientRequest() {
+  const jobId = state.active?.id;
+  if (!jobId || state.active.status !== 'requested' || state.active.driver_id ||
+      clientCancellationPending || logoutPending) return;
+  clientCancellationPending = true;
+  const revision = sessionRevision;
+  const button = document.getElementById('clientCancelBtn');
+  if (button) button.disabled = true;
+  try {
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (revision !== sessionRevision || logoutPending) return;
+    if (authError || !user) { toast('Inicia sesión como cliente para cancelar.'); return; }
+    const { data: profile, error: profileError } = await supabaseClient.from('profiles')
+      .select('role').eq('id', user.id).maybeSingle();
+    if (revision !== sessionRevision || logoutPending) return;
+    if (profileError || profile?.role !== 'client') { toast('Solo el cliente puede cancelar su solicitud.'); return; }
+    const { data: job, error: jobError } = await supabaseClient.from('jobs')
+      .select('id, origin, destination, status, driver_id, client_id')
+      .eq('id', jobId).eq('client_id', user.id).maybeSingle();
+    if (revision !== sessionRevision || logoutPending) return;
+    if (jobError) { toast('No se pudo comprobar la solicitud. Inténtalo de nuevo.'); return; }
+    if (!job || job.status !== 'requested' || job.driver_id || job.client_id !== user.id) {
+      toast('La solicitud ya no está disponible para cancelar. Actualizando estado…');
+      await renderClient(); return;
+    }
+    if (!window.confirm('¿Cancelar esta solicitud?\n\n' + job.origin + ' → ' + job.destination +
+      '\n\nSolo se puede cancelar antes de que un fletero la acepte. Quedará en tu historial como Cancelado.')) return;
+    if (revision !== sessionRevision || logoutPending || state.active?.id !== jobId) return;
+    const { data: cancelled, error } = await supabaseClient.from('jobs')
+      .update({ status: 'cancelled' })
+      .eq('id', jobId).eq('client_id', user.id)
+      .eq('status', 'requested').is('driver_id', null)
+      .select('id, status, driver_id, client_id').maybeSingle();
+    if (revision !== sessionRevision || logoutPending) return;
+    if (error || cancelled?.id !== jobId || cancelled?.status !== 'cancelled' ||
+        cancelled?.driver_id != null || cancelled?.client_id !== user.id) {
+      toast(error ? 'No se pudo confirmar la cancelación. Actualizando estado…'
+        : 'La solicitud cambió; puede haber sido aceptada. Actualizando estado…');
+      await renderClient(); return;
+    }
+    state.active = cancelled;
+    state.accepted = false;
+    routeDraftRevision++;
+    routeCalculationRevision++;
+    closeLocationPicker();
+    clearRouteOnMap();
+    for (const id of ['origin', 'dest', 'km']) document.getElementById(id).value = '';
+    quote();
+    updateLocationControls();
+    document.getElementById('locationFeedback').textContent = 'Solicitud cancelada. Puedes elegir otra ruta.';
+    toast('Solicitud cancelada.');
+    try { await renderClient(); }
+    catch { toast('Solicitud cancelada. Recarga para actualizar el historial.'); }
+  } catch (error) {
+    console.error('Error cancelando solicitud:', error);
+    if (revision === sessionRevision && !logoutPending) {
+      toast('No se pudo confirmar la cancelación. Actualiza el estado antes de intentar otra vez.');
+    }
+  } finally {
+    clientCancellationPending = false;
+    if (button) button.disabled = false;
+  }
 }
  async function updateDriverTracking(){
   const activeJob = state.active;
@@ -2091,7 +2156,8 @@ const filteredServices = services.filter(job => {
   )
 );
 });
-  const sales = services.reduce(
+  const billableServices = services.filter(job => job.status !== 'cancelled');
+  const sales = billableServices.reduce(
     (total, job) => total + Number(job.price || 0),
     0
   );
@@ -2226,7 +2292,7 @@ const filteredServices = services.filter(job => {
 const now = new Date();
 const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-const monthlyServices = services.filter(job =>
+const monthlyServices = billableServices.filter(job =>
   new Date(job.created_at) >= startOfMonth
 );
 
@@ -2248,12 +2314,12 @@ if (reportPeriodLabel) {
     reportPeriod === 'month' ? '📅 Período: Este mes' :
     '📅 Período: Todo el tiempo';
 }
-let reportServices = services;
+let reportServices = billableServices;
 
 const nowReport = new Date();
 
 if (reportPeriod === 'today') {
-  reportServices = services.filter(job => {
+  reportServices = billableServices.filter(job => {
     const d = new Date(job.created_at);
     return d.toDateString() === nowReport.toDateString();
   });
@@ -2263,7 +2329,7 @@ if (reportPeriod === 'week') {
   const startWeek = new Date(nowReport);
   startWeek.setDate(nowReport.getDate() - 7);
 
-  reportServices = services.filter(job =>
+  reportServices = billableServices.filter(job =>
     new Date(job.created_at) >= startWeek
   );
 }
@@ -2275,7 +2341,7 @@ if (reportPeriod === 'month') {
     1
   );
 
-  reportServices = services.filter(job =>
+  reportServices = billableServices.filter(job =>
     new Date(job.created_at) >= startMonth
   );
 }
@@ -2311,6 +2377,9 @@ const enRouteCount = services.filter(
 const completedCount = services.filter(
   job => job.status === 'completed'
 ).length;
+const cancelledCount = services.filter(job => job.status === 'cancelled').length;
+document.getElementById('cancelledCount').textContent = cancelledCount;
+document.getElementById('summaryCancelled').textContent = cancelledCount;
 
 document.getElementById('requestedCount').textContent =
   requestedCount;
@@ -2366,10 +2435,7 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
               <td>${job.service_type || 'Sin especificar'}</td>
               <td>${money(Number(job.price || 0))}</td>
               <td>${
-  job.status === 'requested' ? '🟡 Solicitado' :
-  job.status === 'en_route' ? '🔵 En camino' :
-  job.status === 'completed' ? '🟢 Completado' :
-  job.status || 'Sin estado'
+  jobStatusLabel(job.status)
 }</td>
   <td>
   <button onclick="viewJob('${job.id}')">Ver</button>
@@ -2419,10 +2485,7 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
   <p><strong>👷 Ayudantes:</strong> ${job.helpers || 0}</p>
   <p><strong>💰 Precio:</strong> $${Number(job.price || 0).toLocaleString('es-MX')}</p>
   <p><strong>🔵 Estado:</strong> ${
-  job.status === 'requested' ? '🟡 Solicitado' :
-  job.status === 'en_route' ? '🔵 En camino' :
-  job.status === 'completed' ? '🟢 Completado' :
-  job.status || 'Sin estado'
+  jobStatusLabel(job.status)
 }</p>
 `;
 
@@ -2430,9 +2493,10 @@ const payment = driverPaymentFor(job);
 const paymentBox = document.createElement('div');
 paymentBox.className = 'card';
 const paymentStatus = document.createElement('p');
-paymentStatus.textContent = 'Pago al fletero: ' +
-  (job.driver_paid === true ? 'Registrado' : 'Pendiente');
+paymentStatus.textContent = job.status === 'cancelled' ? 'Pago al fletero: No corresponde (servicio cancelado)'
+  : 'Pago al fletero: ' + (job.driver_paid === true ? 'Registrado' : 'Pendiente');
 paymentBox.appendChild(paymentStatus);
+if (job.status !== 'cancelled') {
 const amounts = document.createElement('p');
 amounts.textContent = 'Comisión FLETYA (15% demo): $' + money2(payment.commission) +
   ' MXN · Neto del fletero: $' + money2(payment.net) + ' MXN';
@@ -2448,6 +2512,7 @@ if (job.status === 'completed' && job.driver_paid === false && job.driver_id) {
   button.textContent = 'Registrar pago de este servicio';
   button.onclick = () => markJobPaid(job.id);
   paymentBox.appendChild(button);
+}
 }
 document.getElementById('jobModalContent').appendChild(paymentBox);
 document.getElementById('jobModal').classList.remove('hidden');
