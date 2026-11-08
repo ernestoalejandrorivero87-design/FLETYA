@@ -30,6 +30,8 @@ function runtime(responses = []) {
         toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); }
       },
       appendChild(child) { this.children.push(child); },
+      append(...children) { this.children.push(...children); },
+      replaceChildren(...children) { this.children=[...children]; },
       scrollIntoView() {}
     };
   }
@@ -48,7 +50,7 @@ function runtime(responses = []) {
       const result = responses.shift();
       assert.ok(result, 'Unexpected database call: ' + table);
       const builder = {};
-      for (const method of ['select', 'eq', 'in', 'is', 'order', 'limit', 'update']) {
+      for (const method of ['select', 'eq', 'in', 'is', 'order', 'limit', 'range', 'update']) {
         builder[method] = (...args) => { entry.calls.push([method, ...args]); return builder; };
       }
       builder.single = builder.maybeSingle = async () => result;
@@ -271,7 +273,7 @@ test('render restores the active job, keeps history and starts automatic GPS', a
   assert.equal(r.run('state.active.id'), 'live-job');
   assert.equal(r.run('state.accepted'), true);
   assert.equal(r.run('restoredGps'), 'live-job');
-  assert.match(r.document.getElementById('jobCard').innerHTML, /History A/);
+  assert.match(r.document.getElementById('driverHistory').innerHTML, /History A/);
   assert.equal(r.intervals.size, 2);
 });
 
@@ -851,4 +853,75 @@ test('signout during release authentication prevents a write',async()=>{
 });
 test('release reason rendering escapes markup and apostrophes',()=>{
  const r=runtime();assert.equal(r.run(`escapeText("<script>'&</script>")`),'&lt;script&gt;&#39;&amp;&lt;/script&gt;');
+});
+
+test('driver working area precedes collapsed profile, recent notifications and history',()=>{
+ const section=html.slice(html.indexOf('<section id="driver"'),html.indexOf('<section id="admin"'));
+ const ids=['jobCard','driverProfile','driverNotifications','driverHistory','driverReleases'];
+ for(let i=1;i<ids.length;i++)assert.ok(section.indexOf('id="'+ids[i-1]+'"')<section.indexOf('id="'+ids[i]+'"'));
+ assert.match(section,/<details[^>]*id="driverProfile"/);assert.match(section,/<details[^>]*id="driverReleases"/);
+ for(const id of ['adminAccountsPager','adminUsersPager','adminServicesPager'])assert.ok(html.includes('id="'+id+'"'));
+});
+test('notifications show three records and retain older records through bounded pages',async()=>{
+ const notices=Array.from({length:4},(_,i)=>({id:'n'+i,title:'Notice '+i,message:'Body'}));
+ const r=runtime([{data:[{id:'request'}]},{data:notices}]);
+ await r.run("loadDriverNotifications('driver-1')");
+ assert.equal(r.document.getElementById('driverNotifications').children.length,3);
+ assert.match(r.document.getElementById('notificationsPager').innerHTML,/Ver más/);
+ assert.deepEqual(r.queries[1].calls.find(c=>c[0]==='range'),['range',0,3]);
+});
+test('driver histories are queried per owner in groups of five and keep work card separate',async()=>{
+ const jobs=Array.from({length:6},(_,i)=>({id:'h'+i,origin:'History '+i,price:400,status:'completed'}));
+ const r=runtime([{data:{role:'driver'}},{data:null},{data:jobs},{data:[]},{data:[]}]);
+ r.run("activeSessionRole='driver';startDriverNotifications=()=>{};syncFletyaGps=async()=>{};panelPages.driverHistory=1;");
+ await r.run('renderDriver()');
+ assert.deepEqual(r.queries[2].calls.find(c=>c[0]==='range'),['range',5,10]);
+ assert.ok(r.queries[2].calls.some(c=>c[0]==='eq'&&c[1]==='driver_id'&&c[2]==='driver-1'));
+ const history=r.document.getElementById('driverHistory').innerHTML;
+ assert.match(history,/History 4/);assert.doesNotMatch(history,/History 5/);assert.match(history,/Página 2/);
+ assert.doesNotMatch(r.document.getElementById('jobCard').innerHTML,/History/);
+});
+test('client history retrieves five records plus a lookahead and leaves draft fields intact',async()=>{
+ const jobs=Array.from({length:6},(_,i)=>({id:'c'+i,origin:'Client '+i,price:100,status:'completed'}));
+ const r=runtime([{data:{role:'client'}},{data:{}},{data:[jobs[0]]},{data:jobs}]);
+ r.document.getElementById('origin').value='My draft';
+ await r.run('renderClient()');
+ const history=r.document.getElementById('clientHistory').innerHTML;
+ assert.match(history,/Client 4/);assert.doesNotMatch(history,/Client 5/);assert.match(history,/Ver más/);
+ assert.deepEqual(r.queries[3].calls.find(c=>c[0]==='range'),['range',0,5]);
+ assert.equal(r.document.getElementById('origin').value,'My draft');
+});
+test('admin pages retain all financial amounts and filters reset the selected page',async()=>{
+ const jobs=Array.from({length:23},(_,i)=>({id:'job-'+i,origin:'Origin '+i,price:100,status:'completed',created_at:new Date().toISOString()}));
+ const data=()=>[{data:{role:'admin'}},{data:jobs},{data:[]},{data:[]}];
+ const r=runtime([...data(),...data()]);
+ for(const id of ['adminSearch','adminUsersSearch','adminStatusFilter'])r.document.getElementById(id).value='';
+ r.document.getElementById('adminReportPeriod').value='all';
+ r.run("panelFilters.adminServices='|';panelPages.adminServices=1");
+ await r.run('renderAdmin()');
+ assert.equal(r.document.getElementById('sales').textContent,r.run('money(2300)'));
+ const rows=r.document.getElementById('adminTable').innerHTML;
+ assert.match(rows,/Origin 10/);assert.match(rows,/Origin 19/);assert.doesNotMatch(rows,/Origin 20/);
+ r.document.getElementById('adminSearch').value='job-22';await r.run('renderAdmin()');
+ assert.equal(r.run('panelPages.adminServices'),0);
+ assert.match(r.document.getElementById('adminTable').innerHTML,/Origin 22/);
+ assert.equal(r.document.getElementById('sales').textContent,r.run('money(2300)'));
+});
+test('polling preserves selected pages and signout resets private navigation',async()=>{
+ const r=runtime();r.run("activeSessionRole='driver';renderDriver=async()=>{};panelPages.driverHistory=2;");
+ await r.run("changePanelPage('driverHistory',1)");assert.equal(r.run('panelPages.driverHistory'),3);
+ await r.run("changePanelPage('adminServices',1)");assert.equal(r.run('panelPages.adminServices'),0);
+ r.run('clearSignedOutView()');assert.equal(r.run('panelPages.driverHistory'),0);
+ assert.equal(r.document.getElementById('driverProfile').open,false);
+});
+test('late notification responses cannot overwrite a more recent page or signed-out view',async()=>{
+ let finish;
+ const old=new Promise(resolve=>{finish=resolve});
+ const r=runtime([old,{data:[{id:'request'}]},{data:[{id:'new',title:'Recent page'}]}]);
+ const pending=r.run("loadDriverNotifications('driver-1')");
+ r.run('panelPages.notifications=1');await r.run("loadDriverNotifications('driver-1')");
+ finish({data:[{id:'request'}]});await pending;
+ assert.equal(r.queries.length,3);
+ assert.equal(r.document.getElementById('driverNotifications').children[0].children[0].textContent,'🔔 Recent page');
+ assert.deepEqual(r.queries[2].calls.find(c=>c[0]==='range'),['range',3,6]);
 });
