@@ -51,7 +51,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 .auth-actions{display:flex;gap:10px;margin-top:20px}.auth-actions .btn{width:100%}
 .signup{border-top:1px solid #e4eaec;margin-top:24px;padding-top:20px}summary{cursor:pointer;font-weight:700;line-height:1.5}
 .signup .btn{margin-top:8px}.session-bar{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px;padding:14px 18px;background:#fff;border:1px solid #e4eaec;border-radius:16px}
-.session-bar p{margin:5px 0 0;overflow-wrap:anywhere}.profile-settings{margin-bottom:18px}.profile-settings .btn{margin-top:12px}
+.session-bar p{margin:5px 0 0;overflow-wrap:anywhere}.profile-settings{margin-bottom:18px}.profile-settings .btn{margin-top:12px}.page-controls{margin-top:16px;justify-content:space-between}.page-controls .btn:disabled{cursor:default}.page-controls span{white-space:nowrap}#driverHistory>.card,#driverReleaseHistory>.card{margin-top:12px}
 #clientLogoutBtn{display:none!important}#clientSessionIdentity{overflow-wrap:anywhere}
 #adminTable,#adminUsersTable,#driverAccountsTable{overflow-x:auto;-webkit-overflow-scrolling:touch}
 #adminTable button,#driverAccountsTable button{min-height:44px;min-width:52px;cursor:pointer}
@@ -180,29 +180,17 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 
 <section id="driver" class="hidden">
 <div class="hero"><h1>Panel del fletero</h1><p>Tus solicitudes, servicio actual e historial en un solo lugar.</p></div>
-<div class="grid">
-<div class="card">
-<h2>Mi perfil</h2><label>Nombre completo</label><input id="dname" placeholder="Tu nombre y apellidos">
+<div class="card"><h2>Trabajo actual y solicitudes</h2><div id="jobCard"><span class="pill">Cargando servicios…</span></div></div>
+<details class="card profile-settings" id="driverProfile" style="margin-top:18px"><summary>Mi perfil de fletero</summary>
+<label>Nombre completo</label><input id="dname" placeholder="Tu nombre y apellidos">
 <label>Vehículo</label><select id="dvehicle"><option>Pickup / Estaquita</option><option>Camioneta</option><option>Camión</option></select>
 <label>Placas</label><input id="plates" placeholder="ABC-123-D">
-<br><button class="btn light" onclick="saveDriverProfile()">Guardar nombre del perfil</button>
-<br><br><button class="btn light" onclick="driverLocation()">📍 Actualizar ubicación</button>
-<p id="gps" class="muted">Ubicación pendiente</p>
-</div>
-<div class="card">
-
-<h2>🔔 Notificaciones</h2>
-<div id="driverNotifications" class="card">
-  <p class="muted">Cargando notificaciones...</p>
-</div>
-
-<h2>Solicitud disponible</h2>
-<div id="jobCard">
-  <span class="pill">Esperando solicitud…</span>
-</div>
-
-</div>
-</div>
+<button class="btn light" onclick="saveDriverProfile()">Guardar nombre del perfil</button>
+<div class="location-actions"><button class="btn light" onclick="driverLocation()">📍 Actualizar ubicación</button></div>
+<p id="gps" class="muted">Ubicación pendiente</p></details>
+<div class="card" style="margin-top:18px"><h2>🔔 Notificaciones recientes</h2><div id="driverNotifications"></div><div id="notificationsPager"></div></div>
+<div class="card" style="margin-top:18px"><h2>Mis últimos servicios</h2><div id="driverHistory"></div></div>
+<details class="card" id="driverReleases" style="margin-top:18px"><summary>Servicios liberados</summary><div id="driverReleaseHistory"></div></details>
 </section>
 
 <section id="admin" class="hidden">
@@ -298,7 +286,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
   <option value="completed">Completado</option>
   <option value="cancelled">Cancelado</option>
  </select>
-  <div id="adminTable"></div></div>
+  <div id="adminTable"></div><div id="adminServicesPager"></div></div>
  <div class="card" style="margin-top:18px">
   <h2>👥 Usuarios</h2>
   <p class="muted">Clientes, fleteros y administradores registrados.</p>
@@ -311,8 +299,8 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
     style="width:100%;padding:12px;margin:12px 0;border:1px solid #ddd;border-radius:10px;"
   >
 
-  <div id="adminUsersTable"></div>
-  <div id="driverAccountsTable" style="margin-top:18px"></div>
+  <div id="adminUsersTable"></div><div id="adminUsersPager"></div>
+  <div id="driverAccountsTable" style="margin-top:18px"></div><div id="adminAccountsPager"></div>
  </div>
 </section>
 </main>
@@ -387,6 +375,36 @@ let activeSessionRole = null;
 let selectedAccessRole = 'client';
 const roleTitles = { client: 'Cliente', driver: 'Fletero', admin: 'Administrador' };
 const rate={pickup:35,camioneta:45,camion:65};
+const panelPageSizes = {clientHistory:5,driverHistory:5,driverReleaseHistory:5,notifications:3,requests:5,adminServices:10,adminUsers:10,adminAccounts:10};
+const panelPages = Object.fromEntries(Object.keys(panelPageSizes).map(key=>[key,0]));
+const panelFilters = {adminServices:'',adminUsers:''};
+let panelNotificationsUser = null;
+let clientRenderVersion=0,driverRenderVersion=0,adminRenderVersion=0,notificationRenderVersion=0;
+function pageRange(key) { const start=panelPages[key]*panelPageSizes[key]; return [start,start+panelPageSizes[key]]; }
+function pageItems(key,items) { return (items||[]).slice(0,panelPageSizes[key]); }
+function pageControls(key,hasMore) {
+ const page=panelPages[key];
+ if(!page&&!hasMore)return '';
+ return `<div class="row page-controls" aria-label="Páginas de registros"><button class="btn light" type="button" onclick="changePanelPage('${key}',-1)" ${page?'':'disabled'}>Anterior</button><span class="muted" role="status">Página ${page+1}</span><button class="btn light" type="button" onclick="changePanelPage('${key}',1)" ${hasMore?'':'disabled'}>Ver más</button></div>`;
+}
+async function changePanelPage(key,direction) {
+ if(!Object.hasOwn(panelPages,key)||![-1,1].includes(direction)||logoutPending||!activeSessionRole)return;
+ const allowed=key.startsWith('admin')?'admin':key==='clientHistory'?'client':'driver';
+ if(activeSessionRole!==allowed)return;
+ panelPages[key]=Math.max(0,panelPages[key]+direction);
+ if(key==='notifications'){if(panelNotificationsUser)await loadDriverNotifications(panelNotificationsUser);}
+ else if(allowed==='client')await renderClient();
+ else if(allowed==='admin')await renderAdmin();
+ else await renderDriver();
+}
+function localPage(key,items,filter) {
+ if(filter!==undefined&&panelFilters[key]!==filter){panelPages[key]=0;panelFilters[key]=filter;}
+ panelPages[key]=Math.min(panelPages[key],Math.max(0,Math.ceil(items.length/panelPageSizes[key])-1));
+ const start=panelPages[key]*panelPageSizes[key];
+ return {items:items.slice(start,start+panelPageSizes[key]),more:start+panelPageSizes[key]<items.length};
+}
+function resetPanelPages(){for(const key of Object.keys(panelPages))panelPages[key]=0;panelNotificationsUser=null;}
+
 function isDriverActiveStatus(status) { return ['en_route','picked_up'].includes(status); }
 function escapeText(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function jobStatusLabel(status) {
@@ -484,7 +502,10 @@ async function createNotification(userId, title, message, type = 'info'){
   }
 }
 async function loadDriverNotifications(userId) {
+  const revision=sessionRevision, renderVersion=++notificationRenderVersion;
+  panelNotificationsUser=userId;
   const box = document.getElementById('driverNotifications');
+  const pager=document.getElementById('notificationsPager');
   if (!box) return;
 const { data: jobs, error: jobsError } = await supabaseClient
   .from('jobs')
@@ -493,12 +514,14 @@ const { data: jobs, error: jobsError } = await supabaseClient
   .is('driver_id', null)
   .limit(1);
 
+if(revision!==sessionRevision||renderVersion!==notificationRenderVersion||logoutPending)return;
 if (jobsError) {
   console.error('Error comprobando solicitudes:', jobsError);
   return;
 }
 
 if (!jobs || jobs.length === 0) {
+  pager.innerHTML='';
   box.replaceChildren();
 
   const message = document.createElement('p');
@@ -513,8 +536,10 @@ if (!jobs || jobs.length === 0) {
     .select('id, title, message, read, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(10);
+    .order('id', { ascending: false }).range(...pageRange('notifications'));
 
+  if(revision!==sessionRevision||renderVersion!==notificationRenderVersion||logoutPending)return;
+  pager.innerHTML='';
   if (error) {
     console.error('Error cargando notificaciones:', error);
     box.textContent = 'No se pudieron cargar las notificaciones.';
@@ -528,7 +553,8 @@ if (!jobs || jobs.length === 0) {
     return;
   }
 
-  data.forEach(n => {
+  pager.innerHTML=pageControls('notifications',data.length>panelPageSizes.notifications);
+  pageItems('notifications',data).forEach(n => {
     const item = document.createElement('div');
     item.className = 'card';
 
@@ -1081,15 +1107,16 @@ document.getElementById('km').value = routeData.distance_km;
 async function renderClient(){
   if (logoutPending) return;
   const revision = sessionRevision;
+  const renderVersion=++clientRenderVersion;
 
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== clientRenderVersion || logoutPending) return;
   const { data: roleProfile, error: roleError } = user && !authError
     ? await supabaseClient.from('profiles').select('role').eq('id', user.id).maybeSingle()
     : { data: null, error: null };
 
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== clientRenderVersion || logoutPending) return;
   if (authError || !user || roleError || roleProfile?.role !== 'client') {
   state.active = null;
   clearRouteOnMap();
@@ -1121,7 +1148,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .eq('id', user.id)
     .maybeSingle();
 
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== clientRenderVersion || logoutPending) return;
   setClientSessionIdentity(user, clientProfile?.full_name);
 
   if (clientProfile?.full_name) {
@@ -1138,7 +1165,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
     .order('created_at', { ascending: false })
     .limit(1);
 
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== clientRenderVersion || logoutPending) return;
   if (error) {
     console.error(error);
 
@@ -1152,14 +1179,14 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
       .from('jobs')
       .select('*')
       .eq('client_id', user.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }).order('id', { ascending: false }).range(...pageRange('clientHistory'));
 
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== clientRenderVersion || logoutPending) return;
   if (!historyError) {
     const historyBox = document.getElementById('clientHistory');
 
     historyBox.innerHTML = history && history.length
-      ? history.map(job => `
+      ? pageItems('clientHistory',history).map(job => `
           <div class="card" style="margin-top:10px">
             <strong>${job.service_type || 'Servicio'}</strong>
             <p>${job.origin || ''} → ${job.destination || ''}</p>
@@ -1172,7 +1199,8 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
             </p>
           </div>
         `).join('')
-      : '<p class="muted">Todavía no tienes servicios.</p>';
+      : '<p class="muted">No hay servicios en esta página.</p>';
+    historyBox.innerHTML += pageControls('clientHistory',(history||[]).length>panelPageSizes.clientHistory);
   }
   if (!jobs || jobs.length === 0) {
     const hadActiveService = state.active &&
@@ -1197,7 +1225,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   updateLocationControls();
   if (['requested', 'en_route', 'picked_up'].includes(j.status)) await restoreRouteForJob(j, user.id);
   else if (previousActive) clearRouteOnMap();
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== clientRenderVersion || logoutPending) return;
 
   document.getElementById('clientStatus').innerHTML =
     `<h3>${
@@ -1408,10 +1436,11 @@ function startDriverPanelRefresh(userId) {
 
  async function renderDriver(){
   const revision = sessionRevision;
+  const renderVersion=++driverRenderVersion;
   if (logoutPending) return;
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== driverRenderVersion || logoutPending) return;
 
   if (authError || !user) {
     toast('Debes iniciar sesión como fletero');
@@ -1431,7 +1460,7 @@ function startDriverPanelRefresh(userId) {
       .select('role, full_name')
       .eq('id', user.id)
       .single();
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== driverRenderVersion || logoutPending) return;
 
   if (profileError || !profile || profile.role !== 'driver') {
     toast('Esta sección es solo para fleteros');
@@ -1444,8 +1473,7 @@ function startDriverPanelRefresh(userId) {
   startDriverPanelRefresh(user.id);
   const e = document.getElementById('jobCard');
 
-  e.innerHTML =
-    '<span class="pill">Cargando servicios...</span>';
+  // Keep the current card visible while refreshing.
 
   /* =========================
      MI SERVICIO ACTUAL
@@ -1460,7 +1488,7 @@ function startDriverPanelRefresh(userId) {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== driverRenderVersion || logoutPending) return;
 
   // Sincronizar el servicio recuperado con el estado usado por Completar servicio.
   // No conservar un pedido anterior de otro usuario al cambiar de sesión.
@@ -1534,8 +1562,8 @@ function startDriverPanelRefresh(userId) {
     .eq('driver_id', user.id)
     .eq('status', 'completed')
     .order('created_at', { ascending: false })
-    .limit(50);
-  if (revision !== sessionRevision || logoutPending) return;
+    .order('id', { ascending: false }).range(...pageRange('driverHistory'));
+  if (revision !== sessionRevision || renderVersion !== driverRenderVersion || logoutPending) return;
 
   const safeText = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;',
@@ -1545,15 +1573,15 @@ function startDriverPanelRefresh(userId) {
     "'": '&#39;'
   })[ch]);
 
-  html += '<section class="card"><h3>📚 Mis servicios</h3><p class="muted">Historial de tus servicios completados.</p>';
+  let historyHtml = '<p class="muted">Historial de tus servicios completados.</p>';
 
   if (historyError) {
     console.error('Error cargando historial del fletero:', historyError);
-    html += '<p class="pill">No se pudo cargar tu historial. Inténtalo de nuevo.</p>';
+    historyHtml += '<p class="pill">No se pudo cargar tu historial. Inténtalo de nuevo.</p>';
   } else if (!completedJobs || completedJobs.length === 0) {
-    html += '<p class="muted">Todavía no tienes servicios completados.</p>';
+    historyHtml += '<p class="muted">Todavía no tienes servicios completados.</p>';
   } else {
-    html += completedJobs.map(job => {
+    historyHtml += pageItems('driverHistory',completedJobs).map(job => {
       const date = job.created_at
         ? new Date(job.created_at).toLocaleDateString('es-MX')
         : 'Fecha no disponible';
@@ -1568,7 +1596,8 @@ function startDriverPanelRefresh(userId) {
     }).join('');
   }
 
-  html += '</section><br>';
+  historyHtml += pageControls('driverHistory',(completedJobs||[]).length>panelPageSizes.driverHistory);
+  document.getElementById('driverHistory').innerHTML=historyHtml;
 
   /* =========================
      NUEVAS SOLICITUDES
@@ -1579,8 +1608,8 @@ function startDriverPanelRefresh(userId) {
     .select('*')
     .eq('status', 'requested')
     .is('driver_id', null)
-    .order('created_at', { ascending: false });
-  if (revision !== sessionRevision || logoutPending) return;
+    .order('created_at', { ascending: false }).order('id', { ascending: false }).range(...pageRange('requests'));
+  if (revision !== sessionRevision || renderVersion !== driverRenderVersion || logoutPending) return;
 
   if (error) {
     console.error(error);
@@ -1592,7 +1621,7 @@ function startDriverPanelRefresh(userId) {
   } else {
     html += '<h3>📋 Nuevas solicitudes</h3>';
 
-    html += data.map(job =>
+    html += pageItems('requests',data).map(job =>
       `<div class="card">
         <h3>${job.origin} → ${job.destination}</h3>
 
@@ -1633,22 +1662,25 @@ function startDriverPanelRefresh(userId) {
     ).join('');
   }
 
+  html += pageControls('requests',(data||[]).length>panelPageSizes.requests);
   e.innerHTML = html;
   const { data: releasedJobs, error: releaseHistoryError } = await supabaseClient
     .from('job_driver_releases').select('job_id, origin, destination, reason, created_at')
-    .eq('driver_id', user.id).order('created_at', { ascending: false }).limit(10);
-  if (revision !== sessionRevision || logoutPending) return;
-  const releasedBox = document.createElement('section');
+    .eq('driver_id', user.id).order('created_at', { ascending: false }).order('id', { ascending: false }).range(...pageRange('driverReleaseHistory'));
+  if (revision !== sessionRevision || renderVersion !== driverRenderVersion || logoutPending) return;
+  const releasedBox = document.getElementById('driverReleaseHistory');
+  releasedBox.textContent='';
   releasedBox.className = 'card';
   if (releaseHistoryError) {
     releasedBox.textContent = 'No se pudo cargar el historial de servicios liberados.';
   } else if (releasedJobs?.length) {
-    releasedBox.innerHTML = '<h3>Servicios liberados</h3><p class="muted">Liberados antes de recoger la carga. No generan pago al fletero.</p>' +
-      releasedJobs.map(item => '<div class="card"><strong>' + escapeText(item.origin) + ' → ' + escapeText(item.destination) +
+    releasedBox.innerHTML = '<p class="muted">Liberados antes de recoger la carga. No generan pago al fletero.</p>' +
+      pageItems('driverReleaseHistory',releasedJobs).map(item => '<div class="card"><strong>' + escapeText(item.origin) + ' → ' + escapeText(item.destination) +
         '</strong><p>Motivo: ' + escapeText(item.reason) + '</p><p class="muted">' +
         escapeText(new Date(item.created_at).toLocaleString('es-MX')) + '</p></div>').join('');
   }
-  if (releaseHistoryError || releasedJobs?.length) e.appendChild(releasedBox);
+  if(!releaseHistoryError&&!releasedJobs?.length)releasedBox.textContent='No hay servicios liberados en esta página.';
+  if(!releaseHistoryError)releasedBox.innerHTML += pageControls('driverReleaseHistory',(releasedJobs||[]).length>panelPageSizes.driverReleaseHistory);
 
 
  }                         
@@ -1736,6 +1768,10 @@ async function syncFletyaGps(userId, activeJob) {
 }
 function clearSignedOutView() {
   sessionRevision++;
+  resetPanelPages();
+  for(const id of ['driverHistory','driverReleaseHistory','notificationsPager','adminUsersPager','adminServicesPager','adminAccountsPager'])document.getElementById(id).textContent='';
+  document.getElementById('driverProfile').open=false;
+  document.getElementById('driverReleases').open=false;
   routeDraftRevision++;
   routeCalculationRevision++;
   closeLocationPicker();
@@ -2180,11 +2216,12 @@ async function markJobPaid(jobId) {
 }
 async function renderAdmin(){
   const revision = sessionRevision;
+  const renderVersion=++adminRenderVersion;
   if (logoutPending) return;
 
   const { data: { user }, error: authError } =
     await supabaseClient.auth.getUser();
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== adminRenderVersion || logoutPending) return;
 
   if (authError || !user) {
     toast('Debes iniciar sesión como administrador');
@@ -2198,7 +2235,7 @@ async function renderAdmin(){
       .select('role')
       .eq('id', user.id)
       .single();
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== adminRenderVersion || logoutPending) return;
 
   if (profileError || !profile || profile.role !== 'admin') {
     toast('Esta sección es solo para administradores');
@@ -2211,7 +2248,7 @@ async function renderAdmin(){
       .from('jobs')
       .select('*')
       .order('created_at', { ascending: false });
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== adminRenderVersion || logoutPending) return;
 
   if (jobsError) {
     console.error(jobsError);
@@ -2225,7 +2262,7 @@ async function renderAdmin(){
       .from('profiles')
       .select('id, full_name, email, phone, role, created_at')
       .order('created_at', { ascending: false });
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== adminRenderVersion || logoutPending) return;
 
   if (adminUsersError) {
     console.error(adminUsersError);
@@ -2238,7 +2275,7 @@ const statusFilter =
   const { data: profiles } = await supabaseClient
   .from('profiles')
   .select('id, full_name');
-  if (revision !== sessionRevision || logoutPending) return;
+  if (revision !== sessionRevision || renderVersion !== adminRenderVersion || logoutPending) return;
 
 const nameById = Object.fromEntries(
   (profiles || []).map(profile => [
@@ -2274,6 +2311,8 @@ const filteredServices = services.filter(job => {
   )
 );
 });
+  const servicePage=localPage('adminServices',filteredServices,statusFilter+'|'+search);
+  const userPage=localPage('adminUsers',filteredUsers,userSearch);
   const billableServices = services.filter(job => job.status !== 'cancelled');
   const sales = billableServices.reduce(
     (total, job) => total + Number(job.price || 0),
@@ -2329,6 +2368,8 @@ const filteredServices = services.filter(job => {
   pendingTotal
 };
   });
+ const accountPage=localPage('adminAccounts',driverAccounts);
+ document.getElementById('adminAccountsPager').innerHTML=pageControls('adminAccounts',accountPage.more);
  document.getElementById('driverAccountsTable').innerHTML =
   driverAccounts.length
     ? `
@@ -2347,7 +2388,7 @@ const filteredServices = services.filter(job => {
             <th>Acción</th>
           </tr>
 
-          ${driverAccounts.map(driver => `
+          ${accountPage.items.map(driver => `
             <tr>
               <td>${driver.full_name || 'Sin nombre'}</td>
               <td>${driver.jobs}</td>
@@ -2379,7 +2420,7 @@ const filteredServices = services.filter(job => {
             <th>Registro</th>
           </tr>
 
-          ${filteredUsers.map(user => `
+          ${userPage.items.map(user => `
             <tr>
               <td>${user.full_name || 'Sin nombre'}</td>
               <td>${user.email || 'Sin correo'}</td>
@@ -2396,6 +2437,8 @@ const filteredServices = services.filter(job => {
         </table>
       `
       : '<p class="muted">No hay usuarios registrados.</p>';
+  document.getElementById('adminUsersPager').innerHTML=pageControls('adminUsers',userPage.more);
+  document.getElementById('adminServicesPager').innerHTML=pageControls('adminServices',servicePage.more);
   document.getElementById('jobsCount').textContent =
     services.length;
    document.getElementById('requestedCount').textContent =
@@ -2543,7 +2586,7 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
 <th>Detalles</th>
           </tr>
 
-          ${filteredServices.map(job => `
+          ${servicePage.items.map(job => `
             <tr>
               <td>${job.id}</td>
               <td>${nameById[job.client_id] || 'Sin cliente'}</td>
