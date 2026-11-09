@@ -90,6 +90,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109192513_driver_push_notifications.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109231824_client_events_and_driver_onboarding.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109231943_client_push_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109233522_private_driver_review_boundary.sql
       - name: Run security regression checks
         run: psql -v ON_ERROR_STOP=1 -f tests/security/integration.sql
 
