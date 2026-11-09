@@ -169,6 +169,13 @@ public final class DriverApi {
         check(response);
         return true;
     }
+    public synchronized JSONObject route(String jobId) throws Exception {
+        JSONObject assigned = job(jobId);
+        if (assigned == null || !DriverRules.ownsActive(assigned.optString("status"), assigned.optString("driver_id"), userId()))
+            throw new Failure(403, "El servicio ya no está asignado a tu cuenta.");
+        return new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
+            .put("origin", assigned.optString("origin")).put("destination", assigned.optString("destination")), null).body());
+    }
     public synchronized void registerPush(String installation, String token, String nonce) throws Exception {
         token();
         JSONArray rows = new JSONArray(call("POST", "/rest/v1/driver_push_devices?on_conflict=user_id,installation_id&select=user_id",

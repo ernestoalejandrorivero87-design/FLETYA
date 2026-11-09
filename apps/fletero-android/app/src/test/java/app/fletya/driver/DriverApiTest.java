@@ -31,6 +31,16 @@ public class DriverApiTest {
         api.login("driver@example.com", "not-persisted");
         return api;
     }
+    @Test public void routeRejectsLostAssignmentAndUsesServerEndpoints() throws Exception {
+        Fake fake = new Fake(); DriverApi api = logged(fake, new Memory());
+        fake.reply(200, "[{\"id\":\"job-1\",\"driver_id\":\"other\",\"status\":\"en_route\"}]");
+        try { api.route("job-1"); fail(); } catch (DriverApi.Failure error) { assertEquals(403, error.status); }
+        fake.reply(200, "[{\"id\":\"job-1\",\"driver_id\":\"driver-a\",\"status\":\"en_route\",\"origin\":\"21,-86\",\"destination\":\"20,-87\"}]");
+        fake.reply(200, "{\"polyline\":\"encoded\"}");
+        assertEquals("encoded", api.route("job-1").getString("polyline"));
+        assertEquals("POST /functions/v1/fletya-routes", fake.paths.get(4));
+        assertEquals("21,-86", fake.bodies.get(4).getString("origin"));
+    }
     @Test public void clientAccountIsRejectedAndSessionCleared() throws Exception {
         Fake fake = new Fake(); Memory store = new Memory(); DriverApi api = new DriverApi(store, fake);
         fake.reply(200, session()); fake.reply(200, "[{\"id\":\"driver-a\",\"role\":\"client\"}]");
