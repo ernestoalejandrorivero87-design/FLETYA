@@ -29,7 +29,8 @@ public final class MainActivity extends Activity {
     private TextView message;
     private ScrollView scroll;
     private String screen="login",rendered="",originDraft="",destDraft="",profileName="";
-    private int vehicleChoice,helperChoice,serviceChoice,historyPage;
+    private int vehicleChoice,helperChoice,serviceChoice,historyPage,noticePage;
+    private String pendingNoticeJob="";
     private boolean busy,visible,picking,menuOpen,routeLoading,routeFailed,awaitingLocationPermission;
     private long revision,draftRevision,routeRevision;
     private JSONObject active;
@@ -45,10 +46,10 @@ public final class MainActivity extends Activity {
     private long locationRevision;
     private AlertDialog pickerDialog;
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);api=((ClientApplication)getApplication()).api();
+        super.onCreate(state);pendingNoticeJob=getIntent().getStringExtra("notice_job_id");if(pendingNoticeJob==null)pendingNoticeJob="";api=((ClientApplication)getApplication()).api();
         if(api.signedIn()){screen="home";shell();}else login();
     }
-    @Override public void onResume(){super.onResume();visible=true;if(api.signedIn()&&"home".equals(screen))refresh();if(locationTarget!=null&&locationListener==null&&!awaitingLocationPermission)startLocation();updateFreshness();main.postDelayed(freshnessTick,1000);main.postDelayed(poll,10_000);}
+    @Override public void onResume(){super.onResume();visible=true;if(api.signedIn()&&!pendingNoticeJob.isEmpty()){String id=pendingNoticeJob;pendingNoticeJob="";openNotice(id);}else if(api.signedIn()&&"home".equals(screen))refresh();if(locationTarget!=null&&locationListener==null&&!awaitingLocationPermission)startLocation();updateFreshness();main.postDelayed(freshnessTick,1000);main.postDelayed(poll,10_000);}
     @Override public void onPause(){visible=false;main.removeCallbacks(poll);main.removeCallbacks(freshnessTick);if(!awaitingLocationPermission)stopLocation();super.onPause();}
     @Override public void onDestroy(){revision++;routeRevision++;main.removeCallbacksAndMessages(null);stopLocation();disposeMaps();if(pickerDialog!=null)pickerDialog.dismiss();worker.shutdownNow();super.onDestroy();}
     private final Runnable poll=new Runnable(){public void run(){if(!visible)return;if(api.signedIn()&&"home".equals(screen)&&!busy&&!picking&&!menuOpen)refresh();main.postDelayed(this,10_000);}};
@@ -78,11 +79,39 @@ public final class MainActivity extends Activity {
         worker.execute(()->{try{T value=work.run();main.post(()->{if(isDestroyed()||version!=revision)return;busy=false;try{done.run(value);}catch(Exception e){fail(e);}});}catch(Exception e){main.post(()->{if(!isDestroyed()&&version==revision){busy=false;fail(e);}});}});
     }
     private void fail(Exception error){
-        if(!api.signedIn()&&!"login".equals(screen))login();
+        if(!api.signedIn()&&!"login".equals(screen)){PushManager.disableLocally(this);login();}
         currentTrackingFix=null;
         if(trackingMap!=null)trackingMap.updateDriver(null);
         if(trackingStatus!=null)trackingStatus.setText("No se pudo actualizar la ubicación. Esperando una nueva recepción.");
         message.setText(error instanceof ClientApi.Failure||error instanceof IllegalArgumentException?error.getMessage():"No se pudo conectar. Actualiza el seguimiento antes de volver a solicitar.");
+    }
+    private void registrationScreen() {
+        screen="register";shell();
+        LinearLayout box=card(false?"Crear cuenta de fletero":"Crear cuenta de cliente");
+        EditText name=field(box,"Nombre completo","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        EditText email=field(box,"Correo electrónico","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        EditText password=field(box,"Contraseña (mínimo 8 caracteres)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setSaveEnabled(false);
+        EditText repeat=field(box,"Repite la contraseña","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);repeat.setSaveEnabled(false);
+        EditText phone=false?field(box,"Teléfono con lada (10 a 15 dígitos)","",InputType.TYPE_CLASS_PHONE):null;
+        Spinner vehicle=new Spinner(this);
+        vehicle.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta","Camión"}));
+        if(false){text(box,"Vehículo",14,true);box.addView(vehicle,new LinearLayout.LayoutParams(-1,dp(52)));}
+        EditText plates=false?field(box,"Placas","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS):null;
+        if(false)text(box,"Después de confirmar tu correo, tu cuenta quedará pendiente de revisión por administración. Podrás completar tus datos desde Mi perfil.",14,false);
+        button(box,"Crear cuenta",()->{
+            String fullName=name.getText().toString(),address=email.getText().toString(),secret=password.getText().toString();
+            if(!secret.equals(repeat.getText().toString())){message.setText("Las contraseñas no coinciden.");return;}
+            String telephone=phone==null?"":phone.getText().toString(),plate=plates==null?"":plates.getText().toString();String code=new String[]{"pickup","camioneta","camion"}[vehicle.getSelectedItemPosition()];
+            task(()->{api.register(fullName,address,secret,telephone,code,plate);return true;},ok->{password.setText("");repeat.setText("");screen="verify";shell();LinearLayout confirmation=card("Confirma tu correo");text(confirmation,"Si el registro procede, recibirás un correo de FLETYA. Abre el enlace de confirmación y vuelve a esta app para iniciar sesión.",16,false);button(confirmation,"Reenviar confirmación",()->task(()->{api.resendConfirmation(address);return true;},sent->message.setText("Si corresponde, enviamos otro correo. Revisa también spam.")));button(root,"Ya confirmé · Iniciar sesión",this::login);});
+        });
+        button(root,"Volver a iniciar sesión",this::login);
+    }
+    private void recoveryScreen() {
+        screen="recover";shell();LinearLayout box=card("Recuperar contraseña");
+        EditText email=field(box,"Correo de tu cuenta","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        text(box,"Te enviaremos un enlace para elegir una contraseña nueva. Después vuelve a la app e inicia sesión.",15,false);
+        button(box,"Enviar enlace de recuperación",()->{String address=email.getText().toString();task(()->{api.recover(address);return true;},ok->message.setText("Si existe una cuenta con ese correo, recibirás el enlace. Revisa también spam."));});
+        button(root,"Volver a iniciar sesión",this::login);
     }
     private void login(){
         resetDraft();disposeMaps();active=null;currentTrackingFix=null;trackingStatus=null;screen="login";shell();
@@ -90,11 +119,11 @@ public final class MainActivity extends Activity {
         var email=field(box,"Correo electrónico","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         var password=field(box,"Contraseña","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setSaveEnabled(false);
         button(box,"Iniciar sesión",()->{String address=email.getText().toString().trim(),secret=password.getText().toString();if(address.isEmpty()||secret.isEmpty()){message.setText("Escribe tu correo y contraseña.");return;}task(()->{api.login(address,secret);return true;},ok->{password.setText("");screen="home";refresh();});});
-        text(box,"En este piloto, crea tu cuenta o recupera tu contraseña desde la web.",13,false);button(box,"Registro y recuperación en la web",()->open("https://fletya.vercel.app"));
+        button(box,"Crear cuenta de cliente",this::registrationScreen);button(box,"Olvidé mi contraseña",this::recoveryScreen);
     }
     private void menu(View anchor){
-        var menu=new PopupMenu(this,anchor);menu.getMenu().add(0,1,0,"Solicitar / Seguimiento");menu.getMenu().add(0,2,1,"Historial de servicios");menu.getMenu().add(0,3,2,"Mi perfil");menu.getMenu().add(0,4,3,"Cerrar sesión");
-        menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();default->{return false;}}return true;});menuOpen=true;menu.setOnDismissListener(m->menuOpen=false);menu.show();
+        var menu=new PopupMenu(this,anchor);menu.getMenu().add(0,1,0,"Solicitar / Seguimiento");menu.getMenu().add(0,2,1,"Historial de servicios");menu.getMenu().add(0,3,2,"Mi perfil");menu.getMenu().add(0,4,5,"Cerrar sesión");menu.getMenu().add(0,5,3,"Avisos de mis servicios");if(BuildConfig.PUSH_ENABLED)menu.getMenu().add(0,6,4,"Activar avisos del teléfono");
+        menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();case 5->{clearTrackingMap();noticePage=0;notices();}case 6->activateNotices();default->{return false;}}return true;});menuOpen=true;menu.setOnDismissListener(m->menuOpen=false);menu.show();
     }
     private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError){}
     private void refresh(){
@@ -104,6 +133,7 @@ public final class MainActivity extends Activity {
             return new Panel(profile,jobs,tracking,error);
         },panel->{
             if(!visible||!"home".equals(screen))return;
+            PushManager.activate(this,api);
             profileName=panel.profile().optString("full_name","cliente");
             if(panel.jobs().length()>1){clearTrackingMap();active=null;shell();text(card("Revisión necesaria"),"Tienes más de un servicio activo. Consulta con administración antes de pedir otro.",16,false);button(root,"Actualizar seguimiento",this::refresh);return;}
             JSONObject next=panel.jobs().length()==1?panel.jobs().getJSONObject(0):null;
@@ -115,6 +145,7 @@ public final class MainActivity extends Activity {
     private void form(){
         screen="home";shell();text(root,"Hola, "+profileName,17,true);
         var intro=card("Solicita tu flete");text(intro,"Elige la ruta y revisa el precio antes de confirmar.",15,false);
+        if(BuildConfig.PUSH_ENABLED&&!PushManager.permitted(this))button(intro,"Activar avisos de mi servicio",this::activateNotices);
         originField=field(intro,"Recogida",originDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         button(intro,"Elegir recogida en mapa",()->picker(originField));button(intro,"Usar mi ubicación como recogida",()->locate(originField));
         destField=field(intro,"Entrega",destDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
@@ -161,13 +192,13 @@ public final class MainActivity extends Activity {
     }
     private void renderActive(ClientApi.Tracking tracking,boolean trackingError){
         screen="home";shell();trackingStatus=null;originField=null;destField=null;quoteArea=null;
-        JSONObject job=active;var box=card("Tu servicio");text(box,ClientRules.status(job.optString("status")),19,true);details(box,job);
+        JSONObject job=active;var box=card("Tu servicio");if(BuildConfig.PUSH_ENABLED&&!PushManager.permitted(this))button(box,"Activar avisos de mi servicio",this::activateNotices);text(box,ClientRules.status(job.optString("status")),19,true);details(box,job);
         if("requested".equals(job.optString("status"))&&!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
         if("requested".equals(job.optString("status"))&&job.isNull("driver_id"))button(box,"Cancelar solicitud",()->dialog().setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
         if(ClientRules.assigned(job.optString("status"))){
             var driverBox=card("Tu fletero asignado");var driver=tracking.driver();var fix=tracking.fix();
             if(driver!=null){text(driverBox,driver.optString("full_name","Sin nombre"),18,true);text(driverBox,"Vehículo: "+ClientRules.vehicle(driver.optString("vehicle_type")),15,false);text(driverBox,"Placas: "+driver.optString("plates","Sin registrar"),16,true);}else text(driverBox,trackingError?"No se pudo actualizar la identificación del fletero.":"Consultando la identificación del fletero…",15,false);
-            if(fix!=null){trackingStatus=text(driverBox,ClientRules.freshness(fix),16,true);text(driverBox,"Precisión: "+Math.round(fix.optDouble("accuracy",0))+" m",14,false);text(driverBox,"Última recepción: "+fix.optString("updated_at"),12,false);}else trackingStatus=text(driverBox,trackingError?"No se pudo actualizar la ubicación. Reintenta el seguimiento.":"Esperando ubicación del fletero…",15,false);
+            if(fix!=null){trackingStatus=text(driverBox,ClientRules.freshness(fix),16,true);text(driverBox,"Precisión: "+Math.round(fix.optDouble("accuracy",0))+" m",14,false);text(driverBox,"Última recepción: "+ClientNotices.time(fix.optString("updated_at")),12,false);}else trackingStatus=text(driverBox,trackingError?"No se pudo actualizar la ubicación. Reintenta el seguimiento.":"Esperando ubicación del fletero…",15,false);
         }
         var mapBox=card("Ruta del servicio");routeContainer=mapBox;routeMessage=text(mapBox,"",14,false);currentTrackingFix=trackingError?null:tracking.fix();
         String key=api.userId()+"|"+job.optString("id")+"|"+job.optString("origin")+"|"+job.optString("destination");
@@ -192,10 +223,32 @@ public final class MainActivity extends Activity {
     private void clearTrackingMap(){routeRevision++;routeKey="";routeLoading=false;routeFailed=false;if(trackingMap!=null){if(trackingMap.getParent() instanceof ViewGroup parent)parent.removeView(trackingMap);trackingMap.dispose();trackingMap=null;}}
     private void disposeMaps(){clearPreview();clearTrackingMap();if(pickerMap!=null){pickerMap.dispose();pickerMap=null;}}
     private void resetDraft(){originDraft="";destDraft="";vehicleChoice=0;helperChoice=0;serviceChoice=0;quote=null;requestId="";draftRevision++;originField=null;destField=null;quoteArea=null;}
+    private void activateNotices(){
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},18);
+        else if(!PushManager.permitted(this)){try{startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}catch(ActivityNotFoundException error){message.setText("Revisa los permisos de notificaciones en Ajustes.");}}
+        else{PushManager.tokenChanged(this,api);message.setText(PushManager.report());}
+    }
+    private void notices(){int page=noticePage;task(()->api.notifications(page*12),rows->{
+        screen="notices";shell();card("Avisos de mis servicios");
+        if(rows.length()==0)text(root,"No tienes avisos en esta página.",16,false);
+        for(int i=0;i<Math.min(12,rows.length());i++){JSONObject notice=rows.getJSONObject(i);LinearLayout box=card((notice.optBoolean("read")?"":"Nuevo · ")+notice.optString("title"));text(box,notice.optString("message"),15,false);text(box,ClientNotices.time(notice.optString("created_at")),13,false);
+            if(!notice.isNull("job_id"))button(box,"Ver servicio",()->openNotice(notice.optString("job_id")));
+            if(!notice.optBoolean("read"))button(box,"Marcar como leído",()->task(()->{api.markNoticeRead(notice.optString("id"));return true;},ok->notices()));
+        }
+        if(page>0)button(root,"Anterior",()->{noticePage--;notices();});if(rows.length()>12)button(root,"Ver más",()->{noticePage++;notices();});button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");
+    });}
+    private void openNotice(String id){
+        try{UUID.fromString(id);}catch(RuntimeException invalid){message.setText("No se pudo abrir el servicio.");return;}
+        task(()->{api.profile();return api.job(id);},job->{
+            if(job==null){message.setText("El servicio no está disponible para esta cuenta.");return;}
+            if(ClientRules.active(job.optString("status"))){screen="home";refresh();return;}
+            clearTrackingMap();screen="notice";shell();LinearLayout box=card(ClientRules.status(job.optString("status")));details(box,job);button(root,"Historial de servicios",()->{historyPage=0;history();});button(root,"Volver a solicitar",()->{screen="home";refresh();});message.setText("");
+        });
+    }
     private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));details(box,job);text(box,job.optString("created_at").split("T")[0],13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private void profile(){task(api::profile,p->{screen="profile";shell();var box=card("Mi perfil de cliente");var name=field(box,"Nombre completo",p.optString("full_name"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);button(box,"Guardar perfil",()->task(()->{api.saveName(name.getText().toString());return true;},ok->message.setText("Perfil guardado.")));button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(this).setOnDismissListener(d->picking=false);}
-    private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();task(()->{api.logout();return true;},ok->{revision++;login();});}).show();}
+    private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();String[] device=PushManager.disableLocally(this);task(()->{try{api.unregisterPush(device[0],device[1]);}catch(Exception ignored){}api.logout();return true;},ok->{revision++;login();});}).show();}
     private void open(String uri){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(uri)));}catch(ActivityNotFoundException error){message.setText("No se pudo abrir el enlace.");}}
     private void picker(EditText target){
         picking=true;var box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(12),dp(8),dp(12),dp(8));text(box,"Mueve el mapa hasta colocar el centro sobre el punto exacto. También puedes tocar un lugar.",15,false);
@@ -210,7 +263,7 @@ public final class MainActivity extends Activity {
         if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){awaitingLocationPermission=true;requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},10);return;}
         startLocation();
     }
-    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==10){awaitingLocationPermission=false;if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED||checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED)startLocation();else {stopLocation();message.setText("Puedes elegir el punto en el mapa o escribir la dirección.");}}}
+    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==18){PushManager.tokenChanged(this,api);message.setText(PushManager.report());return;}if(code==10){awaitingLocationPermission=false;if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED||checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED)startLocation();else {stopLocation();message.setText("Puedes elegir el punto en el mapa o escribir la dirección.");}}}
     @SuppressWarnings("deprecation")
     @android.annotation.SuppressLint("MissingPermission")
     private void startLocation(){

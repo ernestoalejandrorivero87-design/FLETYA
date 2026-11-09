@@ -31,6 +31,14 @@ public class DriverApiTest {
         api.login("driver@example.com", "not-persisted");
         return api;
     }
+    @Test public void nativeRegistrationFixesTheRoleAndDoesNotCreateASession()throws Exception{
+        Fake fake=new Fake();Memory store=new Memory();DriverApi api=new DriverApi(store,fake);fake.reply(200,"{\"user\":{\"id\":\"new-account\"}}");
+        api.register("New account","new@example.com","eightcharacters","9981234567","pickup","TEST-123");
+        assertEquals("POST /auth/v1/signup",fake.paths.get(0));assertEquals("driver",fake.bodies.get(0).getJSONObject("data").getString("role"));assertFalse(fake.bodies.get(0).getJSONObject("data").has("driver_status"));assertFalse(api.signedIn());assertNull(store.value);
+    }
+    @Test public void passwordRecoveryUsesTheSharedVerifiedWebReturn()throws Exception{
+        Fake fake=new Fake();DriverApi api=new DriverApi(new Memory(),fake);fake.reply(200,"{}");api.recover("user@example.com");assertTrue(fake.paths.get(0).startsWith("POST /auth/v1/recover?redirect_to="));assertEquals("user@example.com",fake.bodies.get(0).getString("email"));assertFalse(api.signedIn());
+    }
     @Test public void routeRejectsLostAssignmentAndUsesServerEndpoints() throws Exception {
         Fake fake = new Fake(); DriverApi api = logged(fake, new Memory());
         fake.reply(200, "[{\"id\":\"job-1\",\"driver_id\":\"other\",\"status\":\"en_route\"}]");

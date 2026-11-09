@@ -1052,3 +1052,13 @@ test('missing server time never falls back to the client clock or reports recent
  const r=runtime();assert.equal(r.run('trackingFreshness(new Date().toISOString()).fresh'),false);
  assert.equal(r.run("trackingFreshness('2026-11-09T15:40:00Z','2026-11-09T15:45:00Z').text"),'Ubicación desactualizada · hace 5 min');
 });
+
+test('password recovery requires matching passwords and signs out only the web recovery session', async () => {
+ const r=runtime();let updated='';let scope='';r.api.auth.updateUser=async body=>{updated=body.password;return {error:null};};r.api.auth.signOut=async options=>{scope=options.scope;};
+ r.run('recoveryPending=true');r.document.getElementById('newRecoveryPassword').value='new-password';r.document.getElementById('repeatRecoveryPassword').value='different';
+ await r.run('finishPasswordRecovery()');assert.equal(updated,'');
+ r.document.getElementById('repeatRecoveryPassword').value='new-password';await r.run('finishPasswordRecovery()');assert.equal(updated,'new-password');assert.equal(scope,'local');assert.equal(r.run('recoveryPending'),false);assert.equal(r.document.getElementById('newRecoveryPassword').value,'');
+});
+test('pending driver cannot render or poll available services through the web panel',async()=>{
+ const r=runtime([{data:{role:'driver',full_name:'Pending',driver_status:'pending'}}]);await r.run('renderDriver()');assert.equal(r.queries.length,1);assert.match(r.document.getElementById('jobCard').textContent,/pendiente de aprobación/);
+});

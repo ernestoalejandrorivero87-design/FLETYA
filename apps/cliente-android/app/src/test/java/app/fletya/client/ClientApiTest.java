@@ -23,6 +23,14 @@ public class ClientApiTest {
     private ClientApi login(Fake fake,Memory store)throws Exception{var api=new ClientApi(store,fake);fake.reply(200,session());fake.profile();api.login("client@example.com","secret-not-stored");return api;}
     private ClientApi.Quote quote(){return new ClientApi.Quote("21,-86","20,-87","pickup",0,"Mudanza",38.41,1464.35,"encoded","52 min",System.nanoTime());}
     private String job(String status,String driver){return "{\"id\":\""+ID+"\",\"client_id\":\"client-a\",\"status\":\""+status+"\",\"driver_id\":"+(driver==null?"null":"\""+driver+"\"")+"}";}
+    @Test public void nativeRegistrationFixesTheRoleAndDoesNotCreateASession()throws Exception{
+        Fake fake=new Fake();Memory store=new Memory();ClientApi api=new ClientApi(store,fake);fake.reply(200,"{\"user\":{\"id\":\"new-account\"}}");
+        api.register("New account","new@example.com","eightcharacters","9981234567","pickup","TEST-123");
+        assertEquals("POST /auth/v1/signup",fake.paths.get(0));assertEquals("client",fake.bodies.get(0).getJSONObject("data").getString("role"));assertFalse(fake.bodies.get(0).getJSONObject("data").has("driver_status"));assertFalse(api.signedIn());assertNull(store.value);
+    }
+    @Test public void passwordRecoveryUsesTheSharedVerifiedWebReturn()throws Exception{
+        Fake fake=new Fake();ClientApi api=new ClientApi(new Memory(),fake);fake.reply(200,"{}");api.recover("user@example.com");assertTrue(fake.paths.get(0).startsWith("POST /auth/v1/recover?redirect_to="));assertEquals("user@example.com",fake.bodies.get(0).getString("email"));assertFalse(api.signedIn());
+    }
     @Test public void rejectsDriverAndAdminAccountsAndClearsSession()throws Exception{
         for(String role:new String[]{"driver","admin"}){var fake=new Fake();var store=new Memory();var api=new ClientApi(store,fake);fake.reply(200,session());fake.reply(200,"[{\"id\":\"client-a\",\"role\":\""+role+"\"}]");try{api.login("x","y");fail();}catch(ClientApi.Failure e){assertEquals(403,e.status);}assertFalse(api.signedIn());assertNull(store.value);}
     }

@@ -136,6 +136,34 @@ public final class MainActivity extends Activity {
         }
         message.setText(value);
     }
+    private void registrationScreen() {
+        screen="register";shell();
+        LinearLayout box=card(true?"Crear cuenta de fletero":"Crear cuenta de cliente");
+        EditText name=field(box,"Nombre completo","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        EditText email=field(box,"Correo electrónico","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        EditText password=field(box,"Contraseña (mínimo 8 caracteres)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setSaveEnabled(false);
+        EditText repeat=field(box,"Repite la contraseña","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);repeat.setSaveEnabled(false);
+        EditText phone=true?field(box,"Teléfono con lada (10 a 15 dígitos)","",InputType.TYPE_CLASS_PHONE):null;
+        Spinner vehicle=new Spinner(this);
+        vehicle.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta","Camión"}));
+        if(true){text(box,"Vehículo",14,true);box.addView(vehicle,new LinearLayout.LayoutParams(-1,dp(52)));}
+        EditText plates=true?field(box,"Placas","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS):null;
+        if(true)text(box,"Después de confirmar tu correo, tu cuenta quedará pendiente de revisión por administración. Podrás completar tus datos desde Mi perfil.",14,false);
+        button(box,"Crear cuenta",()->{
+            String fullName=name.getText().toString(),address=email.getText().toString(),secret=password.getText().toString();
+            if(!secret.equals(repeat.getText().toString())){message.setText("Las contraseñas no coinciden.");return;}
+            String telephone=phone==null?"":phone.getText().toString(),plate=plates==null?"":plates.getText().toString();String code=new String[]{"pickup","camioneta","camion"}[vehicle.getSelectedItemPosition()];
+            task(()->{api.register(fullName,address,secret,telephone,code,plate);return true;},ok->{password.setText("");repeat.setText("");screen="verify";shell();LinearLayout confirmation=card("Confirma tu correo");text(confirmation,"Si el registro procede, recibirás un correo de FLETYA. Abre el enlace de confirmación y vuelve a esta app para iniciar sesión.",16,false);button(confirmation,"Reenviar confirmación",()->task(()->{api.resendConfirmation(address);return true;},sent->message.setText("Si corresponde, enviamos otro correo. Revisa también spam.")));button(root,"Ya confirmé · Iniciar sesión",this::loginScreen);});
+        });
+        button(root,"Volver a iniciar sesión",this::loginScreen);
+    }
+    private void recoveryScreen() {
+        screen="recover";shell();LinearLayout box=card("Recuperar contraseña");
+        EditText email=field(box,"Correo de tu cuenta","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        text(box,"Te enviaremos un enlace para elegir una contraseña nueva. Después vuelve a la app e inicia sesión.",15,false);
+        button(box,"Enviar enlace de recuperación",()->{String address=email.getText().toString();task(()->{api.recover(address);return true;},ok->message.setText("Si existe una cuenta con ese correo, recibirás el enlace. Revisa también spam."));});
+        button(root,"Volver a iniciar sesión",this::loginScreen);
+    }
     private void loginScreen() {
         clearRoute(); screen = "login"; shell();
         LinearLayout box = card("Entra como fletero");
@@ -151,7 +179,8 @@ public final class MainActivity extends Activity {
                 password.setText(""); permissionExplained = false; screen = "home"; refresh();
             });
         });
-        text(box, "Esta primera versión es para pruebas con cuentas existentes. El registro y la recuperación de contraseña siguen disponibles en la web.", 13, false);
+        button(box,"Crear cuenta de fletero",this::registrationScreen);
+        button(box,"Olvidé mi contraseña",this::recoveryScreen);
         button(box, "Abrir FLETYA web", () -> open("https://fletya.vercel.app"));
     }
     private record Panel(JSONObject profile, JSONArray active, JSONArray offers) {}
@@ -161,13 +190,19 @@ public final class MainActivity extends Activity {
         if ("profile".equals(screen)) return;
         task(() -> {
             JSONObject profile = api.profile();
-            JSONArray jobs = api.activeJobs();
-            return new Panel(profile, jobs, jobs.length() == 0 ? api.offers() : new JSONArray());
+            JSONArray jobs = "approved".equals(profile.optString("driver_status","approved")) ? api.activeJobs() : new JSONArray();
+            return new Panel(profile, jobs, jobs.length() == 0 && "approved".equals(profile.optString("driver_status","approved")) ? api.offers() : new JSONArray());
         }, panel -> {
             if (!visible) return;
             screen = "home"; shell();
-            PushManager.activate(this, api);
+            if ("approved".equals(panel.profile().optString("driver_status","approved"))) PushManager.activate(this, api);
             text(root, "Hola, " + panel.profile().optString("full_name", "fletero"), 16, true);
+            if (!"approved".equals(panel.profile().optString("driver_status","approved"))) {
+                stopService(new Intent(this,TrackingService.class));PushManager.disableLocally(this);active=null;clearRoute();
+                LinearLayout pending=card("pending".equals(panel.profile().optString("driver_status"))?"Cuenta pendiente de aprobación":"Cuenta no autorizada");
+                text(pending,"Completa tu nombre, teléfono, vehículo y placas en Mi perfil. Administración debe revisar tu cuenta antes de que puedas recibir o aceptar servicios.",16,false);
+                button(pending,"Completar mi perfil",this::profile);button(root,"Consultar aprobación",this::refresh);message.setText("");return;
+            }
             active = panel.active().length() == 1 ? panel.active().getJSONObject(0) : null;
             if (panel.active().length() > 1) {
                 clearRoute();
@@ -182,6 +217,7 @@ public final class MainActivity extends Activity {
                 boolean picked = "picked_up".equals(job.optString("status"));
                 text(box, picked ? "Carga recogida · Lleva la carga al destino" : "En camino a recoger", 17, true);
                 button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job));
+                button(box,picked?"Llegué al punto de entrega":"Llegué al punto de recogida",()->new AlertDialog.Builder(this).setTitle("¿Confirmar llegada?").setMessage("El cliente recibirá el aviso de tu llegada a este punto.").setNegativeButton("Volver",null).setPositiveButton("Confirmar llegada",(d,w)->task(()->{api.arrive(job.optString("id"),picked?"delivery":"pickup");return true;},ok->{message.setText("Llegada registrada. El cliente puede consultar el aviso.");})).show());
                 button(box, picked ? "Completar servicio" : "Carga recogida", () -> confirmTransition(job, picked ? "completed" : "picked_up"));
                 if (!picked) button(box, "Liberar antes de recoger", () -> release(job));
                 text(box, TrackingService.report(), 14, false);
@@ -346,10 +382,11 @@ public final class MainActivity extends Activity {
             String[] codes = {"", "pickup", "camioneta", "camion"};
             for (int i = 0; i < codes.length; i++) if (codes[i].equals(profile.optString("vehicle_type"))) vehicles.setSelection(i);
             box.addView(vehicles, new LinearLayout.LayoutParams(-1, dp(52)));
+            EditText phone = field(box,"Teléfono con lada",profile.isNull("phone")?"":profile.optString("phone"),InputType.TYPE_CLASS_PHONE);
             EditText plates = field(box, "Placas", profile.isNull("plates") ? "" : profile.optString("plates"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
             button(box, "Guardar perfil", () -> {
-                String fullName = name.getText().toString(); String vehicle = codes[vehicles.getSelectedItemPosition()]; String plate = plates.getText().toString();
-                task(() -> { api.saveProfile(fullName, vehicle, plate); return true; }, result -> message.setText("Perfil guardado."));
+                String fullName = name.getText().toString(); String vehicle = codes[vehicles.getSelectedItemPosition()]; String plate = plates.getText().toString(); String telephone=phone.getText().toString().trim();
+                task(() -> { api.saveProfile(fullName, vehicle, plate,telephone); return true; }, result -> message.setText("Perfil guardado."));
             });
             button(root, "Volver al servicio", () -> { screen = "home"; refresh(); });
             message.setText("");

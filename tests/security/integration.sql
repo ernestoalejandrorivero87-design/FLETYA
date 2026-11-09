@@ -41,6 +41,10 @@ begin
   end if;
 end $$;
 
+-- This fixture represents an existing approved pilot driver; real new driver signups stay pending.
+do $$ begin if (select driver_status from public.profiles where id='20000000-0000-0000-0000-000000000002')<>'pending' then raise exception 'New driver must await review';end if;end $$;
+update public.profiles set driver_status='approved' where id='20000000-0000-0000-0000-000000000002';
+
 -- Seed one requested job through the trusted service-role path.
 select set_config('request.jwt.claim.role','service_role',false);
 insert into public.jobs(id,origin,destination,distance_km,vehicle_type,helpers,service_type,description,price,status,client_id)

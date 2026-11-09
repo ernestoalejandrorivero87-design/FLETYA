@@ -1,0 +1,48 @@
+{
+  "client": [
+    {
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5NRF9Oq14HvyD6NbgL1AToWEI4CulMl0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      },
+      "client_info": {
+        "mobilesdk_app_id": "1:899470892442:android:cffd7cc5890aa645a76e23",
+        "android_client_info": {
+          "package_name": "app.fletya.client"
+        }
+      },
+      "oauth_client": []
+    },
+    {
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5NRF9Oq14HvyD6NbgL1AToWEI4CulMl0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      },
+      "client_info": {
+        "mobilesdk_app_id": "1:899470892442:android:f9a7a5f5102610e7a76e23",
+        "android_client_info": {
+          "package_name": "app.fletya.driver"
+        }
+      },
+      "oauth_client": []
+    }
+  ],
+  "project_info": {
+    "project_id": "fletya",
+    "project_number": "899470892442",
+    "storage_bucket": "fletya.firebasestorage.app"
+  },
+  "configuration_version": "1"
+}

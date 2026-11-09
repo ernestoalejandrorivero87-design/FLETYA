@@ -52,6 +52,30 @@ public final class DriverApi {
         session = value;
         validUntilNanos = System.nanoTime() + Math.max(0, value.optLong("expires_in", 3600) - 60) * 1_000_000_000L;
     }
+    public synchronized void register(String name,String email,String password,String phone,String vehicle,String plates) throws Exception {
+        if (signedIn()) throw new Failure(409,"Cierra sesión antes de registrar otra cuenta.");
+        name=name.trim();email=email.trim();phone=phone.trim();plates=plates.trim().toUpperCase(java.util.Locale.ROOT);
+        if(name.isEmpty()||name.length()>100||!email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")||password.length()<8)
+            throw new Failure(400,"Escribe nombre, correo válido y una contraseña de al menos 8 caracteres.");
+        if(true && (!phone.matches("\\+?[0-9]{10,15}")||!java.util.Arrays.asList("pickup","camioneta","camion").contains(vehicle)||!plates.matches("[A-Z0-9 -]{3,15}")))
+            throw new Failure(400,"Completa teléfono (10 a 15 dígitos), vehículo y placas válidas.");
+        JSONObject data=new JSONObject().put("full_name",name).put("role","driver").put("phone",phone);
+        if(true)data.put("vehicle_type",vehicle).put("plates",plates);
+        Response response=transport.send("POST","/auth/v1/signup",null,new JSONObject().put("email",email).put("password",password).put("data",data),null);
+        check(response);
+        // Confirmation is explicit. Never persist a password or auto-enter an unverified registration.
+        JSONObject result=new JSONObject(response.body());
+        if(!result.optString("access_token").isEmpty())try{transport.send("POST","/auth/v1/logout?scope=local",result.getString("access_token"),null,null);}catch(Exception ignored){}
+    }
+    public synchronized void recover(String email) throws Exception {
+        if(signedIn())throw new Failure(409,"Cierra sesión antes de recuperar otra cuenta.");
+        if(!email.trim().matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))throw new Failure(400,"Escribe un correo válido.");
+        check(transport.send("POST","/auth/v1/recover?redirect_to=https%3A%2F%2Ffletya.vercel.app",null,new JSONObject().put("email",email.trim()),null));
+    }
+    public synchronized void resendConfirmation(String email) throws Exception {
+        if(signedIn())throw new Failure(409,"Cierra sesión antes de reenviar la confirmación.");
+        check(transport.send("POST","/auth/v1/resend",null,new JSONObject().put("type","signup").put("email",email.trim()),null));
+    }
     public synchronized void login(String email, String password) throws Exception {
         if (signedIn()) throw new Failure(409, "Cierra la sesión actual antes de cambiar de cuenta.");
         try {
@@ -91,7 +115,7 @@ public final class DriverApi {
     private static String eq(String value) { return androidSafeEncode(value); }
     public synchronized JSONObject profile() throws Exception {
         token();
-        JSONArray rows = get("profiles?select=id,role,full_name,vehicle_type,plates&id=eq." + eq(userId()));
+        JSONArray rows = get("profiles?select=id,role,full_name,phone,vehicle_type,plates,driver_status&id=eq." + eq(userId()));
         if (rows.length() != 1 || !"driver".equals(rows.getJSONObject(0).optString("role"))) {
             clear(); throw new Failure(403, "Esta app es para cuentas de fletero. Usa tu cuenta de fletero.");
         }
@@ -141,14 +165,22 @@ public final class DriverApi {
             throw new Failure(409, "No se pudo confirmar el cambio de estado.");
         return job;
     }
-    public synchronized void saveProfile(String name, String vehicle, String plates) throws Exception {
+    public synchronized void arrive(String jobId,String stop) throws Exception {
+        JSONObject current=job(jobId);
+        String expected="pickup".equals(stop)?"en_route":"delivery".equals(stop)?"picked_up":"";
+        if(current==null||expected.isEmpty()||!expected.equals(current.optString("status"))||!userId().equals(current.optString("driver_id")))throw new Failure(409,"La asignación o la etapa del servicio cambió.");
+        call("POST","/rest/v1/job_arrivals?on_conflict=job_id,driver_id,stop,assignment_cycle",new JSONObject().put("job_id",jobId).put("driver_id",userId()).put("stop",stop),"resolution=ignore-duplicates,return=minimal");
+    }
+    public synchronized void saveProfile(String name, String vehicle, String plates) throws Exception { saveProfile(name,vehicle,plates,null); }
+    public synchronized void saveProfile(String name, String vehicle, String plates,String phone) throws Exception {
         token();
+        if(phone!=null&&!phone.matches("\\+?[0-9]{10,15}"))throw new Failure(400,"Escribe un teléfono de 10 a 15 dígitos.");
         plates = plates.trim().toUpperCase(java.util.Locale.ROOT);
         if (name.trim().isEmpty() || !java.util.Arrays.asList("pickup", "camioneta", "camion").contains(vehicle)
             || !plates.matches("[A-Z0-9 -]{3,15}"))
             throw new Failure(400, "Completa tu nombre, vehículo y placas válidas.");
         JSONArray rows = new JSONArray(call("PATCH", "/rest/v1/profiles?id=eq." + eq(userId()) + "&role=eq.driver&select=id",
-            new JSONObject().put("full_name", name.trim()).put("vehicle_type", vehicle).put("plates", plates), "return=representation").body());
+            new JSONObject().put("full_name", name.trim()).put("vehicle_type", vehicle).put("plates", plates).putOpt("phone",phone), "return=representation").body());
         if (rows.length() != 1 || !userId().equals(rows.getJSONObject(0).optString("id")))
             throw new Failure(409, "No se pudo confirmar el guardado del perfil.");
     }
