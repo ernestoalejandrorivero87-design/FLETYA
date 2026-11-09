@@ -41,7 +41,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}
 .location-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.location-actions .btn{font-size:13px}
 .location-modal{position:fixed;inset:0;background:#10282caa;z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px}
 .location-picker-card{width:100%;max-width:680px;max-height:92vh;overflow-y:auto}.location-picker-card .row{justify-content:space-between}.location-picker-card h2{margin:0}
-#locationPickerMap{height:44vh;min-height:240px;max-height:420px;border-radius:12px;overflow:hidden;margin-top:14px}.btn:disabled{opacity:.55;cursor:wait}
+.location-picker-frame{position:relative;height:44vh;min-height:240px;max-height:420px;border-radius:12px;overflow:hidden;margin-top:14px;isolation:isolate}#locationPickerMap{height:100%;width:100%}.location-center-pin{position:absolute;left:50%;top:50%;width:36px;height:48px;transform:translate(-50%,-100%);z-index:450;pointer-events:none;filter:drop-shadow(0 2px 3px #10282c88)}.btn:disabled{opacity:.55;cursor:wait}
 /* Touch-friendly panels; tablet/desktop-mode phones also use one content column. */
 .card,.grid>*,section{min-width:0}.card h2{margin-top:0}
 .btn,nav button{min-height:44px}.btn:focus-visible,nav button:focus-visible,summary:focus-visible{outline:3px solid #efb447;outline-offset:3px}
@@ -317,10 +317,11 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <div id="locationPickerModal" class="location-modal hidden" role="dialog" aria-modal="true" aria-labelledby="locationPickerTitle" tabindex="-1" onkeydown="if(event.key==='Escape') closeLocationPicker()">
   <div class="card location-picker-card">
     <div class="row"><h2 id="locationPickerTitle">Elegir ubicación</h2><button class="btn light" type="button" onclick="closeLocationPicker()" aria-label="Cerrar selector de ubicación">Cerrar</button></div>
-    <p class="muted" id="locationPickerHelp">Toca el mapa o arrastra el pin hasta el punto exacto. Acerca el mapa para afinarlo.</p>
-    <div id="locationPickerMap" aria-label="Mapa para elegir ubicación"></div>
+    <p class="muted" id="locationPickerHelp">Mueve el mapa hasta que la punta del pin señale el lugar. Acerca el mapa para elegir con precisión.</p>
+    <div class="location-picker-frame"><div id="locationPickerMap" aria-label="Mueve el mapa para elegir la ubicación bajo el pin central" aria-describedby="locationPickerHelp"></div>
+    <svg class="location-center-pin" viewBox="0 0 36 48" aria-hidden="true" focusable="false"><path d="M18 0C8 0 0 8 0 18c0 13 18 30 18 30s18-17 18-30C36 8 28 0 18 0Z" fill="#087f8c"/><circle cx="18" cy="18" r="7" fill="white"/></svg></div>
     <p id="locationPickerCoordinates" class="muted" aria-live="polite"></p>
-    <div class="location-actions"><button class="btn light" type="button" onclick="centerLocationPin()">Colocar pin en el centro</button><button class="btn" type="button" onclick="confirmLocationPicker()">Usar este punto</button><button class="btn light" type="button" onclick="closeLocationPicker()">Cancelar</button></div>
+    <div class="location-actions"><button id="locationPickerConfirm" class="btn" type="button" onclick="confirmLocationPicker()">Confirmar ubicación</button><button class="btn light" type="button" onclick="closeLocationPicker()">Cancelar</button></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -644,7 +645,6 @@ function parseRouteCoordinates(value) {
 let routeDraftRevision = 0;
 let routeCalculationRevision = 0;
 let locationPickerMap = null;
-let locationPickerMarker = null;
 let locationPickerTarget = null;
 let locationPickerSessionRevision = 0;
 
@@ -728,8 +728,8 @@ async function useClientLocation(target) {
   }
 }
 function updateLocationPickerCoordinates() {
-  if (!locationPickerMarker) return;
-  const point = locationPickerMarker.getLatLng();
+  if (!locationPickerMap || !locationPickerTarget) return;
+  const point = locationPickerMap.getCenter();
   document.getElementById('locationPickerCoordinates').textContent =
     'Punto seleccionado: ' + point.lat.toFixed(6) + ', ' + point.lng.toFixed(6);
 }
@@ -743,32 +743,33 @@ function openLocationPicker(target) {
   const point = parseRouteCoordinates(document.getElementById(target).value) ||
     chosenMarker?.getLatLng() || routeMap?.getCenter() || { lat: 21.1619, lng: -86.8515 };
   document.getElementById('locationPickerTitle').textContent = target === 'origin' ? 'Elegir origen' : 'Elegir destino';
+  document.getElementById('locationPickerConfirm').textContent=target==='origin'?'Confirmar origen':'Confirmar destino';
   document.getElementById('locationPickerModal').classList.remove('hidden');
   document.getElementById('appMain').inert = true;
   document.getElementById('appHeader').inert = true;
-  document.getElementById('locationPickerModal').focus?.();
+  document.getElementById('locationPickerModal').focus?.({preventScroll:true});
   if (!locationPickerMap) {
     locationPickerMap = L.map('locationPickerMap').setView([point.lat, point.lng], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(locationPickerMap);
-    locationPickerMarker = L.marker([point.lat, point.lng], { draggable: true, title: 'Arrastra para elegir el punto' }).addTo(locationPickerMap);
-    locationPickerMarker.on('dragend', updateLocationPickerCoordinates);
+    locationPickerMap.on('move', updateLocationPickerCoordinates);
+    locationPickerMap.on('moveend', updateLocationPickerCoordinates);
     locationPickerMap.on('click', event => {
-      locationPickerMarker.setLatLng(event.latlng);
+      if (!locationPickerTarget) return;
+      locationPickerMap.setView(event.latlng, undefined, {animate:false});
       updateLocationPickerCoordinates();
     });
   } else {
-    locationPickerMap.setView([point.lat, point.lng], 16);
-    locationPickerMarker.setLatLng(point);
+    locationPickerMap.stop();
+    locationPickerMap.setView([point.lat, point.lng], 16, {animate:false});
   }
   updateLocationPickerCoordinates();
-  setTimeout(() => locationPickerMap.invalidateSize(), 0);
-}
-function centerLocationPin() {
-  if (!locationPickerTarget || !locationPickerMap) return;
-  locationPickerMarker.setLatLng(locationPickerMap.getCenter());
-  updateLocationPickerCoordinates();
+  setTimeout(() => {
+    if(!locationPickerTarget)return;
+    locationPickerMap.invalidateSize({pan:false});
+    updateLocationPickerCoordinates();
+  }, 0);
 }
 function closeLocationPicker() {
   document.getElementById('locationPickerModal').classList.add('hidden');
@@ -776,14 +777,16 @@ function closeLocationPicker() {
   document.getElementById('appHeader').inert = false;
   const target = locationPickerTarget;
   locationPickerTarget = null;
-  if (target) document.getElementById(target + 'MapBtn').focus?.();
+  if (target) document.getElementById(target + 'MapBtn').focus?.({preventScroll:true});
 }
 async function confirmLocationPicker() {
   const target = locationPickerTarget;
   if (!target || !canEditClientLocations() || locationPickerSessionRevision !== sessionRevision) {
     closeLocationPicker(); return;
   }
-  const point = locationPickerMarker.getLatLng();
+  locationPickerMap.stop();
+  const center = locationPickerMap.getCenter();
+  const point = {lat:center.lat,lng:center.lng};
   closeLocationPicker();
   await setClientLocation(target, point);
 }
