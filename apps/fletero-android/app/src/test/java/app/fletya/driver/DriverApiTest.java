@@ -89,6 +89,20 @@ public class DriverApiTest {
         assertFalse(body.has("updated_at")); assertEquals("job-1", body.getString("job_id"));
         assertEquals("driver-a", body.getString("driver_id"));
     }
+    @Test public void fixThatAgesDuringRequestIsNotUploaded() throws Exception {
+        Fake fake = new Fake(); DriverApi api = logged(fake, new Memory());
+        fake.reply(200, "[{\"status\":\"en_route\",\"driver_id\":\"driver-a\"}]");
+        try { api.uploadLocation("job-1", 21, -86, 12, () -> false); fail(); }
+        catch (java.io.IOException expected) { assertEquals(3, fake.paths.size()); }
+    }
+    @Test public void rejectedGpsTokenDoesNotReplayOldFix() throws Exception {
+        Fake fake = new Fake(); DriverApi api = logged(fake, new Memory());
+        fake.reply(200, "[{\"status\":\"en_route\",\"driver_id\":\"driver-a\"}]");
+        fake.reply(401, "{}");
+        try { api.uploadLocation("job-1", 21, -86, 12); fail(); }
+        catch (DriverApi.Failure error) { assertEquals(401, error.status); }
+        assertEquals(4, fake.paths.size());
+    }
     @Test public void logoutClearsLocalSessionEvenOffline() throws Exception {
         Fake fake = new Fake(); Memory store = new Memory(); DriverApi api = logged(fake, store);
         fake.reply(503, "{}"); api.logout(); assertFalse(api.signedIn()); assertNull(store.value);
