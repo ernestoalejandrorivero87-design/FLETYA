@@ -1,0 +1,44 @@
+name: Android fletero
+on:
+  pull_request:
+    paths: ['apps/fletero-android/**', '.github/workflows/android-fletero.yml']
+  push:
+    branches: [main]
+    paths: ['apps/fletero-android/**', '.github/workflows/android-fletero.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Install pinned Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Test, lint and build both environments
+        working-directory: apps/fletero-android
+        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug assemblePilotoDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FLETYA-Fletero-Android-${{ github.sha }}
+          path: |
+            apps/fletero-android/app/build/outputs/apk/pruebas/debug/*.apk
+            apps/fletero-android/app/build/outputs/apk/piloto/debug/*.apk
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-validation-${{ github.sha }}
+          path: |
+            apps/fletero-android/app/build/reports/
+            apps/fletero-android/app/build/test-results/
+          retention-days: 14
