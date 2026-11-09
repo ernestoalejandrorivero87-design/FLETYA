@@ -46,7 +46,8 @@ public final class TrackingService extends Service implements LocationListener {
     private void status(String value) {
         if (stopped) return;
         report = value;
-        getSystemService(NotificationManager.class).notify(NOTIFICATION, notification(value));
+        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+            getSystemService(NotificationManager.class).notify(NOTIFICATION, notification(value));
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null || !api.signedIn()) { stopSelf(); return START_NOT_STICKY; }
@@ -66,7 +67,9 @@ public final class TrackingService extends Service implements LocationListener {
             if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification("Comprobando servicio y buscando GPS…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
             else startForeground(NOTIFICATION, notification("Comprobando servicio y buscando GPS…"));
             report = "Buscando ubicación…";
-            if (!locations.isLocationEnabled()) { status("Activa la ubicación del teléfono."); stopSelf(); return START_NOT_STICKY; }
+            boolean enabled = Build.VERSION.SDK_INT >= 28 ? locations.isLocationEnabled()
+                : locations.isProviderEnabled(LocationManager.GPS_PROVIDER) || locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+            if (!enabled) { status("Activa la ubicación del teléfono."); stopSelf(); return START_NOT_STICKY; }
             for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
                 if (locations.isProviderEnabled(provider)) locations.requestLocationUpdates(provider, 5_000, 0, this, Looper.getMainLooper());
             }
