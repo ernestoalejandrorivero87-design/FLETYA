@@ -169,6 +169,20 @@ public final class DriverApi {
         check(response);
         return true;
     }
+    public synchronized void registerPush(String installation, String token, String nonce) throws Exception {
+        token();
+        JSONArray rows = new JSONArray(call("POST", "/rest/v1/driver_push_devices?on_conflict=user_id,installation_id&select=user_id",
+            new JSONObject().put("user_id", userId()).put("installation_id", installation).put("token", token)
+                .put("registration_nonce", nonce).put("enabled", true),
+            "resolution=merge-duplicates,return=representation").body());
+        if (rows.length() != 1 || !userId().equals(rows.getJSONObject(0).optString("user_id")))
+            throw new Failure(409, "No se pudo confirmar el registro de avisos.");
+    }
+    public synchronized void unregisterPush(String installation, String nonce) throws Exception {
+        if (!signedIn() || nonce.isEmpty()) return;
+        call("PATCH", "/rest/v1/driver_push_devices?user_id=eq." + eq(userId()) + "&installation_id=eq." + eq(installation)
+            + "&registration_nonce=eq." + eq(nonce), new JSONObject().put("enabled", false), "return=minimal");
+    }
     public synchronized void logout() {
         try { if (session != null) transport.send("POST", "/auth/v1/logout?scope=local", token(), null, null); }
         catch (Exception ignored) { /* Local logout must work offline. */ }

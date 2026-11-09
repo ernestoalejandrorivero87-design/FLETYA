@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "899470892442",
+    "project_id": "fletya",
+    "storage_bucket": "fletya.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:899470892442:android:f9a7a5f5102610e7a76e23",
+        "android_client_info": {
+          "package_name": "app.fletya.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5NRF9Oq14HvyD6NbgL1AToWEI4CulMl0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

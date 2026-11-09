@@ -19,6 +19,11 @@ create or replace function auth.role()
 returns text language sql stable
 as $$ select nullif(current_setting('request.jwt.claim.role', true), '') $$;
 
+create or replace function auth.jwt() returns jsonb language sql stable
+as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
+create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id),not_after timestamptz);
+grant usage on schema auth to service_role;
+
 create table public.profiles (
   id uuid primary key,
   full_name text,

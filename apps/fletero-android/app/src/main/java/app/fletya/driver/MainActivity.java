@@ -121,7 +121,7 @@ public final class MainActivity extends Activity {
     private void fail(Exception error) {
         String value = error instanceof DriverApi.Failure ? error.getMessage() : "No se pudo conectar. Revisa tu conexión y vuelve a intentar.";
         if (!api.signedIn() && !"login".equals(screen)) {
-            stopService(new Intent(this, TrackingService.class)); active = null; loginScreen();
+            stopService(new Intent(this, TrackingService.class)); PushManager.disableLocally(this); active = null; loginScreen();
         }
         message.setText(value);
     }
@@ -156,6 +156,16 @@ public final class MainActivity extends Activity {
             if (!visible) return;
             screen = "home"; shell();
             LinearLayout account = card("Hola, " + panel.profile().optString("full_name", "fletero"));
+            PushManager.activate(this, api);
+            if (BuildConfig.PUSH_ENABLED) {
+                text(account, PushManager.report(), 14, false);
+                button(account, "Activar avisos de solicitudes", () -> {
+                    if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18);
+                    else if (!PushManager.permitted(this)) open("package:" + getPackageName(), android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    else { PushManager.tokenChanged(this, api); message.setText(PushManager.report()); }
+                });
+            }
             button(account, "Mi perfil", this::profile);
             button(account, "Mis servicios completados", () -> { screen = "history"; historyPage = 0; history(); });
             button(account, "Cerrar sesión", this::confirmLogout);
@@ -222,7 +232,9 @@ public final class MainActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
-        if (requestCode != 17 || !api.signedIn()) return;
+        if (!api.signedIn()) return;
+        if (requestCode == 18) { PushManager.activate(this, api); refresh(); return; }
+        if (requestCode != 17) return;
         String acceptingId = permissionAcceptId; permissionAcceptId = null;
         boolean fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
         boolean notifications = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
@@ -326,7 +338,11 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("¿Cerrar sesión?").setMessage(active == null ? "Tendrás que iniciar sesión de nuevo para usar la app." : "Dejarás de compartir ubicación. El servicio seguirá asignado a tu cuenta.")
             .setPositiveButton("Cerrar sesión", (d, w) -> {
                 stopService(new Intent(this, TrackingService.class));
-                task(() -> { api.logout(); return true; }, result -> { revision++; active = null; permissionExplained = false; loginScreen(); });
+                String[] registration = PushManager.disableLocally(this);
+                task(() -> {
+                    try { api.unregisterPush(registration[0], registration[1]); } catch (Exception ignored) { /* Local nonce already invalid. */ }
+                    api.logout(); return true;
+                }, result -> { revision++; active = null; permissionExplained = false; loginScreen(); });
             }).setNegativeButton("Cancelar", null).show();
     }
 }
