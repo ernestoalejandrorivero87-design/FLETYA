@@ -1000,3 +1000,40 @@ test('ending tracking and logout remove assigned identity and private vehicle dr
  assert.equal(r.document.getElementById('assignedDriver').hidden,true);
  r.document.getElementById('plates').value='ABC-123';r.run('clearSignedOutView()');assert.equal(r.document.getElementById('plates').value,'');
 });
+
+test('driver navigation selects pickup before loading and delivery after pickup',()=>{
+ const r=runtime();
+ r.run("job={id:'nav',status:'en_route',origin:'21.1, -86.8',destination:'Airport & terminal',driver_id:'driver-1'}");
+ const first=new URL(r.run('driverDirectionsUrl(job)'));
+ assert.equal(first.origin,'https://www.google.com');assert.equal(first.searchParams.get('destination'),'21.1, -86.8');
+ assert.equal(first.searchParams.get('origin'),null);assert.equal(first.searchParams.get('travelmode'),'driving');assert.equal(first.searchParams.get('dir_action'),'navigate');
+ r.run("job.status='picked_up'");const next=new URL(r.run('driverDirectionsUrl(job)'));
+ assert.match(next.searchParams.get('destination'),/^Airport & terminal/);
+ r.run("job.status='completed'");assert.equal(r.run('driverDirectionsUrl(job)'),null);
+});
+test('driver route loads once through polling and switches navigation action without resetting the map',async()=>{
+ const r=runtime();let requests=0;
+ r.api.functions={invoke:async()=>{requests++;return {data:{polyline:'_p~iF~ps|U_ulLnnqC_mqNvxq`@',distance_km:20,duration_text:'30 min'}}}};
+ r.run("activeSessionRole='driver';state.active={id:'nav',driver_id:'driver-1',status:'en_route',origin:'A',destination:'B'}");
+ await r.run('updateDriverNavigation(state.active)');await r.run('updateDriverNavigation(state.active)');
+ assert.equal(requests,1);assert.equal(r.document.getElementById('driverNavigateLink').textContent,'Navegar al origen');
+ r.run("state.active.status='picked_up'");await r.run('updateDriverNavigation(state.active)');assert.equal(requests,1);
+ assert.equal(r.document.getElementById('driverNavigateLink').textContent,'Navegar al destino');
+ r.run('clearSignedOutView()');assert.equal(r.document.getElementById('driverNavigation').hidden,true);
+ assert.equal(r.document.getElementById('driverNavigateLink').attributes.href,undefined);
+});
+test('late route result cannot restore navigation after releasing or signing out',async()=>{
+ const r=runtime();let finish;
+ r.api.functions={invoke:()=>new Promise(resolve=>{finish=resolve})};
+ r.run("activeSessionRole='driver';state.active={id:'nav',driver_id:'driver-1',status:'en_route',origin:'A',destination:'B'}");
+ const pending=r.run('updateDriverNavigation(state.active)');r.run('clearDriverNavigation();state.active=null');
+ finish({data:{polyline:'_p~iF~ps|U_ulLnnqC_mqNvxq`@'}});await pending;
+ assert.equal(r.document.getElementById('driverNavigation').hidden,true);assert.equal(r.run('driverRouteReady'),false);
+});
+test('route API failure keeps the navigation link usable and supports explicit retry',async()=>{
+ const r=runtime();let requests=0;r.api.functions={invoke:async()=>{requests++;return {error:{message:'offline'}}}};
+ r.run("activeSessionRole='driver';state.active={id:'nav',driver_id:'driver-1',status:'en_route',origin:'A',destination:'B'}");
+ await r.run('updateDriverNavigation(state.active)');assert.match(r.document.getElementById('driverRouteInfo').textContent,/No se pudo/);
+ assert.match(r.document.getElementById('driverNavigateLink').attributes.href,/google.com/);
+ await r.run('updateDriverNavigation(state.active,true)');assert.equal(requests,2);
+});
