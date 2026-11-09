@@ -30,7 +30,7 @@ public final class MainActivity extends Activity {
     private ScrollView scroll;
     private String screen="login",rendered="",originDraft="",destDraft="",profileName="";
     private int vehicleChoice,helperChoice,serviceChoice,historyPage;
-    private boolean busy,visible,picking,routeLoading,routeFailed,awaitingLocationPermission;
+    private boolean busy,visible,picking,menuOpen,routeLoading,routeFailed,awaitingLocationPermission;
     private long revision,draftRevision,routeRevision;
     private JSONObject active;
     private EditText originField,destField;
@@ -51,7 +51,7 @@ public final class MainActivity extends Activity {
     @Override public void onResume(){super.onResume();visible=true;if(api.signedIn()&&"home".equals(screen))refresh();if(locationTarget!=null&&locationListener==null&&!awaitingLocationPermission)startLocation();updateFreshness();main.postDelayed(freshnessTick,1000);main.postDelayed(poll,10_000);}
     @Override public void onPause(){visible=false;main.removeCallbacks(poll);main.removeCallbacks(freshnessTick);if(!awaitingLocationPermission)stopLocation();super.onPause();}
     @Override public void onDestroy(){revision++;routeRevision++;main.removeCallbacksAndMessages(null);stopLocation();disposeMaps();if(pickerDialog!=null)pickerDialog.dismiss();worker.shutdownNow();super.onDestroy();}
-    private final Runnable poll=new Runnable(){public void run(){if(!visible)return;if(api.signedIn()&&"home".equals(screen)&&!busy&&!picking)refresh();main.postDelayed(this,10_000);}};
+    private final Runnable poll=new Runnable(){public void run(){if(!visible)return;if(api.signedIn()&&"home".equals(screen)&&!busy&&!picking&&!menuOpen)refresh();main.postDelayed(this,10_000);}};
     private final Runnable freshnessTick=new Runnable(){public void run(){if(!visible)return;updateFreshness();main.postDelayed(this,1000);}};
     private void updateFreshness(){if("home".equals(screen)&&active!=null&&ClientRules.assigned(active.optString("status"))&&currentTrackingFix!=null){if(trackingStatus!=null)trackingStatus.setText(ClientRules.freshness(currentTrackingFix));if(trackingMap!=null)trackingMap.updateDriver(currentTrackingFix);}}
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -94,7 +94,7 @@ public final class MainActivity extends Activity {
     }
     private void menu(View anchor){
         var menu=new PopupMenu(this,anchor);menu.getMenu().add(0,1,0,"Solicitar / Seguimiento");menu.getMenu().add(0,2,1,"Historial de servicios");menu.getMenu().add(0,3,2,"Mi perfil");menu.getMenu().add(0,4,3,"Cerrar sesión");
-        menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();default->{return false;}}return true;});picking=true;menu.setOnDismissListener(m->picking=false);menu.show();
+        menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();default->{return false;}}return true;});menuOpen=true;menu.setOnDismissListener(m->menuOpen=false);menu.show();
     }
     private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError){}
     private void refresh(){
