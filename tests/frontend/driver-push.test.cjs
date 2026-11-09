@@ -36,6 +36,14 @@ test('missing Firebase server credentials defers eligible offers without pretend
  const value=await(await handler(request('a'.repeat(64)))).json();assert.equal(value.sent,0);assert.equal(value.configured,false);assert.equal(value.retry,1);
  assert.equal(calls[1].body.p_result,'retry');assert.equal(calls.length,2);
 });
+test('credential diagnostics never return the secret or its contents',async()=>{
+ for(const [secret,expected] of [['not-json','invalid_json'],[JSON.stringify({project_id:'wrong'}),'wrong_project'],[JSON.stringify({project_id:'fletya'}),'missing_service_account_fields']]){
+  const handler=make().handler({env:env({SUPABASE_URL:'https://db.example',SUPABASE_SERVICE_ROLE_KEY:'synthetic',FIREBASE_SERVICE_ACCOUNT_JSON:secret}),fetch:async()=>Response.json([]),now:Date.now,crypto});
+  const value=await(await handler(request('a'.repeat(64)))).json();
+  assert.equal(value.configuration,expected);assert.equal(value.configured,false);
+  assert.equal(value.private_key,undefined);assert.equal(value.client_email,undefined);
+ }
+});
 test('offers without eligible devices are skipped without contacting Google',async()=>{
  const calls=[];const handler=make().handler({env:env({SUPABASE_URL:'https://db.example',SUPABASE_SERVICE_ROLE_KEY:'synthetic'}),fetch:async(url,options)=>{calls.push({url,body:JSON.parse(options.body)});return Response.json(url.endsWith('claim_driver_push_batch')?[{...offer,devices:[]}]:null);},now:Date.now,crypto});
  const value=await(await handler(request('a'.repeat(64)))).json();assert.equal(value.sent,0);assert.equal(calls[1].body.p_result,'skipped');

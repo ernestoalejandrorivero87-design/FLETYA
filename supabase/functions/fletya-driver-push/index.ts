@@ -61,13 +61,17 @@ export function handler(runtime: Runtime) {
     const offers: Offer[] = await claim.json();
     const configured = runtime.env('FIREBASE_SERVICE_ACCOUNT_JSON');
     let account: ServiceAccount | null = null, googleToken = '';
+    let configuration = configured ? 'invalid_json' : 'missing_secret';
     try {
       if (configured) {
         account = JSON.parse(configured);
-        if (account?.project_id !== 'fletya' || !account.client_email || !account.private_key) account = null;
+        if (account?.project_id !== 'fletya') { account = null; configuration = 'wrong_project'; }
+        else if (typeof account.client_email !== 'string' || typeof account.private_key !== 'string'
+            || !account.private_key.includes('-----BEGIN PRIVATE KEY-----')) { account = null; configuration = 'missing_service_account_fields'; }
+        else configuration = 'ready';
       }
       if (account && offers.some(offer => offer.devices.length)) googleToken = await accessToken(account, runtime);
-    } catch { account = null; }
+    } catch { account = null; if (configuration === 'ready') configuration = 'google_authorization_failed'; }
     let sent = 0, retried = 0;
     const deadline = runtime.now() + 55_000;
     for (const offer of offers) {
@@ -93,7 +97,7 @@ export function handler(runtime: Runtime) {
         if (!finish.ok) retried++;
       } catch { retried++; }
     }
-    return Response.json({ processed: offers.length, sent, retry: retried, configured: Boolean(account) });
+    return Response.json({ processed: offers.length, sent, retry: retried, configured: Boolean(account), configuration });
   };
 }
 if (typeof Deno !== 'undefined') Deno.serve(handler({ env: name => Deno.env.get(name), fetch, now: Date.now, crypto }));
