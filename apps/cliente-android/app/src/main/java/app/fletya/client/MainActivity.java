@@ -26,7 +26,7 @@ public final class MainActivity extends Activity {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private ClientApi api;
     private LinearLayout root,quoteArea;
-    private TextView message;
+    private TextView message,pushStatusView;
     private ScrollView scroll;
     private String screen="login",rendered="",originDraft="",destDraft="",profileName="";
     private int vehicleChoice,helperChoice,serviceChoice,historyPage,noticePage;
@@ -54,7 +54,7 @@ public final class MainActivity extends Activity {
     @Override public void onDestroy(){revision++;routeRevision++;main.removeCallbacksAndMessages(null);stopLocation();disposeMaps();if(pickerDialog!=null)pickerDialog.dismiss();worker.shutdownNow();super.onDestroy();}
     private final Runnable poll=new Runnable(){public void run(){if(!visible)return;if(api.signedIn()&&"home".equals(screen)&&!busy&&!picking&&!menuOpen)refresh();main.postDelayed(this,10_000);}};
     private final Runnable freshnessTick=new Runnable(){public void run(){if(!visible)return;updateFreshness();main.postDelayed(this,1000);}};
-    private void updateFreshness(){if("home".equals(screen)&&active!=null&&ClientRules.assigned(active.optString("status"))&&currentTrackingFix!=null){if(trackingStatus!=null)trackingStatus.setText(ClientRules.freshness(currentTrackingFix));if(trackingMap!=null)trackingMap.updateDriver(currentTrackingFix);}}
+    private void updateFreshness(){if(pushStatusView!=null)pushStatusView.setText(PushManager.report());if("home".equals(screen)&&active!=null&&ClientRules.assigned(active.optString("status"))&&currentTrackingFix!=null){if(trackingStatus!=null)trackingStatus.setText(ClientRules.freshness(currentTrackingFix));if(trackingMap!=null)trackingMap.updateDriver(currentTrackingFix);}}
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable background(int color,int radius){var value=new GradientDrawable();value.setColor(color);value.setCornerRadius(dp(radius));return value;}
     private TextView text(LinearLayout parent,String value,int size,boolean bold){var view=new TextView(this);view.setText(value);view.setTextSize(size);view.setTextColor(Color.rgb(32,45,49));if(bold)view.setTypeface(null,Typeface.BOLD);view.setPadding(0,dp(4),0,dp(8));parent.addView(view);return view;}
@@ -70,7 +70,7 @@ public final class MainActivity extends Activity {
         var header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);root.addView(header);
         var title=text(header,"FLETYA",26,true);title.setTextColor(TEAL);title.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1));
         if(api.signedIn())button(header,"Menú",()->menu(header)).setLayoutParams(new LinearLayout.LayoutParams(dp(96),dp(48)));
-        text(root,"Clientes · "+BuildConfig.ENVIRONMENT,12,false);message=text(root,"",14,false);message.setTextColor(TEAL);
+        text(root,"Clientes · "+BuildConfig.ENVIRONMENT,12,false);pushStatusView=api.signedIn()&&BuildConfig.PUSH_ENABLED?text(root,PushManager.report(),13,false):null;message=text(root,"",14,false);message.setTextColor(TEAL);
     }
     private interface Work<T>{T run()throws Exception;}
     private interface Done<T>{void run(T value)throws Exception;}
