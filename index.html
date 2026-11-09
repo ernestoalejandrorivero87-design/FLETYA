@@ -1342,9 +1342,9 @@ async function loadAssignedDriver(job){
   box.innerHTML='<h3>Tu fletero asignado</h3><p><strong>'+escapeText(driver.full_name||'Nombre sin registrar')+'</strong></p><p>Vehículo: '+escapeText(vehicleLabel(driver.vehicle_type))+'</p><p>Placas: '+escapeText(driver.plates||'Sin registrar')+'</p>';
  }catch(error){if(revision===sessionRevision&&state.active?.id===jobId&&state.active?.driver_id===driverId)box.textContent='No se pudo consultar la identificación del fletero.';}
 }
-function trackingFreshness(updatedAt,now=Date.now()){
- const time=Date.parse(updatedAt),age=now-time;
- if(!Number.isFinite(time)||age< -60000)return {fresh:false,text:'Hora de ubicación no disponible'};
+function trackingFreshness(updatedAt,serverNow){
+ const time=Date.parse(updatedAt),now=typeof serverNow==='number'?serverNow:Date.parse(serverNow),age=now-time;
+ if(!Number.isFinite(time)||!Number.isFinite(now)||age< -60000)return {fresh:false,text:'Hora de ubicación no disponible'};
  const elapsed=Math.max(0,Math.floor(age/1000));
  return {fresh:elapsed<=60,text:elapsed<=60?'Ubicación reciente':'Ubicación desactualizada · hace '+(elapsed<3600?Math.floor(elapsed/60)+' min':Math.floor(elapsed/3600)+' h')};
 }
@@ -1357,14 +1357,8 @@ function trackingFreshness(updatedAt,now=Date.now()){
     return;
   }
 
-  const { data, error } = await supabaseClient
-    .from('driver_locations')
-    .select('latitude, longitude, accuracy, updated_at')
-    .eq('job_id', activeJob.id)
-    .eq('driver_id', activeJob.driver_id)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: rows, error } = await supabaseClient.rpc('get_job_driver_location', {p_job_id:activeJob.id});
+  const data=rows?.[0];
 
   // Ignora respuestas pendientes de un servicio que ya terminó o cambió.
   if (revision!==sessionRevision||logoutPending||state.active?.id !== activeJob.id || state.active?.driver_id!==driverId || !isDriverActiveStatus(state.active?.status)) return;
@@ -1379,15 +1373,15 @@ function trackingFreshness(updatedAt,now=Date.now()){
     return;
   }
 
-  if (!data) {
+  if (!data || data.job_id!==activeJob.id || data.driver_id!==driverId) {
     if (box) {
       box.textContent = '🚚 Buscando ubicación del fletero...';
     }
     return;
   }
 
-  const freshness=trackingFreshness(data.updated_at);
-  const hora=Number.isFinite(Date.parse(data.updated_at))?new Date(data.updated_at).toLocaleString('es-MX'):'Sin hora registrada';
+  const freshness=trackingFreshness(data.updated_at,data.server_now);
+  const hora=Number.isFinite(Date.parse(data.updated_at))?new Date(data.updated_at).toLocaleString('es-MX',{timeZone:'America/Cancun'}):'Sin hora registrada';
 
   if (box) {
     box.innerHTML = `
@@ -1395,7 +1389,7 @@ function trackingFreshness(updatedAt,now=Date.now()){
       <p>Lat: ${Number(data.latitude).toFixed(6)}</p>
       <p>Lng: ${Number(data.longitude).toFixed(6)}</p>
       <p>🎯 Precisión: ${Math.round(data.accuracy || 0)} m</p>
-      <p>🕐 Última recepción: ${hora}</p>
+      <p>🕐 Última recepción (hora de Cancún): ${hora}</p>
     `;
   }
  }
