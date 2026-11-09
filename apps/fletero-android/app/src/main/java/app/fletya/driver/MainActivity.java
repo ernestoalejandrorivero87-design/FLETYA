@@ -25,12 +25,15 @@ public final class MainActivity extends Activity {
     private DriverApi api;
     private LinearLayout root;
     private TextView message;
+    private ScrollView currentScroll;
+    private String renderedScreen = "";
     private boolean visible, busy, permissionExplained;
     private long revision;
     private String screen = "login";
     private JSONObject active;
     private int historyPage;
     private String permissionAcceptId;
+    private RouteMapView routeMap;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -44,7 +47,7 @@ public final class MainActivity extends Activity {
         main.postDelayed(poll, 10_000);
     }
     @Override public void onPause() { visible = false; main.removeCallbacks(poll); super.onPause(); }
-    @Override public void onDestroy() { revision++; main.removeCallbacksAndMessages(null); worker.shutdownNow(); super.onDestroy(); }
+    @Override public void onDestroy() { revision++; main.removeCallbacksAndMessages(null); if (routeMap != null) routeMap.dispose(); worker.shutdownNow(); super.onDestroy(); }
     private final Runnable poll = new Runnable() {
         @Override public void run() {
             if (!visible) return;
@@ -57,7 +60,10 @@ public final class MainActivity extends Activity {
         GradientDrawable value = new GradientDrawable(); value.setColor(color); value.setCornerRadius(dp(radius)); return value;
     }
     private void shell() {
-        ScrollView scroll = new ScrollView(this);
+        int scrollY = currentScroll != null && screen.equals(renderedScreen) ? currentScroll.getScrollY() : 0;
+        renderedScreen = screen;
+        ScrollView scroll = new ScrollView(this); currentScroll = scroll;
+        scroll.post(() -> scroll.scrollTo(0, scrollY));
         scroll.setFillViewport(true);
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(20), dp(16), dp(20), dp(28));
         root.setBackgroundColor(Color.rgb(244, 247, 248));
@@ -71,7 +77,12 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
         scroll.requestApplyInsets();
-        text(root, "FLETYA", 26, true).setTextColor(TEAL);
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        root.addView(heading);
+        TextView brand = text(heading, "FLETYA", 26, true); brand.setTextColor(TEAL);
+        brand.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
+        if (api.signedIn()) button(heading, "Menú", () -> showMenu(heading)).setLayoutParams(new LinearLayout.LayoutParams(dp(96), dp(48)));
         text(root, "Fleteros · " + BuildConfig.ENVIRONMENT, 12, false);
         message = text(root, "", 14, false); message.setTextColor(TEAL);
     }
@@ -126,7 +137,7 @@ public final class MainActivity extends Activity {
         message.setText(value);
     }
     private void loginScreen() {
-        screen = "login"; shell();
+        clearRoute(); screen = "login"; shell();
         LinearLayout box = card("Entra como fletero");
         text(box, "Usa tu cuenta de fletero de FLETYA.", 15, false);
         EditText email = field(box, "Correo electrónico", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
@@ -155,22 +166,11 @@ public final class MainActivity extends Activity {
         }, panel -> {
             if (!visible) return;
             screen = "home"; shell();
-            LinearLayout account = card("Hola, " + panel.profile().optString("full_name", "fletero"));
             PushManager.activate(this, api);
-            if (BuildConfig.PUSH_ENABLED) {
-                text(account, PushManager.report(), 14, false);
-                button(account, "Activar avisos de solicitudes", () -> {
-                    if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18);
-                    else if (!PushManager.permitted(this)) open("package:" + getPackageName(), android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                    else { PushManager.tokenChanged(this, api); message.setText(PushManager.report()); }
-                });
-            }
-            button(account, "Mi perfil", this::profile);
-            button(account, "Mis servicios completados", () -> { screen = "history"; historyPage = 0; history(); });
-            button(account, "Cerrar sesión", this::confirmLogout);
+            text(root, "Hola, " + panel.profile().optString("full_name", "fletero"), 16, true);
             active = panel.active().length() == 1 ? panel.active().getJSONObject(0) : null;
             if (panel.active().length() > 1) {
+                clearRoute();
                 stopService(new Intent(this, TrackingService.class));
                 text(card("Revisión necesaria"), "Hay más de un servicio activo. Contacta con administración antes de continuar.", 16, false);
                 return;
@@ -187,7 +187,14 @@ public final class MainActivity extends Activity {
                 text(box, TrackingService.report(), 14, false);
                 button(box, "Revisar permisos y activar ubicación", () -> requestTracking(null, true));
                 requestTracking(null, false);
+                LinearLayout mapBox = card("Ruta de recogida a entrega");
+                text(mapBox, "Referencia del servicio. Usa Navegar para recibir indicaciones desde tu ubicación.", 13, false);
+                if (routeMap == null) routeMap = new RouteMapView(this, api);
+                if (routeMap.getParent() instanceof ViewGroup parent) parent.removeView(routeMap);
+                mapBox.addView(routeMap);
+                routeMap.show(job, api.userId());
             } else {
+                clearRoute();
                 stopService(new Intent(this, TrackingService.class));
                 LinearLayout box = card("Solicitudes disponibles");
                 if (panel.offers().length() == 0) text(box, "No hay nuevas solicitudes disponibles.", 16, false);
@@ -201,6 +208,37 @@ public final class MainActivity extends Activity {
             button(root, "Actualizar panel", this::refresh);
             message.setText("");
         });
+    }
+    private void clearRoute() {
+        if (routeMap != null) { routeMap.dispose(); routeMap = null; }
+    }
+    private void showMenu(View anchor) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add(0, 1, 0, "Mi servicio / Solicitudes");
+        menu.getMenu().add(0, 2, 1, "Mi perfil");
+        menu.getMenu().add(0, 3, 2, "Mis servicios completados");
+        if (BuildConfig.PUSH_ENABLED) menu.getMenu().add(0, 4, 3, "Avisos de solicitudes");
+        menu.getMenu().add(0, 5, 4, "Cerrar sesión");
+        menu.setOnMenuItemClickListener(item -> {
+            if (busy) return true;
+            switch (item.getItemId()) {
+                case 1 -> { screen = "home"; refresh(); }
+                case 2 -> profile();
+                case 3 -> { screen = "history"; historyPage = 0; history(); }
+                case 4 -> new AlertDialog.Builder(this).setTitle("Avisos de solicitudes")
+                    .setMessage(PushManager.report()).setNegativeButton("Volver", null)
+                    .setPositiveButton("Activar avisos", (d, w) -> {
+                        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18);
+                        else if (!PushManager.permitted(this)) open("package:" + getPackageName(), android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                        else { PushManager.tokenChanged(this, api); message.setText(PushManager.report()); }
+                    }).show();
+                case 5 -> confirmLogout();
+                default -> { return false; }
+            }
+            return true;
+        });
+        menu.show();
     }
     private void jobDetails(LinearLayout box, JSONObject job) {
         text(box, "Recogida: " + job.optString("origin"), 16, true);
