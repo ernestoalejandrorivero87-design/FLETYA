@@ -127,6 +127,28 @@ public class DriverApiTest {
         assertFalse(DriverRules.freshFix(60_000_000_000L, 55_000_000_000L, 91, -86.8, 10));
         assertFalse(DriverRules.freshFix(60_000_000_000L, 55_000_000_000L, 21, -186, 10));
     }
+    @Test public void pushRegistrationMustReturnOwnRow() throws Exception {
+        Fake fake = new Fake(); DriverApi api = logged(fake, new Memory()); fake.reply(200, "[]");
+        try { api.registerPush("installation", "synthetic-fcm-token", "nonce"); fail(); }
+        catch (DriverApi.Failure error) { assertEquals(409, error.status); }
+        assertEquals("driver-a", fake.bodies.get(2).getString("user_id"));
+        assertFalse(fake.bodies.get(2).has("session_id"));
+    }
+    @Test public void logoutUnregisterMatchesInstallationAndLoginNonce() throws Exception {
+        Fake fake = new Fake(); DriverApi api = logged(fake, new Memory()); fake.reply(204, "");
+        api.unregisterPush("installation", "login-nonce");
+        assertTrue(fake.paths.get(2).contains("user_id=eq.driver-a&installation_id=eq.installation&registration_nonce=eq.login-nonce"));
+        assertFalse(fake.bodies.get(2).getBoolean("enabled"));
+    }
+    @Test public void pushRequiresCurrentAccountAndLoginNonce() {
+        String id = "00000000-0000-0000-0000-000000000001";
+        assertTrue(DriverRules.matchesPush("a", "a", "login-2", "a", "login-2", "new_service", id));
+        assertFalse(DriverRules.matchesPush("", "a", "login-2", "a", "login-2", "new_service", id));
+        assertFalse(DriverRules.matchesPush("b", "b", "login-2", "a", "login-2", "new_service", id));
+        assertFalse(DriverRules.matchesPush("a", "a", "login-2", "a", "login-1", "new_service", id));
+        assertFalse(DriverRules.matchesPush("a", "a", "", "a", "", "new_service", id));
+        assertFalse(DriverRules.matchesPush("a", "a", "login-2", "a", "login-2", "new_service", "invalid"));
+    }
     @Test public void navigationChangesOnlyAfterPickup() {
         assertEquals("origin", DriverRules.navigationPoint("en_route", "origin", "destination"));
         assertEquals("destination", DriverRules.navigationPoint("picked_up", "origin", "destination"));

@@ -1,4 +1,7 @@
 plugins { id 'com.android.application' }
+def firebaseConfig = new groovy.json.JsonSlurper().parse(file('src/piloto/google-services.json'))
+def firebaseClient = firebaseConfig.client.find { it.client_info.android_client_info.package_name == 'app.fletya.driver' }
+if (!firebaseClient) throw new GradleException('Firebase package must match app.fletya.driver')
 android {
     namespace 'app.fletya.driver'
     compileSdk 36
@@ -6,8 +9,8 @@ android {
         applicationId 'app.fletya.driver'
         minSdk 26
         targetSdk 36
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 2
+        versionName '0.2.0'
     }
     buildFeatures { buildConfig true }
     flavorDimensions += 'environment'
@@ -15,6 +18,7 @@ android {
         pruebas {
             dimension 'environment'
             applicationIdSuffix '.pruebas'
+            buildConfigField 'boolean', 'PUSH_ENABLED', 'false'
             resValue 'string', 'app_name', 'FLETYA Fletero · Pruebas'
             buildConfigField 'String', 'SUPABASE_URL', '"https://ccdtpwvalqznasstnqxj.supabase.co"'
             buildConfigField 'String', 'SUPABASE_KEY', '"sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89"'
@@ -22,6 +26,11 @@ android {
         }
         piloto {
             dimension 'environment'
+            buildConfigField 'boolean', 'PUSH_ENABLED', 'true'
+            resValue 'string', 'google_app_id', firebaseClient.client_info.mobilesdk_app_id
+            resValue 'string', 'gcm_defaultSenderId', firebaseConfig.project_info.project_number
+            resValue 'string', 'google_api_key', firebaseClient.api_key[0].current_key
+            resValue 'string', 'project_id', firebaseConfig.project_info.project_id
             resValue 'string', 'app_name', 'FLETYA Fletero · Piloto'
             buildConfigField 'String', 'SUPABASE_URL', '"https://wsdfqscrvfygxripmrzi.supabase.co"'
             buildConfigField 'String', 'SUPABASE_KEY', '"sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O"'
@@ -33,6 +42,8 @@ android {
     testOptions { unitTests.returnDefaultValues = true }
 }
 dependencies {
+    implementation platform('com.google.firebase:firebase-bom:35.1.0')
+    implementation 'com.google.firebase:firebase-messaging'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20250517'
 }
