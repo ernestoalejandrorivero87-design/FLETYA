@@ -113,7 +113,7 @@ begin
   'notification_id',c.notification_id,'user_id',c.user_id,'job_id',c.job_id,'attempt',c.attempts,
   'devices',coalesce((select jsonb_agg(jsonb_build_object('installation_id',d.installation_id,'token',d.token,'registration_nonce',d.registration_nonce))
    from public.driver_push_devices d join public.profiles p on p.id=d.user_id and p.role='driver'
-   where d.user_id=c.user_id and d.enabled and d.updated_at>now()-interval '30 days'
+   where d.user_id=c.user_id and d.enabled
    and private.driver_push_session_active(d.session_id,d.user_id)
    and c.created_at>now()-interval '5 minutes'
    and exists(select 1 from public.jobs j where j.id=c.job_id and j.status='requested' and j.driver_id is null)

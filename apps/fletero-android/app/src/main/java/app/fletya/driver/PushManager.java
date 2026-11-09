@@ -19,11 +19,14 @@ final class PushManager {
     private static final ExecutorService worker = Executors.newSingleThreadExecutor();
     private static volatile String report = "Avisos pendientes de activar";
     private static boolean pending;
+    private static volatile long generation;
     private static long lastSync;
     private static SharedPreferences prefs(Context context) { return context.getSharedPreferences("push_registration", Context.MODE_PRIVATE); }
     static String report() { return report; }
     static boolean permitted(Context context) {
-        return (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+        NotificationChannel channel = context.getSystemService(NotificationManager.class).getNotificationChannel(CHANNEL);
+        return (channel == null || channel.getImportance() != NotificationManager.IMPORTANCE_NONE)
+            && (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
             && context.getSystemService(NotificationManager.class).areNotificationsEnabled();
     }
     static synchronized void activate(Context context, DriverApi api) {
@@ -32,7 +35,7 @@ final class PushManager {
         String user = api.userId();
         if (!user.equals(prefs.getString("user", ""))) {
             prefs.edit().putString("user", user).putString("nonce", UUID.randomUUID().toString()).remove("seen").commit();
-            lastSync = 0;
+            lastSync = 0; generation++;
         }
         syncIfActive(context, api);
     }
@@ -54,6 +57,7 @@ final class PushManager {
             installation = UUID.randomUUID().toString(); prefs.edit().putString("installation", installation).commit();
         }
         final String device = installation, user = api.userId(), nonce = prefs.getString("nonce", "");
+        final long currentGeneration = generation;
         pending = true;
         report = "Activando avisos…";
         FirebaseMessaging.getInstance().setAutoInitEnabled(true);
@@ -63,20 +67,23 @@ final class PushManager {
                 try {
                     if (!user.equals(api.userId()) || !nonce.equals(prefs.getString("nonce", ""))) return;
                     api.registerPush(device, task.getResult(), nonce);
-                    if (user.equals(api.userId()) && nonce.equals(prefs.getString("nonce", ""))) {
+                    if (currentGeneration == generation && user.equals(api.userId()) && nonce.equals(prefs.getString("nonce", ""))) {
                         lastSync = SystemClock.elapsedRealtime(); report = "Teléfono registrado para avisos de solicitudes";
                     }
                 } catch (Exception error) { report = "Avisos sin confirmar. Toca Activar avisos para reintentar."; }
-                finally { synchronized (PushManager.class) { pending = false; } }
+                finally { synchronized (PushManager.class) {
+                    pending = false;
+                    if (currentGeneration != generation) syncIfActive(context, api);
+                } }
             });
         });
     }
-    static synchronized void tokenChanged(Context context, DriverApi api) { lastSync = 0; syncIfActive(context, api); }
+    static synchronized void tokenChanged(Context context, DriverApi api) { generation++; lastSync = 0; syncIfActive(context, api); }
     static synchronized String[] disableLocally(Context context) {
         SharedPreferences prefs = prefs(context);
         String[] registration = {prefs.getString("installation", ""), prefs.getString("nonce", "")};
         prefs.edit().remove("user").remove("nonce").remove("seen").commit();
-        lastSync = 0;
+        lastSync = 0; generation++;
         report = "Avisos desactivados";
         if (BuildConfig.PUSH_ENABLED) FirebaseMessaging.getInstance().setAutoInitEnabled(false);
         NotificationManager manager = context.getSystemService(NotificationManager.class);
@@ -87,12 +94,10 @@ final class PushManager {
     }
     static synchronized void show(Context context, DriverApi api, Map<String, String> data) {
         SharedPreferences prefs = prefs(context);
-        if (!BuildConfig.PUSH_ENABLED || !api.signedIn() || !permitted(context)
-            || !"new_service".equals(data.get("type"))
-            || !api.userId().equals(data.get("user_id")) || !api.userId().equals(prefs.getString("user", ""))
-            || prefs.getString("nonce", "").isEmpty() || !prefs.getString("nonce", "").equals(data.get("registration_nonce"))) return;
+        if (!BuildConfig.PUSH_ENABLED || !permitted(context) || !DriverRules.matchesPush(
+                api.signedIn() ? api.userId() : "", prefs.getString("user", ""), prefs.getString("nonce", ""),
+                data.get("user_id"), data.get("registration_nonce"), data.get("type"), data.get("notification_id"))) return;
         String id = data.get("notification_id");
-        try { UUID.fromString(id); } catch (RuntimeException invalid) { return; }
         Set<String> seen = new LinkedHashSet<>(prefs.getStringSet("seen", Collections.emptySet()));
         if (!seen.add(id)) return;
         while (seen.size() > 100) seen.remove(seen.iterator().next());

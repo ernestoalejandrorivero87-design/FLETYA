@@ -108,3 +108,6 @@ jobs:
 
       - name: Check driver push device and worker boundaries
         run: psql -v ON_ERROR_STOP=1 -f tests/security/driver-push.sql
+
+      - name: Check push eligibility and logout with disposable Auth sessions
+        run: psql -v ON_ERROR_STOP=1 -f tests/security/driver-push-worker.sql

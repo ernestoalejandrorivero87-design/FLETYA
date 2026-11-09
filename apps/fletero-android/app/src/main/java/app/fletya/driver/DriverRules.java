@@ -20,6 +20,14 @@ public final class DriverRules {
         int length = reason.trim().codePointCount(0, reason.trim().length());
         return length >= 10 && length <= 300;
     }
+    public static boolean matchesPush(String signedInUser, String registeredUser, String nonce,
+                                      String recipient, String messageNonce, String type, String id) {
+        if (signedInUser == null || signedInUser.isEmpty() || !signedInUser.equals(registeredUser)
+            || !signedInUser.equals(recipient) || nonce == null || nonce.isEmpty() || !nonce.equals(messageNonce)
+            || !"new_service".equals(type)) return false;
+        try { return java.util.UUID.fromString(id).toString().equals(id.toLowerCase(java.util.Locale.ROOT)); }
+        catch (RuntimeException invalid) { return false; }
+    }
     public static String navigationPoint(String status, String origin, String destination) {
         return "picked_up".equals(status) ? destination : origin;
     }

@@ -140,6 +140,15 @@ public class DriverApiTest {
         assertTrue(fake.paths.get(2).contains("user_id=eq.driver-a&installation_id=eq.installation&registration_nonce=eq.login-nonce"));
         assertFalse(fake.bodies.get(2).getBoolean("enabled"));
     }
+    @Test public void pushRequiresCurrentAccountAndLoginNonce() {
+        String id = "00000000-0000-0000-0000-000000000001";
+        assertTrue(DriverRules.matchesPush("a", "a", "login-2", "a", "login-2", "new_service", id));
+        assertFalse(DriverRules.matchesPush("", "a", "login-2", "a", "login-2", "new_service", id));
+        assertFalse(DriverRules.matchesPush("b", "b", "login-2", "a", "login-2", "new_service", id));
+        assertFalse(DriverRules.matchesPush("a", "a", "login-2", "a", "login-1", "new_service", id));
+        assertFalse(DriverRules.matchesPush("a", "a", "", "a", "", "new_service", id));
+        assertFalse(DriverRules.matchesPush("a", "a", "login-2", "a", "login-2", "new_service", "invalid"));
+    }
     @Test public void navigationChangesOnlyAfterPickup() {
         assertEquals("origin", DriverRules.navigationPoint("en_route", "origin", "destination"));
         assertEquals("destination", DriverRules.navigationPoint("picked_up", "origin", "destination"));

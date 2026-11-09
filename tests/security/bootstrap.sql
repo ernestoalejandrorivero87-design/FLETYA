@@ -135,3 +135,6 @@ grant select, insert, update, delete on auth.users to authenticated;
 
 create trigger trigger_notify_drivers_new_job
 after insert on public.jobs for each row execute function public.notify_drivers_new_job();
+
+-- Supabase service_role already has these reads on hosted public tables.
+grant select on public.jobs,public.profiles to service_role;
