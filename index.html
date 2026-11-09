@@ -163,6 +163,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 </div>
 <div class="card">
 <h2>Seguimiento</h2><div id="clientStatus"><span class="pill">Sin servicio activo</span></div>
+<div id="assignedDriver" class="card" style="margin-top:12px" hidden></div>
 <div id="routeMap"></div>
 <div id="driverTracking" class="muted" hidden></div>
 <p id="routeInfo" class="muted">
@@ -182,10 +183,10 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <div class="hero"><h1>Panel del fletero</h1><p>Tus solicitudes, servicio actual e historial en un solo lugar.</p></div>
 <div class="card"><h2>Trabajo actual y solicitudes</h2><div id="jobCard"><span class="pill">Cargando servicios…</span></div></div>
 <details class="card profile-settings" id="driverProfile" style="margin-top:18px"><summary>Mi perfil de fletero</summary>
-<label>Nombre completo</label><input id="dname" placeholder="Tu nombre y apellidos">
-<label>Vehículo</label><select id="dvehicle"><option>Pickup / Estaquita</option><option>Camioneta</option><option>Camión</option></select>
-<label>Placas</label><input id="plates" placeholder="ABC-123-D">
-<button class="btn light" onclick="saveDriverProfile()">Guardar nombre del perfil</button>
+<label>Nombre completo</label><input id="dname" maxlength="100" oninput="driverProfileDirty=true" placeholder="Tu nombre y apellidos">
+<label>Vehículo</label><select id="dvehicle" onchange="driverProfileDirty=true"><option value="">Selecciona tu vehículo</option><option value="pickup">Pickup / Estaquita</option><option value="camioneta">Camioneta</option><option value="camion">Camión</option></select>
+<label>Placas</label><input id="plates" maxlength="15" oninput="driverProfileDirty=true" autocapitalize="characters" placeholder="Escribe las placas de tu vehículo">
+<button id="saveDriverProfileBtn" class="btn light" onclick="saveDriverProfile()">Guardar perfil de fletero</button><p id="driverProfileMessage" class="muted" role="status"></p>
 <div class="location-actions"><button class="btn light" onclick="driverLocation()">📍 Actualizar ubicación</button></div>
 <p id="gps" class="muted">Ubicación pendiente</p></details>
 <div class="card" style="margin-top:18px"><h2>🔔 Notificaciones recientes</h2><div id="driverNotifications"></div><div id="notificationsPager"></div></div>
@@ -1222,6 +1223,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
   }
 
   const j = jobs[0];
+  clearAssignedDriver();
 
   const previousActive = state.active && ['requested', 'en_route', 'picked_up'].includes(state.active.status);
   state.active = j;
@@ -1244,6 +1246,7 @@ document.getElementById('clientLogoutBtn').style.display = 'inline-block';
      </button>
      ${j.status === 'requested' && !j.driver_id ? '<button id="clientCancelBtn" class="btn light" type="button" onclick="cancelClientRequest()">Cancelar solicitud</button>' : ''}`;
    if (isDriverActiveStatus(j.status)) {
+    loadAssignedDriver(j);
     startDriverTracking();
    } else {
     stopDriverTracking();
@@ -1313,8 +1316,34 @@ async function cancelClientRequest() {
     if (button) button.disabled = false;
   }
 }
+function clearAssignedDriver(){
+ const box=document.getElementById('assignedDriver');box.hidden=true;box.textContent='';
+}
+function vehicleLabel(value){return {pickup:'Pickup / Estaquita',camioneta:'Camioneta',camion:'Camión'}[value]||'Sin registrar';}
+async function loadAssignedDriver(job){
+ const revision=sessionRevision,jobId=job.id,driverId=job.driver_id;
+ const box=document.getElementById('assignedDriver');
+ clearAssignedDriver();
+ if(!driverId||!isDriverActiveStatus(job.status))return;
+ box.hidden=false;box.textContent='Consultando el fletero asignado…';
+ try{
+  const {data,error}=await supabaseClient.rpc('get_assigned_driver',{p_job_id:jobId});
+  if(revision!==sessionRevision||logoutPending||state.active?.id!==jobId||state.active?.driver_id!==driverId||!isDriverActiveStatus(state.active?.status))return;
+  const driver=data?.[0];
+  if(error||!driver||driver.driver_id!==driverId){box.textContent='No se pudo confirmar la identificación del fletero. Actualiza el estado.';return;}
+  box.innerHTML='<h3>Tu fletero asignado</h3><p><strong>'+escapeText(driver.full_name||'Nombre sin registrar')+'</strong></p><p>Vehículo: '+escapeText(vehicleLabel(driver.vehicle_type))+'</p><p>Placas: '+escapeText(driver.plates||'Sin registrar')+'</p>';
+ }catch(error){if(revision===sessionRevision&&state.active?.id===jobId&&state.active?.driver_id===driverId)box.textContent='No se pudo consultar la identificación del fletero.';}
+}
+function trackingFreshness(updatedAt,now=Date.now()){
+ const time=Date.parse(updatedAt),age=now-time;
+ if(!Number.isFinite(time)||age< -60000)return {fresh:false,text:'Hora de ubicación no disponible'};
+ const elapsed=Math.max(0,Math.floor(age/1000));
+ return {fresh:elapsed<=60,text:elapsed<=60?'Ubicación reciente':'Ubicación desactualizada · hace '+(elapsed<3600?Math.floor(elapsed/60)+' min':Math.floor(elapsed/3600)+' h')};
+}
  async function updateDriverTracking(){
+  const revision=sessionRevision;
   const activeJob = state.active;
+  const driverId=activeJob?.driver_id;
 
   if (!activeJob || !isDriverActiveStatus(activeJob.status)) {
     return;
@@ -1330,7 +1359,7 @@ async function cancelClientRequest() {
     .maybeSingle();
 
   // Ignora respuestas pendientes de un servicio que ya terminó o cambió.
-  if (state.active?.id !== activeJob.id || !isDriverActiveStatus(state.active?.status)) return;
+  if (revision!==sessionRevision||logoutPending||state.active?.id !== activeJob.id || state.active?.driver_id!==driverId || !isDriverActiveStatus(state.active?.status)) return;
 
   const box = document.getElementById('driverTracking');
 
@@ -1349,12 +1378,12 @@ async function cancelClientRequest() {
     return;
   }
 
-  const hora = new Date(data.updated_at).toLocaleTimeString();
+  const freshness=trackingFreshness(data.updated_at);
+  const hora=Number.isFinite(Date.parse(data.updated_at))?new Date(data.updated_at).toLocaleString('es-MX'):'Sin hora registrada';
 
   if (box) {
     box.innerHTML = `
-      <div class="pill">🟢 Fletero en camino</div>
-      <p>📍 Ubicación actualizada</p>
+      <div class="pill">${freshness.fresh?'🟢':'🟠'} ${freshness.text}</div>
       <p>Lat: ${Number(data.latitude).toFixed(6)}</p>
       <p>Lng: ${Number(data.longitude).toFixed(6)}</p>
       <p>🎯 Precisión: ${Math.round(data.accuracy || 0)} m</p>
@@ -1367,6 +1396,7 @@ async function cancelClientRequest() {
 function stopDriverTracking(){
   if (driverTrackingTimer) clearInterval(driverTrackingTimer);
   driverTrackingTimer = null;
+  clearAssignedDriver();
   const box = document.getElementById('driverTracking');
   if (box) {
     box.hidden = true;
@@ -1460,7 +1490,7 @@ function startDriverPanelRefresh(userId) {
   const { data: profile, error: profileError } =
     await supabaseClient
       .from('profiles')
-      .select('role, full_name')
+      .select('role, full_name, vehicle_type, plates')
       .eq('id', user.id)
       .single();
   if (revision !== sessionRevision || renderVersion !== driverRenderVersion || logoutPending) return;
@@ -1471,7 +1501,11 @@ function startDriverPanelRefresh(userId) {
     return;
   }
 
-  document.getElementById('dname').value = profile.full_name || '';
+  if(!driverProfileDirty&&!driverProfileSaving){
+    document.getElementById('dname').value=profile.full_name||'';
+    document.getElementById('dvehicle').value=profile.vehicle_type||'';
+    document.getElementById('plates').value=profile.plates||'';
+  }
   startDriverNotifications(user.id);
   startDriverPanelRefresh(user.id);
   const e = document.getElementById('jobCard');
@@ -1772,6 +1806,9 @@ async function syncFletyaGps(userId, activeJob) {
 function clearSignedOutView() {
   sessionRevision++;
   resetPanelPages();
+  driverProfileDirty=false;
+  for(const id of ['dname','dvehicle','plates'])document.getElementById(id).value='';
+  document.getElementById('driverProfileMessage').textContent='';
   for(const id of ['driverHistory','driverReleaseHistory','notificationsPager','adminUsersPager','adminServicesPager','adminAccountsPager'])document.getElementById(id).textContent='';
   document.getElementById('driverProfile').open=false;
   document.getElementById('driverReleases').open=false;
@@ -1894,6 +1931,7 @@ const { data: acceptedJob, error } = await supabaseClient
 
   toast('Servicio aceptado correctamente.');
 }
+let driverProfileDirty=false,driverProfileSaving=false;
 let driverTransitionPending = false;
 let driverReleaseJobId = null;
 let driverReleaseSessionRevision = 0;
@@ -2926,7 +2964,32 @@ async function saveClientProfile() {
 }
 
 async function saveDriverProfile() {
-  return saveProfileName('dname', 'driver');
+ if(driverProfileSaving||logoutPending||activeSessionRole!=='driver')return;
+ const full_name=document.getElementById('dname').value.trim();
+ const vehicle_type=document.getElementById('dvehicle').value;
+ const plates=document.getElementById('plates').value.trim().toUpperCase();
+ const message=document.getElementById('driverProfileMessage');
+ if(!full_name||full_name.length>100||!['pickup','camioneta','camion'].includes(vehicle_type)||!/^[A-Z0-9 -]{3,15}$/.test(plates)){
+  message.textContent='Revisa el nombre, elige el vehículo y escribe placas de 3 a 15 caracteres (letras, números, espacios o guiones).';return;
+ }
+ const revision=sessionRevision;
+ driverProfileSaving=true;document.getElementById('saveDriverProfileBtn').disabled=true;
+ try{
+  const {data:{user},error:authError}=await supabaseClient.auth.getUser();
+  if(revision!==sessionRevision||logoutPending)return;
+  if(authError||!user){message.textContent='Inicia sesión como fletero.';return;}
+  const {data:profile,error}=await supabaseClient.from('profiles').update({full_name,vehicle_type,plates})
+   .eq('id',user.id).eq('role','driver').select('id, full_name, vehicle_type, plates').maybeSingle();
+  if(revision!==sessionRevision||logoutPending)return;
+  if(error||profile?.id!==user.id){message.textContent='No se pudo guardar el perfil. Revisa la conexión e inténtalo de nuevo.';return;}
+  // Preserve edits made while the save request was in flight.
+  const unchanged=document.getElementById('dname').value.trim()===full_name&&document.getElementById('dvehicle').value===vehicle_type&&document.getElementById('plates').value.trim().toUpperCase()===plates;
+  driverProfileDirty=!unchanged;
+  if(unchanged)document.getElementById('plates').value=plates;
+  message.textContent=unchanged?'Perfil de fletero guardado.':'Perfil guardado. Tienes cambios nuevos pendientes de guardar.';
+  document.getElementById('sessionName').textContent=profile.full_name;
+ }catch(error){if(revision===sessionRevision&&!logoutPending)message.textContent='No se pudo guardar el perfil. Inténtalo de nuevo.';}
+ finally{driverProfileSaving=false;document.getElementById('saveDriverProfileBtn').disabled=false;}
 }
 
 let loginPending = false;
