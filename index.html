@@ -202,7 +202,14 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <details class="card" id="driverReleases" style="margin-top:18px"><summary>Servicios liberados</summary><div id="driverReleaseHistory"></div></details>
 </section>
 
+<section id="passwordRecovery" class="card hidden" aria-labelledby="passwordRecoveryTitle">
+<h2 id="passwordRecoveryTitle">Elige tu contraseña nueva</h2><p>Después vuelve a la app e inicia sesión con la contraseña nueva.</p>
+<label for="newRecoveryPassword">Contraseña nueva (mínimo 8 caracteres)</label><input id="newRecoveryPassword" type="password" autocomplete="new-password" minlength="8">
+<label for="repeatRecoveryPassword">Repite la contraseña</label><input id="repeatRecoveryPassword" type="password" autocomplete="new-password" minlength="8">
+<button id="saveRecoveryPassword" class="btn" onclick="finishPasswordRecovery()">Guardar contraseña nueva</button><p id="passwordRecoveryMessage" role="status"></p>
+</section>
 <section id="admin" class="hidden">
+<div class="card"><h2>Nuevas cuentas de fletero</h2><p>Revisa los datos y la documentación del conductor antes de autorizar su acceso al piloto.</p><button class="btn light" onclick="loadDriverApplications()">Consultar cuentas pendientes</button><div id="driverApplications"></div></div>
 <div class="hero"><h1>FLETYA Admin</h1><p>Control básico de servicios, ventas y comisión.</p></div>
 <div class="grid">
 <div class="card"><h3>Servicios</h3><div class="price" id="jobsCount">0</div><span class="muted">solicitudes</span></div>
@@ -378,6 +385,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
   </div>
 </div>
 <script>
+let recoveryPending=false;
 const state={jobs:[],active:null,accepted:false,status:'Pendiente'};
 let sessionRevision = 0;
 let logoutPending = false;
@@ -472,6 +480,7 @@ function show(id){
  if(id==='client') setTimeout(() => { routeMap?.invalidateSize(); }, 0);
 }
 async function navigateToRole(target) {
+  if(recoveryPending){showPasswordRecovery();return;}
   if (!Object.hasOwn(roleTitles, target) || logoutPending) return;
   if (!supabaseClient) { toast('No se pudo verificar la sesión'); return; }
   const revision = sessionRevision;
@@ -1492,7 +1501,7 @@ function startDriverPanelRefresh(userId) {
   const { data: profile, error: profileError } =
     await supabaseClient
       .from('profiles')
-      .select('role, full_name, vehicle_type, plates')
+      .select('role, full_name, vehicle_type, plates, driver_status')
       .eq('id', user.id)
       .single();
   if (revision !== sessionRevision || renderVersion !== driverRenderVersion || logoutPending) return;
@@ -1503,6 +1512,11 @@ function startDriverPanelRefresh(userId) {
     return;
   }
 
+  if(profile.driver_status && profile.driver_status!=='approved'){
+    stopFletyaGps();clearDriverNavigation();state.active=null;
+    document.getElementById('jobCard').textContent=profile.driver_status==='pending'?'Cuenta pendiente de aprobación. Completa tus datos en la app del fletero y espera la revisión de administración.':'Cuenta no autorizada. Consulta con administración.';
+    return;
+  }
   if(!driverProfileDirty&&!driverProfileSaving){
     document.getElementById('dname').value=profile.full_name||'';
     document.getElementById('dvehicle').value=profile.vehicle_type||'';
@@ -2833,6 +2847,7 @@ const SUPABASE_PUBLISHABLE_KEY = IS_FLETYA_PRODUCTION_HOST
   ? 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O'
   : 'sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
 
+recoveryPending = /(?:^#|&)type=recovery(?:&|$)/.test(String(window.location?.hash||''));
 const supabaseClient =
   window.supabase && window.supabase.createClient
     ? window.supabase.createClient(
@@ -2852,6 +2867,7 @@ if (supabaseClient) {
   // Synchronous: never await another Auth operation from this callback.
   supabaseClient.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_OUT') clearSignedOutView();
+    if(event==='PASSWORD_RECOVERY'){recoveryPending=true;setTimeout(showPasswordRecovery,0);}
   });
 }
 
@@ -2883,6 +2899,7 @@ async function activateRoleSession(user, profile) {
   }
 }
 async function restoreRoleSession() {
+  if(recoveryPending){showPasswordRecovery();return;}
   const revision = sessionRevision;
   if (!supabaseClient) { showAccess(selectedAccessRole); return; }
   try {
@@ -2907,6 +2924,48 @@ async function restoreRoleSession() {
 showAccess('client');
 restoreRoleSession();
 
+function showPasswordRecovery(){
+ for(const id of ['access','client','driver','admin','sessionBar'])document.getElementById(id).classList.add('hidden');
+ stopFletyaGps();document.getElementById('passwordRecovery').classList.remove('hidden');
+}
+async function finishPasswordRecovery(){
+ const password=document.getElementById('newRecoveryPassword').value,repeat=document.getElementById('repeatRecoveryPassword').value;
+ const message=document.getElementById('passwordRecoveryMessage'),button=document.getElementById('saveRecoveryPassword');
+ if(!recoveryPending||password.length<8||password!==repeat){message.textContent='Escribe dos contraseñas iguales de al menos 8 caracteres.';return;}
+ button.disabled=true;message.textContent='Guardando…';
+ try{
+  const {error}=await supabaseClient.auth.updateUser({password});
+  if(error){message.textContent='No se pudo cambiar la contraseña. Abre un enlace nuevo de recuperación e inténtalo otra vez.';return;}
+  document.getElementById('newRecoveryPassword').value='';document.getElementById('repeatRecoveryPassword').value='';
+  recoveryPending=false;await supabaseClient.auth.signOut({scope:'local'});document.getElementById('passwordRecovery').classList.add('hidden');showAccess('client');
+  document.getElementById('authMessage').textContent='Contraseña actualizada. Vuelve a tu app e inicia sesión.';
+ }catch{message.textContent='No se pudo confirmar el cambio. Revisa la conexión.';}finally{button.disabled=false;}
+}
+async function loadDriverApplications(){
+ const revision=sessionRevision,box=document.getElementById('driverApplications');box.textContent='Consultando…';
+ const {data:{user},error:authError}=await supabaseClient.auth.getUser();
+ if(revision!==sessionRevision||logoutPending)return;
+ if(authError||!user){box.textContent='Inicia sesión como administrador.';return;}
+ const {data:actor,error:roleError}=await supabaseClient.from('profiles').select('role').eq('id',user.id).maybeSingle();
+ if(revision!==sessionRevision||logoutPending)return;
+ if(roleError||actor?.role!=='admin'){box.textContent='Solo administración puede revisar cuentas.';return;}
+ const {data,error}=await supabaseClient.from('profiles').select('id,full_name,email,phone,vehicle_type,plates,driver_status').eq('role','driver').eq('driver_status','pending').order('created_at',{ascending:true}).limit(20);
+ if(revision!==sessionRevision||logoutPending)return;box.textContent='';
+ if(error){box.textContent='No se pudieron consultar las cuentas pendientes.';return;}
+ if(!data?.length){box.textContent='No hay cuentas pendientes.';return;}
+ for(const profile of data){const card=document.createElement('div');card.className='card';
+  const description=document.createElement('p');description.textContent=[profile.full_name,profile.email,profile.phone,vehicleLabel(profile.vehicle_type),profile.plates].filter(Boolean).join(' · ');card.append(description);
+  for(const [approved,label] of [[true,'Autorizar para el piloto'],[false,'Rechazar solicitud']]){const action=document.createElement('button');action.className='btn light';action.textContent=label;action.onclick=async()=>{
+   if(revision!==sessionRevision||logoutPending)return;
+   const note=window.prompt('Motivo de la revisión (10 a 500 caracteres). Confirma que revisaste los datos y documentación del conductor.');
+   if(note===null)return;if(note.trim().length<10||note.trim().length>500){toast('Escribe un motivo de 10 a 500 caracteres.');return;}
+   action.disabled=true;const {data:result,error}=await supabaseClient.rpc('review_driver_application',{p_driver_id:profile.id,p_approved:approved,p_note:note.trim()});
+   if(revision!==sessionRevision||logoutPending)return;
+   if(error||result?.driver_id!==profile.id){toast('No se pudo confirmar la revisión. Revisa los datos o consulta de nuevo.');action.disabled=false;return;}
+   toast(approved?'Fletero autorizado para el piloto.':'Solicitud rechazada.');await loadDriverApplications();
+  };card.append(action);}box.append(card);
+ }
+}
 async function registerClient() {
   const fullName = document.getElementById('clientSignupName').value.trim();
   const email = document.getElementById('authEmail').value.trim();

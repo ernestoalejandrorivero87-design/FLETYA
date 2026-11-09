@@ -52,6 +52,30 @@ public final class ClientApi {
         session = value;
         validUntilNanos = System.nanoTime() + Math.max(0, value.optLong("expires_in", 3600) - 60) * 1_000_000_000L;
     }
+    public synchronized void register(String name,String email,String password,String phone,String vehicle,String plates) throws Exception {
+        if (signedIn()) throw new Failure(409,"Cierra sesión antes de registrar otra cuenta.");
+        name=name.trim();email=email.trim();phone=phone.trim();plates=plates.trim().toUpperCase(java.util.Locale.ROOT);
+        if(name.isEmpty()||name.length()>100||!email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")||password.length()<8)
+            throw new Failure(400,"Escribe nombre, correo válido y una contraseña de al menos 8 caracteres.");
+        if(false && (!phone.matches("\\+?[0-9]{10,15}")||!java.util.Arrays.asList("pickup","camioneta","camion").contains(vehicle)||!plates.matches("[A-Z0-9 -]{3,15}")))
+            throw new Failure(400,"Completa teléfono (10 a 15 dígitos), vehículo y placas válidas.");
+        JSONObject data=new JSONObject().put("full_name",name).put("role","client").put("phone",phone);
+        if(false)data.put("vehicle_type",vehicle).put("plates",plates);
+        Response response=transport.send("POST","/auth/v1/signup",null,new JSONObject().put("email",email).put("password",password).put("data",data),null);
+        check(response);
+        // Confirmation is explicit. Never persist a password or auto-enter an unverified registration.
+        JSONObject result=new JSONObject(response.body());
+        if(!result.optString("access_token").isEmpty())try{transport.send("POST","/auth/v1/logout?scope=local",result.getString("access_token"),null,null);}catch(Exception ignored){}
+    }
+    public synchronized void recover(String email) throws Exception {
+        if(signedIn())throw new Failure(409,"Cierra sesión antes de recuperar otra cuenta.");
+        if(!email.trim().matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))throw new Failure(400,"Escribe un correo válido.");
+        check(transport.send("POST","/auth/v1/recover?redirect_to=https%3A%2F%2Ffletya.vercel.app",null,new JSONObject().put("email",email.trim()),null));
+    }
+    public synchronized void resendConfirmation(String email) throws Exception {
+        if(signedIn())throw new Failure(409,"Cierra sesión antes de reenviar la confirmación.");
+        check(transport.send("POST","/auth/v1/resend",null,new JSONObject().put("type","signup").put("email",email.trim()),null));
+    }
     public synchronized void login(String email, String password) throws Exception {
         if (signedIn()) throw new Failure(409, "Cierra la sesión actual antes de cambiar de cuenta.");
         try {
@@ -100,6 +124,12 @@ public final class ClientApi {
     public synchronized JSONArray activeJobs() throws Exception {
         token();
         return get("jobs?select=*&client_id=eq." + eq(userId()) + "&status=in.(requested,en_route,picked_up)&order=created_at.desc,id.desc&limit=2");
+    }
+    public synchronized JSONArray notifications(int offset) throws Exception {
+        return get("notifications?select=id,title,message,type,read,created_at,job_id&user_id=eq."+eq(userId())+"&type=like.client_*&order=created_at.desc,id.desc&limit=13&offset="+Math.max(0,offset));
+    }
+    public synchronized void markNoticeRead(String id) throws Exception {
+        call("PATCH","/rest/v1/notifications?id=eq."+eq(id)+"&user_id=eq."+eq(userId()),new JSONObject().put("read",true),"return=minimal");
     }
     public synchronized JSONArray history(int offset) throws Exception {
         token();
@@ -174,6 +204,20 @@ public final class ClientApi {
         JSONObject fix = positions.length() == 1 && driverId.equals(positions.getJSONObject(0).optString("driver_id")) && job.getString("id").equals(positions.getJSONObject(0).optString("job_id")) ? positions.getJSONObject(0) : null;
         if (fix != null) fix.put("observed_elapsed_nanos", System.nanoTime());
         return new Tracking(driver,fix);
+    }
+    public synchronized void registerPush(String installation, String token, String nonce) throws Exception {
+        token();
+        JSONArray rows = new JSONArray(call("POST", "/rest/v1/client_push_devices?on_conflict=user_id,installation_id&select=user_id",
+            new JSONObject().put("user_id", userId()).put("installation_id", installation).put("token", token)
+                .put("registration_nonce", nonce).put("enabled", true),
+            "resolution=merge-duplicates,return=representation").body());
+        if (rows.length() != 1 || !userId().equals(rows.getJSONObject(0).optString("user_id")))
+            throw new Failure(409, "No se pudo confirmar el registro de avisos.");
+    }
+    public synchronized void unregisterPush(String installation, String nonce) throws Exception {
+        if (!signedIn() || nonce.isEmpty()) return;
+        call("PATCH", "/rest/v1/client_push_devices?user_id=eq." + eq(userId()) + "&installation_id=eq." + eq(installation)
+            + "&registration_nonce=eq." + eq(nonce), new JSONObject().put("enabled", false), "return=minimal");
     }
     public synchronized void logout() {
         try { if (session != null) transport.send("POST","/auth/v1/logout?scope=local",token(),null,null); }

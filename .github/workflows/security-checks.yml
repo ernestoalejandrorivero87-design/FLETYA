@@ -111,3 +111,7 @@ jobs:
 
       - name: Check push eligibility and logout with disposable Auth sessions
         run: psql -v ON_ERROR_STOP=1 -f tests/security/driver-push-worker.sql
+      - name: Verify client events and driver approval
+        run: psql -v ON_ERROR_STOP=1 -f tests/security/client-events-onboarding.sql
+      - name: Verify client push session eligibility and superseded events
+        run: psql -v ON_ERROR_STOP=1 -f tests/security/client-push-worker.sql
