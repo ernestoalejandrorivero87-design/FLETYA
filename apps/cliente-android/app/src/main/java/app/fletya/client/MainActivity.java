@@ -37,7 +37,7 @@ public final class MainActivity extends Activity {
     private ClientApi.Quote quote;
     private String requestId="",routeKey="";
     private ClientMapView previewMap,trackingMap,pickerMap;
-    private TextView routeMessage;
+    private TextView routeMessage,trackingStatus;
     private LinearLayout routeContainer;
     private JSONObject currentTrackingFix;
     private LocationListener locationListener;
@@ -48,10 +48,12 @@ public final class MainActivity extends Activity {
         super.onCreate(state);api=((ClientApplication)getApplication()).api();
         if(api.signedIn()){screen="home";shell();}else login();
     }
-    @Override public void onResume(){super.onResume();visible=true;if(api.signedIn()&&"home".equals(screen))refresh();if(locationTarget!=null&&locationListener==null&&!awaitingLocationPermission)startLocation();main.postDelayed(poll,10_000);}
-    @Override public void onPause(){visible=false;main.removeCallbacks(poll);if(!awaitingLocationPermission)stopLocation();super.onPause();}
+    @Override public void onResume(){super.onResume();visible=true;if(api.signedIn()&&"home".equals(screen))refresh();if(locationTarget!=null&&locationListener==null&&!awaitingLocationPermission)startLocation();updateFreshness();main.postDelayed(freshnessTick,1000);main.postDelayed(poll,10_000);}
+    @Override public void onPause(){visible=false;main.removeCallbacks(poll);main.removeCallbacks(freshnessTick);if(!awaitingLocationPermission)stopLocation();super.onPause();}
     @Override public void onDestroy(){revision++;routeRevision++;main.removeCallbacksAndMessages(null);stopLocation();disposeMaps();if(pickerDialog!=null)pickerDialog.dismiss();worker.shutdownNow();super.onDestroy();}
     private final Runnable poll=new Runnable(){public void run(){if(!visible)return;if(api.signedIn()&&"home".equals(screen)&&!busy&&!picking)refresh();main.postDelayed(this,10_000);}};
+    private final Runnable freshnessTick=new Runnable(){public void run(){if(!visible)return;updateFreshness();main.postDelayed(this,1000);}};
+    private void updateFreshness(){if("home".equals(screen)&&active!=null&&ClientRules.assigned(active.optString("status"))&&currentTrackingFix!=null){if(trackingStatus!=null)trackingStatus.setText(ClientRules.freshness(currentTrackingFix));if(trackingMap!=null)trackingMap.updateDriver(currentTrackingFix);}}
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable background(int color,int radius){var value=new GradientDrawable();value.setColor(color);value.setCornerRadius(dp(radius));return value;}
     private TextView text(LinearLayout parent,String value,int size,boolean bold){var view=new TextView(this);view.setText(value);view.setTextSize(size);view.setTextColor(Color.rgb(32,45,49));if(bold)view.setTypeface(null,Typeface.BOLD);view.setPadding(0,dp(4),0,dp(8));parent.addView(view);return view;}
@@ -77,11 +79,13 @@ public final class MainActivity extends Activity {
     }
     private void fail(Exception error){
         if(!api.signedIn()&&!"login".equals(screen))login();
+        currentTrackingFix=null;
         if(trackingMap!=null)trackingMap.updateDriver(null);
+        if(trackingStatus!=null)trackingStatus.setText("No se pudo actualizar la ubicación. Esperando una nueva recepción.");
         message.setText(error instanceof ClientApi.Failure||error instanceof IllegalArgumentException?error.getMessage():"No se pudo conectar. Actualiza el seguimiento antes de volver a solicitar.");
     }
     private void login(){
-        resetDraft();disposeMaps();active=null;screen="login";shell();
+        resetDraft();disposeMaps();active=null;currentTrackingFix=null;trackingStatus=null;screen="login";shell();
         var box=card("Pide tu flete");text(box,"Entra con tu cuenta de cliente de FLETYA.",16,false);
         var email=field(box,"Correo electrónico","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         var password=field(box,"Contraseña","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setSaveEnabled(false);
@@ -90,7 +94,7 @@ public final class MainActivity extends Activity {
     }
     private void menu(View anchor){
         var menu=new PopupMenu(this,anchor);menu.getMenu().add(0,1,0,"Solicitar / Seguimiento");menu.getMenu().add(0,2,1,"Historial de servicios");menu.getMenu().add(0,3,2,"Mi perfil");menu.getMenu().add(0,4,3,"Cerrar sesión");
-        menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();default->{return false;}}return true;});menu.show();
+        menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();default->{return false;}}return true;});picking=true;menu.setOnDismissListener(m->picking=false);menu.show();
     }
     private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError){}
     private void refresh(){
@@ -144,7 +148,7 @@ public final class MainActivity extends Activity {
     private void confirmRequest(){
         if(quote==null)return;var selected=quote;String id=requestId;long draft=draftRevision;
         picking=true;
-        new AlertDialog.Builder(this).setTitle("¿Confirmar el flete?").setMessage(selected.origin()+"\n→ "+selected.destination()+"\n\n"+money(selected.price())+"\nSujeto a disponibilidad de fleteros.")
+        dialog().setTitle("¿Confirmar el flete?").setMessage(selected.origin()+"\n→ "+selected.destination()+"\n\n"+money(selected.price())+"\nSujeto a disponibilidad de fleteros.")
             .setNegativeButton("Volver",null).setPositiveButton("Confirmar solicitud",(d,w)->{
                 if(quote!=selected||draft!=draftRevision)return;
                 task(()->api.create(selected,id),job->{resetDraft();active=job;clearPreview();refresh();});
@@ -156,14 +160,14 @@ public final class MainActivity extends Activity {
         text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(TEAL);
     }
     private void renderActive(ClientApi.Tracking tracking,boolean trackingError){
-        screen="home";shell();originField=null;destField=null;quoteArea=null;
+        screen="home";shell();trackingStatus=null;originField=null;destField=null;quoteArea=null;
         JSONObject job=active;var box=card("Tu servicio");text(box,ClientRules.status(job.optString("status")),19,true);details(box,job);
-        if(!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
-        if("requested".equals(job.optString("status"))&&job.isNull("driver_id"))button(box,"Cancelar solicitud",()->new AlertDialog.Builder(this).setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
+        if("requested".equals(job.optString("status"))&&!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
+        if("requested".equals(job.optString("status"))&&job.isNull("driver_id"))button(box,"Cancelar solicitud",()->dialog().setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
         if(ClientRules.assigned(job.optString("status"))){
             var driverBox=card("Tu fletero asignado");var driver=tracking.driver();var fix=tracking.fix();
             if(driver!=null){text(driverBox,driver.optString("full_name","Sin nombre"),18,true);text(driverBox,"Vehículo: "+ClientRules.vehicle(driver.optString("vehicle_type")),15,false);text(driverBox,"Placas: "+driver.optString("plates","Sin registrar"),16,true);}else text(driverBox,trackingError?"No se pudo actualizar la identificación del fletero.":"Consultando la identificación del fletero…",15,false);
-            if(fix!=null){text(driverBox,ClientRules.freshness(fix),16,true);text(driverBox,"Precisión: "+Math.round(fix.optDouble("accuracy",0))+" m",14,false);text(driverBox,"Última recepción: "+fix.optString("updated_at"),12,false);}else text(driverBox,trackingError?"No se pudo actualizar la ubicación. Reintenta el seguimiento.":"Esperando ubicación del fletero…",15,false);
+            if(fix!=null){trackingStatus=text(driverBox,ClientRules.freshness(fix),16,true);text(driverBox,"Precisión: "+Math.round(fix.optDouble("accuracy",0))+" m",14,false);text(driverBox,"Última recepción: "+fix.optString("updated_at"),12,false);}else trackingStatus=text(driverBox,trackingError?"No se pudo actualizar la ubicación. Reintenta el seguimiento.":"Esperando ubicación del fletero…",15,false);
         }
         var mapBox=card("Ruta del servicio");routeContainer=mapBox;routeMessage=text(mapBox,"",14,false);currentTrackingFix=trackingError?null:tracking.fix();
         String key=api.userId()+"|"+job.optString("id")+"|"+job.optString("origin")+"|"+job.optString("destination");
@@ -180,7 +184,7 @@ public final class MainActivity extends Activity {
         long session=revision,request=++routeRevision;String user=api.userId();routeMessage.setText("Cargando ruta…");
         worker.execute(()->{try{JSONObject route=api.route(job.optString("origin"),job.optString("destination"));main.post(()->{
             if(isDestroyed()||session!=revision||request!=routeRevision||!user.equals(api.userId())||!"home".equals(screen)||active==null||!key.equals(routeKey))return;
-            try{trackingMap=new ClientMapView(this);trackingMap.route(route.optString("polyline"));trackingMap.updateDriver(currentTrackingFix);attachMap(routeContainer);routeLoading=false;routeMessage.setText(route.optString("distance_km")+" km · "+route.optString("duration_text"));message.setText("Mapa cargado.");}
+            try{trackingMap=new ClientMapView(this);trackingMap.route(route.optString("polyline"));trackingMap.updateDriver(currentTrackingFix);attachMap(routeContainer);routeLoading=false;routeMessage.setText(route.optString("distance_km")+" km · "+route.optString("duration_text"));if(currentTrackingFix!=null)button(routeContainer,"Ver fletero en mapa",()->{if(trackingMap!=null)trackingMap.centerDriver();});message.setText("Mapa cargado.");}
             catch(Exception error){clearTrackingMap();routeKey=key;routeFailed=true;routeMessage.setText("No se pudo abrir el mapa. Pulsa Recargar mapa.");}
         });}catch(Exception error){main.post(()->{if(!isDestroyed()&&session==revision&&request==routeRevision&&key.equals(routeKey)&&"home".equals(screen)){routeLoading=false;routeFailed=true;routeMessage.setText("No se pudo cargar la ruta. Pulsa Recargar mapa.");}});}});
     }
@@ -190,7 +194,8 @@ public final class MainActivity extends Activity {
     private void resetDraft(){originDraft="";destDraft="";vehicleChoice=0;helperChoice=0;serviceChoice=0;quote=null;requestId="";draftRevision++;originField=null;destField=null;quoteArea=null;}
     private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));details(box,job);text(box,job.optString("created_at").split("T")[0],13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private void profile(){task(api::profile,p->{screen="profile";shell();var box=card("Mi perfil de cliente");var name=field(box,"Nombre completo",p.optString("full_name"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);button(box,"Guardar perfil",()->task(()->{api.saveName(name.getText().toString());return true;},ok->message.setText("Perfil guardado.")));button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
-    private void logout(){new AlertDialog.Builder(this).setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();task(()->{api.logout();return true;},ok->{revision++;login();});}).show();}
+    private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(this).setOnDismissListener(d->picking=false);}
+    private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();task(()->{api.logout();return true;},ok->{revision++;login();});}).show();}
     private void open(String uri){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(uri)));}catch(ActivityNotFoundException error){message.setText("No se pudo abrir el enlace.");}}
     private void picker(EditText target){
         picking=true;var box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(12),dp(8),dp(12),dp(8));text(box,"Mueve el mapa hasta colocar el centro sobre el punto exacto. También puedes tocar un lugar.",15,false);

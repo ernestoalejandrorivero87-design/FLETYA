@@ -91,8 +91,8 @@ public final class ClientApi {
     private static String eq(String value) { return androidSafeEncode(value); }
     public synchronized JSONObject profile() throws Exception {
         token();
-        JSONArray rows = get("profiles?select=id,role,full_name,vehicle_type,plates&id=eq." + eq(userId()));
-        if (rows.length() != 1 || !"client".equals(rows.getJSONObject(0).optString("role"))) {
+        JSONArray rows = get("profiles?select=id,role,full_name&id=eq." + eq(userId()));
+        if (rows.length() != 1 || !userId().equals(rows.getJSONObject(0).optString("id")) || !"client".equals(rows.getJSONObject(0).optString("role"))) {
             clear(); throw new Failure(403, "Esta app es para cuentas de cliente. Usa tu cuenta de cliente.");
         }
         return rows.getJSONObject(0);
@@ -172,6 +172,7 @@ public final class ClientApi {
         String driverId = job.getString("driver_id");
         JSONObject driver = identity.length() == 1 && driverId.equals(identity.getJSONObject(0).optString("driver_id")) ? identity.getJSONObject(0) : null;
         JSONObject fix = positions.length() == 1 && driverId.equals(positions.getJSONObject(0).optString("driver_id")) && job.getString("id").equals(positions.getJSONObject(0).optString("job_id")) ? positions.getJSONObject(0) : null;
+        if (fix != null) fix.put("observed_elapsed_nanos", System.nanoTime());
         return new Tracking(driver,fix);
     }
     public synchronized void logout() {

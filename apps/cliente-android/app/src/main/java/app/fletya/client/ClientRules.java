@@ -45,7 +45,8 @@ final class ClientRules {
             long update = OffsetDateTime.parse(fix.getString("updated_at")).toInstant().toEpochMilli();
             long now = OffsetDateTime.parse(fix.getString("server_now")).toInstant().toEpochMilli();
             if (now - update < -60_000) return -1;
-            return Math.max(0, (now - update) / 1000);
+            long elapsed = fix.has("observed_elapsed_nanos") ? Math.max(0, System.nanoTime()-fix.getLong("observed_elapsed_nanos"))/1_000_000_000L : 0;
+            return Math.max(0, (now - update) / 1000) + elapsed;
         } catch (Exception error) { return -1; }
     }
     static String freshness(JSONObject fix) {
