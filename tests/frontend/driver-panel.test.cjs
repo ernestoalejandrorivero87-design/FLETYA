@@ -949,3 +949,54 @@ test('fixed center pin stays outside moving map layers and cannot intercept gest
  assert.match(html,/\.location-center-pin\{[^}]*left:50%;top:50%[^}]*translate\(-50%,-100%\)[^}]*pointer-events:none/);
  assert.doesNotMatch(html,/Colocar pin en el centro|locationPickerMarker|Arrastra para elegir el punto/);
 });
+
+test('driver profile saves name, registered vehicle and normalized plates only on own driver row',async()=>{
+ const r=runtime([{data:{id:'driver-1',full_name:'Ernesto',vehicle_type:'camioneta',plates:'ABC-123'}}]);
+ r.run("activeSessionRole='driver';driverProfileDirty=true");
+ for(const [id,value]of Object.entries({dname:'Ernesto',dvehicle:'camioneta',plates:' abc-123 '}))r.document.getElementById(id).value=value;
+ await r.run('saveDriverProfile()');
+ const q=r.queries[0];assert.deepEqual(JSON.parse(JSON.stringify(q.calls.find(c=>c[0]==='update')[1])),{full_name:'Ernesto',vehicle_type:'camioneta',plates:'ABC-123'});
+ assert.deepEqual(q.calls.filter(c=>c[0]==='eq'),[['eq','id','driver-1'],['eq','role','driver']]);
+ assert.equal(r.run('driverProfileDirty'),false);assert.equal(r.document.getElementById('plates').value,'ABC-123');
+});
+test('missing or invalid vehicle identity cannot produce a profile save',async()=>{
+ for(const plates of ['','<script>','a'.repeat(16)]){
+  const r=runtime();r.run("activeSessionRole='driver'");r.document.getElementById('dname').value='Driver';r.document.getElementById('dvehicle').value='pickup';r.document.getElementById('plates').value=plates;
+  await r.run('saveDriverProfile()');assert.equal(r.queries.length,0);
+ }
+});
+test('driver profile edits survive polling rather than being replaced by saved values',async()=>{
+ const r=runtime([{data:{role:'driver',full_name:'Saved',vehicle_type:'pickup',plates:'OLD-123'}},{data:null},{data:[]},{data:[]},{data:[]}]);
+ r.run("driverProfileDirty=true;startDriverNotifications=()=>{};syncFletyaGps=async()=>{}");
+ r.document.getElementById('plates').value='NEW-456';await r.run('renderDriver()');
+ assert.equal(r.document.getElementById('plates').value,'NEW-456');
+});
+test('assigned driver card displays only matching driver identity with escaped free text',async()=>{
+ const r=runtime();r.api.rpc=async()=>({data:[{driver_id:'driver-B',full_name:'<Monolito>',vehicle_type:'pickup',plates:'ABC-123'}]});
+ r.run("state.active={id:'job',driver_id:'driver-B',status:'en_route'}");
+ await r.run('loadAssignedDriver(state.active)');
+ const box=r.document.getElementById('assignedDriver');assert.equal(box.hidden,false);
+ assert.match(box.innerHTML,/&lt;Monolito&gt;/);assert.match(box.innerHTML,/Pickup \/ Estaquita/);assert.match(box.innerHTML,/ABC-123/);
+});
+test('late driver identity and GPS responses cannot restore a released or reassigned driver',async()=>{
+ let finish;const r=runtime();r.api.rpc=()=>new Promise(resolve=>{finish=resolve});
+ r.run("state.active={id:'job',driver_id:'driver-A',status:'en_route'}");
+ const pending=r.run('loadAssignedDriver(state.active)');
+ r.run("state.active={id:'job',driver_id:'driver-B',status:'en_route'};clearAssignedDriver()");
+ finish({data:[{driver_id:'driver-A',full_name:'Old driver'}]});await pending;
+ assert.equal(r.document.getElementById('assignedDriver').hidden,true);
+ let done;const gps=runtime([new Promise(resolve=>{done=resolve})]);
+ gps.run("state.active={id:'job',driver_id:'driver-A',status:'en_route'}");const p=gps.run('updateDriverTracking()');
+ gps.run("state.active={id:'job',driver_id:'driver-B',status:'en_route'}");done({data:{latitude:21,longitude:-86,updated_at:new Date().toISOString()}});await p;
+ assert.equal(gps.document.getElementById('driverTracking').innerHTML,'');
+});
+test('stale, invalid and future GPS timestamps never claim a recent location',()=>{
+ const r=runtime();r.context.now=Date.now();
+ for(const expression of ["new Date(now-120000).toISOString()","'invalid'","new Date(now+120000).toISOString()"]){assert.equal(r.run(`trackingFreshness(${expression},now).fresh`),false);}
+ assert.equal(r.run('trackingFreshness(new Date(now-5000).toISOString(),now).fresh'),true);
+});
+test('ending tracking and logout remove assigned identity and private vehicle drafts',()=>{
+ const r=runtime();r.document.getElementById('assignedDriver').hidden=false;r.run('stopDriverTracking()');
+ assert.equal(r.document.getElementById('assignedDriver').hidden,true);
+ r.document.getElementById('plates').value='ABC-123';r.run('clearSignedOutView()');assert.equal(r.document.getElementById('plates').value,'');
+});

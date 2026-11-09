@@ -84,6 +84,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261022090000_move_is_admin_to_private_schema.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107015407_allow_client_requested_job_cancellation.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107022645_allow_driver_release_before_pickup.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109045659_driver_identity_for_active_jobs.sql
       - name: Run security regression checks
         run: psql -v ON_ERROR_STOP=1 -f tests/security/integration.sql
 
@@ -95,3 +96,5 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f tests/security/driver-release.sql
       - name: Check simultaneous pickup and release
         run: node tests/security/driver-release-race.mjs
+      - name: Check assigned driver identity and vehicle profile permissions
+        run: psql -v ON_ERROR_STOP=1 -f tests/security/driver-identity.sql
