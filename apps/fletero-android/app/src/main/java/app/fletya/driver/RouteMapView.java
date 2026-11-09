@@ -36,7 +36,7 @@ final class RouteMapView extends LinearLayout {
         if (disposed || worker.isShutdown()) return;
         long request = ++generation;
         String requestedId = jobId, requestedOwner = owner;
-        status.setText("Cargando ruta…"); retry.setVisibility(GONE); clearMap();
+        status.setText("Cargando ruta…"); retry.setText("Reintentar mapa"); retry.setVisibility(GONE); clearMap();
         worker.execute(() -> {
             try {
                 JSONObject route = api.route(requestedId);
@@ -45,7 +45,7 @@ final class RouteMapView extends LinearLayout {
                 String detail = route.optString("distance_km", "—") + " km · " + route.optString("duration_text", "");
                 post(() -> {
                     if (disposed || generation != request || !requestedOwner.equals(api.userId())) return;
-                    try { render(css, js, coordinates); status.setText(detail); }
+                    try { render(css, js, coordinates); status.setText(detail); retry.setText("Recargar mapa"); retry.setVisibility(VISIBLE); }
                     catch (RuntimeException error) { clearMap(); status.setText("No se pudo abrir el mapa. Puedes usar Navegar."); retry.setVisibility(VISIBLE); }
                 });
             } catch (Exception error) {
@@ -67,7 +67,13 @@ final class RouteMapView extends LinearLayout {
         map.getSettings().setGeolocationEnabled(false);
         map.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         map.setWebViewClient(new WebViewClient() {
-            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return true; }
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request.hasGesture() && "https://www.openstreetmap.org/copyright".equals(request.getUrl().toString())) {
+                    try { getContext().startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, request.getUrl())); }
+                    catch (android.content.ActivityNotFoundException ignored) { /* Attribution text remains visible. */ }
+                }
+                return true;
+            }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 android.net.Uri url = request.getUrl();
                 if ("https".equals(url.getScheme()) && "tile.openstreetmap.org".equals(url.getHost()) && "GET".equals(request.getMethod()) && url.getPath() != null && url.getPath().matches("/\\d+/\\d+/\\d+\\.png")) return null;
@@ -83,8 +89,8 @@ final class RouteMapView extends LinearLayout {
             + "<meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src https://tile.openstreetmap.org data:; style-src 'unsafe-inline'; script-src 'unsafe-inline';\">"
             + "<style>" + css + "html,body,#map{height:100%;margin:0}#notice{position:absolute;bottom:24px;left:8px;z-index:999;background:white;font:12px sans-serif;padding:4px}</style>"
             + "<div id='map' aria-label='Ruta del servicio'></div><div id='notice' hidden>Mapa base sin conexión. Usa Navegar o reintenta el mapa.</div><script>" + js
-            + "const points=" + points + ";const map=L.map('map',{scrollWheelZoom:false});"
-            + "L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).on('tileerror',()=>document.getElementById('notice').hidden=false).addTo(map);"
+            + "\nconst points=" + points + ";const map=L.map('map',{scrollWheelZoom:false});"
+            + "L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors'}).on('tileerror',()=>document.getElementById('notice').hidden=false).addTo(map);"
             + "const line=L.polyline(points,{color:'#087f88',weight:5}).addTo(map);map.fitBounds(line.getBounds(),{padding:[25,25]});"
             + "L.circleMarker(points[0],{radius:8,color:'#087f88',fillOpacity:1}).addTo(map).bindTooltip('Recogida');"
             + "L.circleMarker(points[points.length-1],{radius:8,color:'#c85229',fillOpacity:1}).addTo(map).bindTooltip('Entrega');</script></html>";
