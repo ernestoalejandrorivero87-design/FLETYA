@@ -985,9 +985,9 @@ test('late driver identity and GPS responses cannot restore a released or reassi
  r.run("state.active={id:'job',driver_id:'driver-B',status:'en_route'};clearAssignedDriver()");
  finish({data:[{driver_id:'driver-A',full_name:'Old driver'}]});await pending;
  assert.equal(r.document.getElementById('assignedDriver').hidden,true);
- let done;const gps=runtime([new Promise(resolve=>{done=resolve})]);
+ let done;const gps=runtime();gps.api.rpc=()=>new Promise(resolve=>{done=resolve});
  gps.run("state.active={id:'job',driver_id:'driver-A',status:'en_route'}");const p=gps.run('updateDriverTracking()');
- gps.run("state.active={id:'job',driver_id:'driver-B',status:'en_route'}");done({data:{latitude:21,longitude:-86,updated_at:new Date().toISOString()}});await p;
+ gps.run("state.active={id:'job',driver_id:'driver-B',status:'en_route'}");done({data:[{job_id:'job',driver_id:'driver-A',latitude:21,longitude:-86,updated_at:new Date().toISOString(),server_now:new Date().toISOString()}]});await p;
  assert.equal(gps.document.getElementById('driverTracking').innerHTML,'');
 });
 test('stale, invalid and future GPS timestamps never claim a recent location',()=>{
@@ -1036,4 +1036,19 @@ test('route API failure keeps the navigation link usable and supports explicit r
  await r.run('updateDriverNavigation(state.active)');assert.match(r.document.getElementById('driverRouteInfo').textContent,/No se pudo/);
  assert.match(r.document.getElementById('driverNavigateLink').attributes.href,/google.com/);
  await r.run('updateDriverNavigation(state.active,true)');assert.equal(requests,2);
+});
+
+test('server-referenced GPS age ignores client clocks one hour ahead or behind',async()=>{
+ for(const skew of [-3600000,3600000]){
+  const r=runtime();const server='2026-11-09T15:45:51Z',received='2026-11-09T15:45:07Z';
+  r.context.clock=Date.parse(server)+skew;r.run('Date.now=()=>clock');
+  r.api.rpc=async(name,args)=>{assert.equal(name,'get_job_driver_location');assert.equal(args.p_job_id,'job');return{data:[{job_id:'job',driver_id:'driver-A',latitude:21.1,longitude:-86.8,accuracy:47,updated_at:received,server_now:server}]};};
+  r.run("state.active={id:'job',driver_id:'driver-A',status:'en_route'}");await r.run('updateDriverTracking()');
+  const html=r.document.getElementById('driverTracking').innerHTML;
+  assert.match(html,/Ubicación reciente/);assert.doesNotMatch(html,/58 min|1 h/);assert.match(html,/hora de Cancún/);assert.match(html,/10:45:07/);
+ }
+});
+test('missing server time never falls back to the client clock or reports recent',()=>{
+ const r=runtime();assert.equal(r.run('trackingFreshness(new Date().toISOString()).fresh'),false);
+ assert.equal(r.run("trackingFreshness('2026-11-09T15:40:00Z','2026-11-09T15:45:00Z').text"),'Ubicación desactualizada · hace 5 min');
 });

@@ -86,6 +86,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107022645_allow_driver_release_before_pickup.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109045659_driver_identity_for_active_jobs.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109143312_server_received_gps_timestamp.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109155008_server_based_location_freshness.sql
       - name: Run security regression checks
         run: psql -v ON_ERROR_STOP=1 -f tests/security/integration.sql
 
@@ -101,3 +102,5 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f tests/security/driver-identity.sql
       - name: Check GPS server reception timestamps
         run: psql -v ON_ERROR_STOP=1 -f tests/security/gps-server-time.sql
+      - name: Check server-referenced location freshness and RLS
+        run: psql -v ON_ERROR_STOP=1 -f tests/security/location-freshness.sql
