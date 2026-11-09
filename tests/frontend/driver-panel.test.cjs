@@ -62,7 +62,7 @@ function runtime(responses = []) {
     center: { lat: 21.1619, lng: -86.8515 }, events: {},
     setView(point) { this.center = Array.isArray(point) ? {lat:point[0],lng:point[1]} : point; return this; },
     getCenter() { return this.center; }, on(event, handler) { this.events[event]=handler; return this; },
-    removeLayer() {}, fitBounds() {}, invalidateSize() {}
+    stop() { this.stopped=true; return this; }, removeLayer() {}, fitBounds() {}, invalidateSize() {}
   };
   function marker(point, options = {}) {
     return { point: Array.isArray(point) ? { lat: point[0], lng: point[1] } : point, options, events: {},
@@ -575,20 +575,20 @@ test('cancelled map selection preserves draft fields and quote', () => {
   r.document.getElementById('origin').value = '21.1, -86.8';
   r.document.getElementById('dest').value = 'Original destination';
   r.document.getElementById('price').textContent = '$400';
-  r.run("openLocationPicker('origin'); locationPickerMarker.setLatLng({lat:21.2,lng:-86.9}); closeLocationPicker();");
+  r.run("openLocationPicker('origin'); locationPickerMap.setView({lat:21.2,lng:-86.9}); closeLocationPicker();");
   assert.equal(r.document.getElementById('origin').value, '21.1, -86.8');
   assert.equal(r.document.getElementById('dest').value, 'Original destination');
   assert.equal(r.document.getElementById('price').textContent, '$400');
 });
 
-test('confirming a draggable map pin changes only the chosen endpoint and recalculates', async () => {
+test('confirming the center pin changes only the chosen endpoint and recalculates', async () => {
   const r = runtime();
   r.run("activeSessionRole='client'");
   r.document.getElementById('origin').value = 'Plaza Las Américas';
   let body;
   r.api.functions = { invoke: async (name, options) => { body=options.body; return {data:{distance_km:8.22,duration_text:'22 min'}}; } };
-  r.run("openLocationPicker('dest'); locationPickerMarker.setLatLng({lat:21.16,lng:-86.88}); locationPickerMarker.events.dragend();");
-  assert.equal(r.run('locationPickerMarker.options.draggable'), true);
+  r.run("openLocationPicker('dest'); locationPickerMap.setView({lat:21.16,lng:-86.88}); locationPickerMap.events.move();");
+  assert.match(r.document.getElementById('locationPickerCoordinates').textContent,/21.160000, -86.880000/);
   await r.run('confirmLocationPicker()');
   assert.equal(r.document.getElementById('dest').value, '21.160000, -86.880000');
   assert.equal(r.document.getElementById('origin').value, 'Plaza Las Américas');
@@ -924,4 +924,28 @@ test('late notification responses cannot overwrite a more recent page or signed-
  assert.equal(r.queries.length,3);
  assert.equal(r.document.getElementById('driverNotifications').children[0].children[0].textContent,'🔔 Recent page');
  assert.deepEqual(r.queries[2].calls.find(c=>c[0]==='range'),['range',3,6]);
+});
+
+test('panning far from the original point confirms the latest visible map center',async()=>{
+ const r=runtime();r.run("activeSessionRole='client';setClientLocation=async(target,point)=>{chosen={target,point}};");
+ r.document.getElementById('dest').value='21.132603, -86.865174';
+ r.run("openLocationPicker('dest');locationPickerMap.setView({lat:21.04,lng:-86.87});locationPickerMap.events.move();");
+ assert.match(r.document.getElementById('locationPickerCoordinates').textContent,/21.040000, -86.870000/);
+ r.run("locationPickerMap.setView({lat:21.0365,lng:-86.8771});locationPickerMap.events.moveend();");
+ await r.run('confirmLocationPicker()');
+ assert.equal(r.run('chosen.target'),'dest');
+ assert.equal(r.run('chosen.point.lat'),21.0365);assert.equal(r.run('chosen.point.lng'),-86.8771);
+ assert.equal(r.run('locationPickerMap.stopped'),true);
+});
+test('tapping a place centers it under the pin and reopening changes the confirmation label',()=>{
+ const r=runtime();r.run("activeSessionRole='client';openLocationPicker('origin');locationPickerMap.events.click({latlng:{lat:21.2,lng:-86.9}})");
+ assert.equal(r.run('locationPickerMap.getCenter().lat'),21.2);
+ assert.equal(r.document.getElementById('locationPickerConfirm').textContent,'Confirmar origen');
+ r.run("closeLocationPicker();openLocationPicker('dest')");
+ assert.equal(r.document.getElementById('locationPickerConfirm').textContent,'Confirmar destino');
+});
+test('fixed center pin stays outside moving map layers and cannot intercept gestures',()=>{
+ assert.match(html,/id="locationPickerMap"[^>]*><\/div>\s*<svg class="location-center-pin"/);
+ assert.match(html,/\.location-center-pin\{[^}]*left:50%;top:50%[^}]*translate\(-50%,-100%\)[^}]*pointer-events:none/);
+ assert.doesNotMatch(html,/Colocar pin en el centro|locationPickerMarker|Arrastra para elegir el punto/);
 });
