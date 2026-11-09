@@ -182,6 +182,14 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <section id="driver" class="hidden">
 <div class="hero"><h1>Panel del fletero</h1><p>Tus solicitudes, servicio actual e historial en un solo lugar.</p></div>
 <div class="card"><h2>Trabajo actual y solicitudes</h2><div id="jobCard"><span class="pill">Cargando servicios…</span></div></div>
+<section id="driverNavigation" class="card" style="margin-top:18px" hidden>
+<h2 id="driverNavigationTitle">Ruta del servicio</h2><p id="driverNavigationAddress"></p>
+<a id="driverNavigateLink" class="btn" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none">Abrir Google Maps</a>
+<p class="muted">Google Maps abre las indicaciones desde tu ubicación actual. Al abrir otra app, el navegador puede pausar el GPS de FLETYA.</p>
+<h3>Ruta de entrega: origen → destino</h3><div id="driverRouteMap" style="height:280px;border-radius:12px;overflow:hidden"></div>
+<p id="driverRouteInfo" class="muted" role="status"></p>
+<button class="btn light" type="button" onclick="updateDriverNavigation(state.active,true)">Volver a cargar la ruta</button>
+</section>
 <details class="card profile-settings" id="driverProfile" style="margin-top:18px"><summary>Mi perfil de fletero</summary>
 <label>Nombre completo</label><input id="dname" maxlength="100" oninput="driverProfileDirty=true" placeholder="Tu nombre y apellidos">
 <label>Vehículo</label><select id="dvehicle" onchange="driverProfileDirty=true"><option value="">Selecciona tu vehículo</option><option value="pickup">Pickup / Estaquita</option><option value="camioneta">Camioneta</option><option value="camion">Camión</option></select>
@@ -1387,7 +1395,7 @@ function trackingFreshness(updatedAt,now=Date.now()){
       <p>Lat: ${Number(data.latitude).toFixed(6)}</p>
       <p>Lng: ${Number(data.longitude).toFixed(6)}</p>
       <p>🎯 Precisión: ${Math.round(data.accuracy || 0)} m</p>
-      <p>🕐 Última actualización: ${hora}</p>
+      <p>🕐 Última recepción: ${hora}</p>
     `;
   }
  }
@@ -1536,6 +1544,7 @@ function startDriverPanelRefresh(userId) {
   state.active = activeJob || null;
   state.accepted = Boolean(activeJob);
   syncFletyaGps(user.id, activeJob).catch(console.error);
+  updateDriverNavigation(activeJob);
 
   let html = '';
 
@@ -1721,6 +1730,63 @@ function startDriverPanelRefresh(userId) {
 
 
  }                         
+// Driver route preview is separate from the client map and survives panel polling.
+let driverRouteMap=null,driverRouteLayers=[],driverRouteKey='',driverRouteRequest=0,driverRoutePending=null,driverRouteReady=false;
+function driverDirectionsUrl(job){
+ if(!job||!isDriverActiveStatus(job.status))return null;
+ const target=job.status==='en_route'?job.origin:job.destination;
+ const destination=prepareRouteAddress(String(target||''));
+ if(!destination||destination.length>1000)return null;
+ return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination='+encodeURIComponent(destination);
+}
+function clearDriverNavigation(){
+ driverRouteRequest++;driverRouteKey='';driverRoutePending=null;driverRouteReady=false;
+ const box=document.getElementById('driverNavigation');box.hidden=true;
+ document.getElementById('driverNavigateLink').removeAttribute('href');
+ document.getElementById('driverNavigationAddress').textContent='';
+ document.getElementById('driverRouteInfo').textContent='';
+ if(driverRouteMap)driverRouteMap.remove?.();
+ driverRouteMap=null;driverRouteLayers=[];
+}
+async function updateDriverNavigation(job,force=false){
+ if(!job||!isDriverActiveStatus(job.status)||activeSessionRole!=='driver'||logoutPending){clearDriverNavigation();return;}
+ const url=driverDirectionsUrl(job),box=document.getElementById('driverNavigation'),link=document.getElementById('driverNavigateLink');
+ box.hidden=false;
+ const pickup=job.status==='en_route';
+ document.getElementById('driverNavigationTitle').textContent=pickup?'Ve a recoger la carga':'Lleva la carga al destino';
+ document.getElementById('driverNavigationAddress').textContent=(pickup?'Recogida: ':'Entrega: ')+(pickup?job.origin:job.destination);
+ link.textContent=pickup?'Navegar al origen':'Navegar al destino';
+ if(url)link.setAttribute('href',url);else link.removeAttribute('href');
+ const key=JSON.stringify([sessionRevision,job.id,job.driver_id,job.origin,job.destination]);
+ if(key===driverRouteKey&&!force){if(driverRoutePending)return driverRoutePending;if(driverRouteReady)return;return;}
+ const revision=sessionRevision,request=++driverRouteRequest;
+ driverRouteKey=key;driverRouteReady=false;
+ const info=document.getElementById('driverRouteInfo');info.textContent='Cargando ruta de entrega…';
+ const work=(async()=>{
+ try{
+  if(!driverRouteMap){
+   driverRouteMap=L.map('driverRouteMap').setView([21.1619,-86.8515],12);
+   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(driverRouteMap);
+  }
+  for(const layer of driverRouteLayers)driverRouteMap.removeLayer(layer);driverRouteLayers=[];
+  driverRouteMap.invalidateSize({pan:false});
+  const origin=prepareRouteAddress(String(job.origin||'')),destination=prepareRouteAddress(String(job.destination||''));
+  if(!origin||!destination)throw new Error('Missing route endpoints');
+  const {data,error}=await supabaseClient.functions.invoke('fletya-routes',{body:{origin,destination}});
+  if(revision!==sessionRevision||request!==driverRouteRequest||logoutPending||activeSessionRole!=='driver'||state.active?.id!==job.id||state.active?.driver_id!==job.driver_id||!isDriverActiveStatus(state.active?.status))return;
+  const points=data?.polyline?decodePolyline(data.polyline):[];
+  if(error||points.length<2)throw new Error('Route unavailable');
+  const line=L.polyline(points,{weight:5}).addTo(driverRouteMap);
+  const originPoint=parseRouteCoordinates(origin),destPoint=parseRouteCoordinates(destination);
+  driverRouteLayers=[line,L.marker(originPoint?[originPoint.lat,originPoint.lng]:points[0]).addTo(driverRouteMap).bindPopup('Recogida'),L.marker(destPoint?[destPoint.lat,destPoint.lng]:points[points.length-1]).addTo(driverRouteMap).bindPopup('Entrega')];
+  driverRouteMap.fitBounds(line.getBounds(),{padding:[25,25]});driverRouteReady=true;
+  info.textContent=(data.distance_km??job.distance_km??'—')+' km · '+(data.duration_text||'Tiempo estimado')+' · Vista de referencia de la entrega';
+ }catch(error){if(revision===sessionRevision&&request===driverRouteRequest&&!logoutPending)info.textContent='No se pudo cargar el mapa de la ruta. Puedes usar el botón de Google Maps o volver a intentarlo.';}
+ finally{if(request===driverRouteRequest)driverRoutePending=null;}
+ })();
+ driverRoutePending=work;return work;
+}
+
 // GPS del fletero: seguimiento exclusivo del servicio activo y de la sesión actual.
 let fletyaGpsWatch = null;
 let fletyaGpsJobId = null;
@@ -1786,7 +1852,7 @@ async function syncFletyaGps(userId, activeJob) {
     const { error } = await supabaseClient.from('driver_locations').upsert({
       driver_id: userId, job_id: jobId,
       latitude: position.coords.latitude, longitude: position.coords.longitude,
-      accuracy: position.coords.accuracy, updated_at: new Date().toISOString()
+      accuracy: position.coords.accuracy
     }, { onConflict: 'driver_id' });
     if (fletyaGpsJobId !== jobId || fletyaGpsUserId !== userId) return;
     if (error) {
@@ -1806,6 +1872,7 @@ async function syncFletyaGps(userId, activeJob) {
 function clearSignedOutView() {
   sessionRevision++;
   resetPanelPages();
+  clearDriverNavigation();
   driverProfileDirty=false;
   for(const id of ['dname','dvehicle','plates'])document.getElementById(id).value='';
   document.getElementById('driverProfileMessage').textContent='';
@@ -2125,8 +2192,7 @@ async function driverLocation(){
             job_id: activeJob.id,
             latitude: latitude,
             longitude: longitude,
-            accuracy: accuracy,
-            updated_at: new Date().toISOString()
+            accuracy: accuracy
           },
           {
             onConflict: 'driver_id'
