@@ -1,0 +1,38 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'app.fletya.client'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'app.fletya.client'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'
+    }
+    buildFeatures { buildConfig true }
+    flavorDimensions += 'environment'
+    productFlavors {
+        pruebas {
+            dimension 'environment'
+            applicationIdSuffix '.pruebas'
+            resValue 'string', 'app_name', 'FLETYA Cliente · Pruebas'
+            buildConfigField 'String', 'SUPABASE_URL', '"https://ccdtpwvalqznasstnqxj.supabase.co"'
+            buildConfigField 'String', 'SUPABASE_KEY', '"sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89"'
+            buildConfigField 'String', 'ENVIRONMENT', '"PRUEBAS"'
+        }
+        piloto {
+            dimension 'environment'
+            resValue 'string', 'app_name', 'FLETYA Cliente · Piloto'
+            buildConfigField 'String', 'SUPABASE_URL', '"https://wsdfqscrvfygxripmrzi.supabase.co"'
+            buildConfigField 'String', 'SUPABASE_KEY', '"sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O"'
+            buildConfigField 'String', 'ENVIRONMENT', '"PILOTO · Servicios reales"'
+        }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    lint { abortOnError true; checkReleaseBuilds true }
+    testOptions { unitTests.returnDefaultValues = true }
+}
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20250517'
+}
