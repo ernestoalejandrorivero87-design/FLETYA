@@ -20,7 +20,7 @@ android {
     flavorDimensions += 'environment'
     productFlavors {
         pruebas {
-            manifestPlaceholders = [fletyaMapsAndroidKey: testMapsKey]
+            manifestPlaceholders = [fletyaMapsAndroidKey: testMapsKey ?: "disabled"]
             buildConfigField 'boolean', 'NATIVE_ROUTE_MAP', (!testMapsKey.isEmpty()).toString()
             versionCode 8
             versionName '0.4.4'
@@ -34,7 +34,7 @@ android {
             buildConfigField 'String', 'ENVIRONMENT', '"PRUEBAS"'
         }
         piloto {
-            manifestPlaceholders = [fletyaMapsAndroidKey: pilotMapsKey]
+            manifestPlaceholders = [fletyaMapsAndroidKey: pilotMapsKey ?: "disabled"]
             buildConfigField 'boolean', 'NATIVE_ROUTE_MAP', (!pilotMapsKey.isEmpty()).toString()
             versionCode 8
             versionName '0.3.1'
