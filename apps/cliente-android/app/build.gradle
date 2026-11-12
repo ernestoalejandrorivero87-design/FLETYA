@@ -5,6 +5,18 @@ def firebaseClient=firebaseConfig?.client?.find { it.client_info.android_client_
 if(firebaseConfig && !firebaseClient)throw new GradleException('Firebase package must match app.fletya.client')
 def testMapsKey = providers.environmentVariable('FLETYA_MAPS_ANDROID_TEST_KEY').getOrElse('').trim()
 def pilotMapsKey = providers.environmentVariable('FLETYA_MAPS_ANDROID_PILOT_KEY').getOrElse('').trim()
+def pilotSigning = [
+    store: providers.environmentVariable('FLETYA_PILOT_KEYSTORE').orNull,
+    storePassword: providers.environmentVariable('FLETYA_PILOT_STORE_PASSWORD').orNull,
+    alias: providers.environmentVariable('FLETYA_PILOT_KEY_ALIAS').orNull,
+    keyPassword: providers.environmentVariable('FLETYA_PILOT_KEY_PASSWORD').orNull
+]
+if (pilotSigning.values().any { it } && !pilotSigning.values().every { it }) {
+    throw new GradleException('Incomplete FLETYA Pilot signing configuration')
+}
+if (pilotSigning.store && !file(pilotSigning.store).isFile()) {
+    throw new GradleException('FLETYA Pilot keystore file is missing')
+}
 android {
     namespace 'app.fletya.client'
     compileSdk 36
@@ -17,9 +29,24 @@ android {
     }
     buildFeatures { buildConfig true }
     sourceSets.main.java.srcDir '../../android-shared/src/main/java'
+    signingConfigs {
+        if (pilotSigning.store) {
+            pilotDistribution {
+                storeFile file(pilotSigning.store)
+                storePassword pilotSigning.storePassword
+                keyAlias pilotSigning.alias
+                keyPassword pilotSigning.keyPassword
+            }
+        }
+    }
+    // A build type's signing config takes precedence over the product flavor.
+    if (pilotSigning.store) {
+        buildTypes.debug.signingConfig = null
+    }
     flavorDimensions += 'environment'
     productFlavors {
         pruebas {
+            if (pilotSigning.store) signingConfig signingConfigs.debug
             manifestPlaceholders = [fletyaMapsAndroidKey: testMapsKey ?: "disabled"]
             buildConfigField 'boolean', 'NATIVE_ROUTE_MAP', (!testMapsKey.isEmpty()).toString()
             versionCode 8
@@ -34,6 +61,7 @@ android {
             buildConfigField 'String', 'ENVIRONMENT', '"PRUEBAS"'
         }
         piloto {
+            if (pilotSigning.store) signingConfig signingConfigs.pilotDistribution
             manifestPlaceholders = [fletyaMapsAndroidKey: pilotMapsKey ?: "disabled"]
             buildConfigField 'boolean', 'NATIVE_ROUTE_MAP', (!pilotMapsKey.isEmpty()).toString()
             versionCode 8
