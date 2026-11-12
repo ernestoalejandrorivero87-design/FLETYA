@@ -40,7 +40,8 @@ final class RouteMapView extends LinearLayout {
         worker.execute(() -> {
             try {
                 JSONObject route = api.route(requestedId);
-                String coordinates = RouteMapData.decode(route.optString("polyline")).toString();
+                String coordinates = (route.has("points") ? RouteMapData.fromLongitudeFirst(route.getJSONArray("points"))
+                    : RouteMapData.decode(route.getString("polyline"))).toString();
                 String css = asset("leaflet.css"), js = asset("leaflet.js");
                 String detail = route.optString("distance_km", "—") + " km · " + route.optString("duration_text", "");
                 post(() -> {

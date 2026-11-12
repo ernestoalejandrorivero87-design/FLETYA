@@ -1,5 +1,6 @@
 package app.fletya.driver;
 
+import app.fletya.maps.RouteMapActivity;
 import android.Manifest;
 import android.app.*;
 import android.content.*;
@@ -229,6 +230,13 @@ public final class MainActivity extends Activity {
                 if (routeMap.getParent() instanceof ViewGroup parent) parent.removeView(routeMap);
                 mapBox.addView(routeMap);
                 routeMap.show(job, api.userId());
+                if (BuildConfig.NATIVE_ROUTE_MAP) {
+                    button(mapBox, "Ver ruta en mapa", () -> task(() -> {
+                        JSONObject route = api.route(job.getString("id"));
+                        return route.has("points") ? RouteMapData.fromLongitudeFirst(route.getJSONArray("points"))
+                            : RouteMapData.decode(route.getString("polyline"));
+                    }, points -> RouteMapActivity.show(this, points)));
+                }
             } else {
                 clearRoute();
                 stopService(new Intent(this, TrackingService.class));
@@ -283,6 +291,9 @@ public final class MainActivity extends Activity {
         text(box, job.optString("distance_km", "—") + " km · Ayudantes: " + job.optInt("helpers"), 15, false);
         NumberFormat money = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX"));
         text(box, money.format(job.optDouble("price", 0)) + " MXN", 24, true).setTextColor(TEAL);
+        if (BuildConfig.TEST_ROUTE_PRICING && !job.isNull("test_driver_payout")) {
+            text(box, "Recibes " + money.format(job.optDouble("test_driver_payout")) + " MXN", 16, true);
+        }
     }
     private String vehicleLabel(String value) {
         return switch (value) { case "pickup" -> "Pickup / Estaquita"; case "camioneta" -> "Camioneta"; case "camion" -> "Camión"; default -> "Sin registrar"; };

@@ -205,6 +205,12 @@ public final class DriverApi {
         JSONObject assigned = job(jobId);
         if (assigned == null || !DriverRules.ownsActive(assigned.optString("status"), assigned.optString("driver_id"), userId()))
             throw new Failure(403, "El servicio ya no está asignado a tu cuenta.");
+        if (!assigned.isNull("route_quote_id")) {
+            JSONObject route = new JSONObject(call("POST", "/rest/v1/rpc/get_job_delivery_route",
+                new JSONObject().put("p_job", jobId), null).body());
+            if (!route.optBoolean("available")) throw new Failure(409, "La ruta ya no está disponible.");
+            return route;
+        }
         return new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
             .put("origin", assigned.optString("origin")).put("destination", assigned.optString("destination")), null).body());
     }

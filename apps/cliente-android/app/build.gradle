@@ -3,6 +3,8 @@ def configFile=file('src/piloto/google-services.json')
 def firebaseConfig=configFile.exists()?new groovy.json.JsonSlurper().parse(configFile):null
 def firebaseClient=firebaseConfig?.client?.find { it.client_info.android_client_info.package_name == 'app.fletya.client' }
 if(firebaseConfig && !firebaseClient)throw new GradleException('Firebase package must match app.fletya.client')
+def testMapsKey = providers.environmentVariable('FLETYA_MAPS_ANDROID_TEST_KEY').getOrElse('').trim()
+def pilotMapsKey = providers.environmentVariable('FLETYA_MAPS_ANDROID_PILOT_KEY').getOrElse('').trim()
 android {
     namespace 'app.fletya.client'
     compileSdk 36
@@ -14,9 +16,15 @@ android {
         versionName '0.2.0'
     }
     buildFeatures { buildConfig true }
+    sourceSets.main.java.srcDir '../../android-shared/src/main/java'
     flavorDimensions += 'environment'
     productFlavors {
         pruebas {
+            manifestPlaceholders = [fletyaMapsAndroidKey: testMapsKey]
+            buildConfigField 'boolean', 'NATIVE_ROUTE_MAP', (!testMapsKey.isEmpty()).toString()
+            versionCode 8
+            versionName '0.4.4'
+            buildConfigField 'boolean', 'TEST_ROUTE_PRICING', 'true'
             dimension 'environment'
             applicationIdSuffix '.pruebas'
             buildConfigField 'boolean', 'PUSH_ENABLED', 'false'
@@ -26,6 +34,11 @@ android {
             buildConfigField 'String', 'ENVIRONMENT', '"PRUEBAS"'
         }
         piloto {
+            manifestPlaceholders = [fletyaMapsAndroidKey: pilotMapsKey]
+            buildConfigField 'boolean', 'NATIVE_ROUTE_MAP', (!pilotMapsKey.isEmpty()).toString()
+            versionCode 8
+            versionName '0.3.1'
+            buildConfigField 'boolean', 'TEST_ROUTE_PRICING', 'false'
             buildConfigField 'boolean', 'PUSH_ENABLED', firebaseClient?'true':'false'
             if(firebaseClient){
                 resValue 'string','google_app_id',firebaseClient.client_info.mobilesdk_app_id
@@ -45,6 +58,7 @@ android {
     testOptions { unitTests.returnDefaultValues = true }
 }
 dependencies {
+    implementation "com.google.android.gms:play-services-maps:19.2.0"
     implementation platform('com.google.firebase:firebase-bom:35.1.0')
     implementation 'com.google.firebase:firebase-messaging'
     testImplementation 'junit:junit:4.13.2'

@@ -14,6 +14,7 @@ import android.text.*;
 import android.view.*;
 import android.widget.*;
 import org.json.*;
+import app.fletya.maps.RouteMapActivity;
 import java.text.NumberFormat;
 import java.util.Locale;
 import java.util.UUID;
@@ -36,6 +37,9 @@ public final class MainActivity extends Activity {
     private JSONObject active;
     private EditText originField,destField;
     private ClientApi.Quote quote;
+    private ClientApi.TestQuote testQuote;
+    private JSONArray activeRoutePoints;
+    private static final String[] TEST_SERVICES = {"Mudanza", "Paquetería"};
     private String requestId="",routeKey="";
     private ClientMapView previewMap,trackingMap,pickerMap;
     private TextView routeMessage,trackingStatus;
@@ -139,7 +143,7 @@ public final class MainActivity extends Activity {
             JSONObject next=panel.jobs().length()==1?panel.jobs().getJSONObject(0):null;
             if(next==null&&active==null&&originField!=null&&originField.getParent()!=null&&"home".equals(rendered)){message.setText("");return;}
             active=next;
-            if(active==null){clearTrackingMap();form();}else{stopLocation();clearPreview();quote=null;requestId="";renderActive(panel.tracking(),panel.trackingError());}
+            if(active==null){clearTrackingMap();form();}else{stopLocation();clearPreview();quote=null;testQuote=null;requestId="";renderActive(panel.tracking(),panel.trackingError());}
         });
     }
     private void form(){
@@ -153,7 +157,7 @@ public final class MainActivity extends Activity {
         watch(originField,true);watch(destField,false);
         spinner(intro,"Vehículo",new String[]{"Pickup / Estaquita","Camioneta","Camión"},vehicleChoice,0);
         spinner(intro,"Ayudantes",new String[]{"Sin ayudante","1 ayudante","2 ayudantes"},helperChoice,1);
-        spinner(intro,"Servicio",ClientRules.SERVICES,serviceChoice,2);
+        spinner(intro,"Servicio",BuildConfig.TEST_ROUTE_PRICING ? TEST_SERVICES : ClientRules.SERVICES,serviceChoice,2);
         button(intro,"Ver precio y ruta",this::calculate);
         quoteArea=new LinearLayout(this);quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();
     }
@@ -162,18 +166,28 @@ public final class MainActivity extends Activity {
         text(box,label,14,true);var spinner=new Spinner(this);spinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,items));spinner.setSelection(selected);box.addView(spinner,new LinearLayout.LayoutParams(-1,dp(52)));
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int position,long id){int old=kind==0?vehicleChoice:kind==1?helperChoice:serviceChoice;if(old==position)return;if(kind==0)vehicleChoice=position;else if(kind==1)helperChoice=position;else serviceChoice=position;invalidateQuote();}});
     }
-    private void invalidateQuote(){draftRevision++;quote=null;requestId="";clearPreview();if(quoteArea!=null){quoteArea.removeAllViews();text(quoteArea,"Calcula el precio después de elegir tu ruta.",14,false);}}
+    private void invalidateQuote(){draftRevision++;quote=null;testQuote=null;requestId="";clearPreview();if(quoteArea!=null){quoteArea.removeAllViews();text(quoteArea,"Calcula el precio después de elegir tu ruta.",14,false);}}
     private void calculate(){
-        String from=originDraft,to=destDraft,vehicle=ClientRules.VEHICLES[vehicleChoice],service=ClientRules.SERVICES[serviceChoice];int helpers=helperChoice;long draft=draftRevision;
-        task(()->api.quote(from,to,vehicle,helpers,service),value->{if(draft!=draftRevision){message.setText("La ruta cambió. Calcula de nuevo el precio.");return;}quote=value;requestId=UUID.randomUUID().toString();showQuote();message.setText("Revisa el precio y confirma cuando estés listo.");});
+        String from=originDraft,to=destDraft,vehicle=ClientRules.VEHICLES[vehicleChoice],service=(BuildConfig.TEST_ROUTE_PRICING ? TEST_SERVICES : ClientRules.SERVICES)[serviceChoice];int helpers=helperChoice;long draft=draftRevision;
+        task(()->BuildConfig.TEST_ROUTE_PRICING ? api.quoteForTest(from,to,vehicle,helpers,service) : new ClientApi.TestQuote(api.quote(from,to,vehicle,helpers,service), null),value->{if(draft!=draftRevision){message.setText("La ruta cambió. Calcula de nuevo el precio.");return;}testQuote=value;quote=value.quote();requestId=UUID.randomUUID().toString();showQuote();message.setText("Revisa el precio y confirma cuando estés listo.");});
     }
     private void showQuote(){
         if(quoteArea==null)return;quoteArea.removeAllViews();
         if(quote==null){text(quoteArea,"Elige origen y destino para calcular el precio.",14,false);return;}
         text(quoteArea,money(quote.price()),28,true).setTextColor(TEAL);text(quoteArea,quote.km()+" km · "+quote.duration(),15,false);
-        text(quoteArea,"Base + distancia + vehículo + "+quote.helpers()+" ayudante(s)",13,false);
+        String pricing = BuildConfig.TEST_ROUTE_PRICING && "pickup".equals(quote.vehicle())
+            ? "$400 hasta 3 km · $35 por km adicional"
+            : "Base + distancia + vehículo";
+        if (quote.helpers() > 0) pricing += " + " + quote.helpers() + " ayudante(s)";
+        text(quoteArea, pricing, 13, false);
         clearPreview();
         try{previewMap=new ClientMapView(this);previewMap.route(quote.polyline());quoteArea.addView(previewMap,new LinearLayout.LayoutParams(-1,dp(240)));}catch(Exception error){clearPreview();text(quoteArea,"Vista de mapa no disponible. Revisa las direcciones antes de solicitar.",13,false);}
+        if (BuildConfig.NATIVE_ROUTE_MAP) {
+            button(quoteArea, "Ver ruta en mapa", () -> {
+                try { RouteMapActivity.show(this, RouteMapData.decode(quote.polyline())); }
+                catch (Exception error) { message.setText("No se pudo abrir la ruta."); }
+            });
+        }
         button(quoteArea,"Solicitar FLETYA",this::confirmRequest);
     }
     private void confirmRequest(){
@@ -182,7 +196,8 @@ public final class MainActivity extends Activity {
         dialog().setTitle("¿Confirmar el flete?").setMessage(selected.origin()+"\n→ "+selected.destination()+"\n\n"+money(selected.price())+"\nSujeto a disponibilidad de fleteros.")
             .setNegativeButton("Volver",null).setPositiveButton("Confirmar solicitud",(d,w)->{
                 if(quote!=selected||draft!=draftRevision)return;
-                task(()->api.create(selected,id),job->{resetDraft();active=job;clearPreview();refresh();});
+                ClientApi.TestQuote selectedTest = testQuote;
+                task(()->BuildConfig.TEST_ROUTE_PRICING ? api.createForTest(selectedTest,id) : api.create(selected,id),job->{resetDraft();active=job;clearPreview();refresh();});
             }).setOnDismissListener(d->picking=false).show();
     }
     private void details(LinearLayout box,JSONObject job){
@@ -207,22 +222,29 @@ public final class MainActivity extends Activity {
         else if(!routeLoading&&!routeFailed)loadTrackingRoute(job,key);
         else routeMessage.setText(routeFailed?"No se pudo cargar la ruta. Pulsa Recargar mapa.":"Cargando ruta…");
         if(trackingMap!=null&&tracking.fix()!=null)button(mapBox,"Ver fletero en mapa",()->trackingMap.centerDriver());
+        if (BuildConfig.NATIVE_ROUTE_MAP && activeRoutePoints != null) {
+            button(mapBox, "Ver ruta en mapa", () -> RouteMapActivity.show(this, activeRoutePoints));
+        }
         button(mapBox,"Recargar mapa",()->{clearTrackingMap();refresh();});button(root,"Actualizar seguimiento",this::refresh);message.setText("");
     }
     private void attachMap(LinearLayout box){if(trackingMap.getParent() instanceof ViewGroup parent)parent.removeView(trackingMap);box.addView(trackingMap,new LinearLayout.LayoutParams(-1,dp(280)));}
     private void loadTrackingRoute(JSONObject job,String key){
         routeLoading=true;
         long session=revision,request=++routeRevision;String user=api.userId();routeMessage.setText("Cargando ruta…");
-        worker.execute(()->{try{JSONObject route=api.route(job.optString("origin"),job.optString("destination"));main.post(()->{
+        worker.execute(()->{try{
+            boolean bound = !job.isNull("route_quote_id");
+            JSONArray points = bound ? RouteMapData.fromLongitudeFirst(api.savedRoute(job.getString("id")))
+                : RouteMapData.decode(api.route(job.optString("origin"),job.optString("destination")).getString("polyline"));
+            main.post(()->{
             if(isDestroyed()||session!=revision||request!=routeRevision||!user.equals(api.userId())||!"home".equals(screen)||active==null||!key.equals(routeKey))return;
-            try{trackingMap=new ClientMapView(this);trackingMap.route(route.optString("polyline"));trackingMap.updateDriver(currentTrackingFix);attachMap(routeContainer);routeLoading=false;routeMessage.setText(route.optString("distance_km")+" km · "+route.optString("duration_text"));if(currentTrackingFix!=null)button(routeContainer,"Ver fletero en mapa",()->{if(trackingMap!=null)trackingMap.centerDriver();});message.setText("Mapa cargado.");}
+            try{activeRoutePoints=points;trackingMap=new ClientMapView(this);trackingMap.route(points);trackingMap.updateDriver(currentTrackingFix);attachMap(routeContainer);routeLoading=false;routeMessage.setText(job.optString("distance_km")+" km · Recogida a entrega");if(currentTrackingFix!=null)button(routeContainer,"Ver fletero en mapa",()->{if(trackingMap!=null)trackingMap.centerDriver();});message.setText("Mapa cargado.");}
             catch(Exception error){clearTrackingMap();routeKey=key;routeFailed=true;routeMessage.setText("No se pudo abrir el mapa. Pulsa Recargar mapa.");}
         });}catch(Exception error){main.post(()->{if(!isDestroyed()&&session==revision&&request==routeRevision&&key.equals(routeKey)&&"home".equals(screen)){routeLoading=false;routeFailed=true;routeMessage.setText("No se pudo cargar la ruta. Pulsa Recargar mapa.");}});}});
     }
     private void clearPreview(){if(previewMap!=null){if(previewMap.getParent() instanceof ViewGroup parent)parent.removeView(previewMap);previewMap.dispose();previewMap=null;}}
-    private void clearTrackingMap(){routeRevision++;routeKey="";routeLoading=false;routeFailed=false;if(trackingMap!=null){if(trackingMap.getParent() instanceof ViewGroup parent)parent.removeView(trackingMap);trackingMap.dispose();trackingMap=null;}}
+    private void clearTrackingMap(){activeRoutePoints=null;routeRevision++;routeKey="";routeLoading=false;routeFailed=false;if(trackingMap!=null){if(trackingMap.getParent() instanceof ViewGroup parent)parent.removeView(trackingMap);trackingMap.dispose();trackingMap=null;}}
     private void disposeMaps(){clearPreview();clearTrackingMap();if(pickerMap!=null){pickerMap.dispose();pickerMap=null;}}
-    private void resetDraft(){originDraft="";destDraft="";vehicleChoice=0;helperChoice=0;serviceChoice=0;quote=null;requestId="";draftRevision++;originField=null;destField=null;quoteArea=null;}
+    private void resetDraft(){originDraft="";destDraft="";vehicleChoice=0;helperChoice=0;serviceChoice=0;quote=null;testQuote=null;requestId="";draftRevision++;originField=null;destField=null;quoteArea=null;}
     private void activateNotices(){
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},18);
         else if(!PushManager.permitted(this)){try{startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}catch(ActivityNotFoundException error){message.setText("Revisa los permisos de notificaciones en Ajustes.");}}
