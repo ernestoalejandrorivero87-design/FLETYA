@@ -28,11 +28,12 @@ public final class MainActivity extends Activity {
     private ClientApi api;
     private LinearLayout root,quoteArea;
     private TextView message,pushStatusView;
+    private Button activateNoticesButton;
     private ScrollView scroll;
     private String screen="login",rendered="",originDraft="",destDraft="",profileName="";
     private int vehicleChoice,helperChoice,serviceChoice,historyPage,noticePage;
     private String pendingNoticeJob="";
-    private boolean busy,visible,picking,menuOpen,routeLoading,routeFailed,awaitingLocationPermission;
+    private boolean busy,visible,picking,menuOpen,routeLoading,routeFailed,awaitingLocationPermission,requestingNotices;
     private long revision,draftRevision,routeRevision;
     private JSONObject active;
     private EditText originField,destField;
@@ -58,7 +59,7 @@ public final class MainActivity extends Activity {
     @Override public void onDestroy(){revision++;routeRevision++;main.removeCallbacksAndMessages(null);stopLocation();disposeMaps();if(pickerDialog!=null)pickerDialog.dismiss();worker.shutdownNow();super.onDestroy();}
     private final Runnable poll=new Runnable(){public void run(){if(!visible)return;if(api.signedIn()&&"home".equals(screen)&&!busy&&!picking&&!menuOpen)refresh();main.postDelayed(this,10_000);}};
     private final Runnable freshnessTick=new Runnable(){public void run(){if(!visible)return;updateFreshness();main.postDelayed(this,1000);}};
-    private void updateFreshness(){if(pushStatusView!=null)pushStatusView.setText(PushManager.report());if("home".equals(screen)&&active!=null&&ClientRules.assigned(active.optString("status"))&&currentTrackingFix!=null){if(trackingStatus!=null)trackingStatus.setText(ClientRules.freshness(currentTrackingFix));if(trackingMap!=null)trackingMap.updateDriver(currentTrackingFix);}}
+    private void updateFreshness(){if(activateNoticesButton!=null)activateNoticesButton.setVisibility(PushManager.permitted(this)?View.GONE:View.VISIBLE);if(pushStatusView!=null)pushStatusView.setText(PushManager.report());if("home".equals(screen)&&active!=null&&ClientRules.assigned(active.optString("status"))&&currentTrackingFix!=null){if(trackingStatus!=null)trackingStatus.setText(ClientRules.freshness(currentTrackingFix));if(trackingMap!=null)trackingMap.updateDriver(currentTrackingFix);}}
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable background(int color,int radius){var value=new GradientDrawable();value.setColor(color);value.setCornerRadius(dp(radius));return value;}
     private TextView text(LinearLayout parent,String value,int size,boolean bold){var view=new TextView(this);view.setText(value);view.setTextSize(size);view.setTextColor(Color.rgb(32,45,49));if(bold)view.setTypeface(null,Typeface.BOLD);view.setPadding(0,dp(4),0,dp(8));parent.addView(view);return view;}
@@ -67,6 +68,7 @@ public final class MainActivity extends Activity {
     private EditText field(LinearLayout box,String label,String value,int type){text(box,label,14,true);var v=new EditText(this);v.setSingleLine(true);v.setTextSize(16);v.setInputType(type);v.setText(value);v.setMinHeight(dp(48));box.addView(v,new LinearLayout.LayoutParams(-1,-2));return v;}
     private String money(double value){return NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX")).format(value)+" MXN";}
     private void shell(){
+        activateNoticesButton=null;
         int y=scroll!=null&&screen.equals(rendered)?scroll.getScrollY():0;rendered=screen;
         scroll=new ScrollView(this);scroll.setFillViewport(true);root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(20),dp(16),dp(20),dp(28));root.setBackgroundColor(Color.rgb(244,247,248));scroll.addView(root);
         scroll.setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=30){var bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
@@ -131,13 +133,14 @@ public final class MainActivity extends Activity {
     }
     private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError){}
     private void refresh(){
-        if(!visible||busy||picking||!api.signedIn())return;
+        if(!visible||busy||picking||requestingNotices||!api.signedIn())return;
         task(()->{var profile=api.profile();var jobs=api.activeJobs();var tracking=new ClientApi.Tracking(null,null);boolean error=false;
             if(jobs.length()==1&&ClientRules.assigned(jobs.getJSONObject(0).optString("status")))try{tracking=api.tracking(jobs.getJSONObject(0));}catch(Exception e){if(!api.signedIn())throw e;error=true;}
             return new Panel(profile,jobs,tracking,error);
         },panel->{
             if(!visible||!"home".equals(screen))return;
             PushManager.activate(this,api);
+            if (PushManager.shouldRequestOnFirstUse(this)) requestNoticePermission();
             profileName=panel.profile().optString("full_name","cliente");
             if(panel.jobs().length()>1){clearTrackingMap();active=null;shell();text(card("Revisión necesaria"),"Tienes más de un servicio activo. Consulta con administración antes de pedir otro.",16,false);button(root,"Actualizar seguimiento",this::refresh);return;}
             JSONObject next=panel.jobs().length()==1?panel.jobs().getJSONObject(0):null;
@@ -149,7 +152,7 @@ public final class MainActivity extends Activity {
     private void form(){
         screen="home";shell();text(root,"Hola, "+profileName,17,true);
         var intro=card("Solicita tu flete");text(intro,"Elige la ruta y revisa el precio antes de confirmar.",15,false);
-        if(BuildConfig.PUSH_ENABLED&&!PushManager.permitted(this))button(intro,"Activar avisos de mi servicio",this::activateNotices);
+        addNoticePermissionButton(intro);
         originField=field(intro,"Recogida",originDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         button(intro,"Elegir recogida en mapa",()->picker(originField));button(intro,"Usar mi ubicación como recogida",()->locate(originField));
         destField=field(intro,"Entrega",destDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
@@ -207,7 +210,7 @@ public final class MainActivity extends Activity {
     }
     private void renderActive(ClientApi.Tracking tracking,boolean trackingError){
         screen="home";shell();trackingStatus=null;originField=null;destField=null;quoteArea=null;
-        JSONObject job=active;var box=card("Tu servicio");if(BuildConfig.PUSH_ENABLED&&!PushManager.permitted(this))button(box,"Activar avisos de mi servicio",this::activateNotices);text(box,ClientRules.status(job.optString("status")),19,true);details(box,job);
+        JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);text(box,ClientRules.status(job.optString("status")),19,true);details(box,job);
         if("requested".equals(job.optString("status"))&&!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
         if("requested".equals(job.optString("status"))&&job.isNull("driver_id"))button(box,"Cancelar solicitud",()->dialog().setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
         if(ClientRules.assigned(job.optString("status"))){
@@ -245,10 +248,23 @@ public final class MainActivity extends Activity {
     private void clearTrackingMap(){activeRoutePoints=null;routeRevision++;routeKey="";routeLoading=false;routeFailed=false;if(trackingMap!=null){if(trackingMap.getParent() instanceof ViewGroup parent)parent.removeView(trackingMap);trackingMap.dispose();trackingMap=null;}}
     private void disposeMaps(){clearPreview();clearTrackingMap();if(pickerMap!=null){pickerMap.dispose();pickerMap=null;}}
     private void resetDraft(){originDraft="";destDraft="";vehicleChoice=0;helperChoice=0;serviceChoice=0;quote=null;testQuote=null;requestId="";draftRevision++;originField=null;destField=null;quoteArea=null;}
+    private void addNoticePermissionButton(LinearLayout parent) {
+        if (!BuildConfig.PUSH_ENABLED) return;
+        activateNoticesButton = button(parent, "Activar avisos de mi servicio", this::activateNotices);
+        activateNoticesButton.setVisibility(PushManager.permitted(this) ? View.GONE : View.VISIBLE);
+    }
     private void activateNotices(){
-        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},18);
+        if (PushManager.shouldRequestOnFirstUse(this)
+            || (Build.VERSION.SDK_INT >= 33 && shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))) {
+            requestNoticePermission();
+        }
         else if(!PushManager.permitted(this)){try{startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}catch(ActivityNotFoundException error){message.setText("Revisa los permisos de notificaciones en Ajustes.");}}
         else{PushManager.tokenChanged(this,api);message.setText(PushManager.report());}
+    }
+    private void requestNoticePermission() {
+        requestingNotices=true;
+        PushManager.markPermissionRequested(this);
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18);
     }
     private void notices(){int page=noticePage;task(()->api.notifications(page*12),rows->{
         screen="notices";shell();card("Avisos de mis servicios");
@@ -285,7 +301,7 @@ public final class MainActivity extends Activity {
         if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){awaitingLocationPermission=true;requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},10);return;}
         startLocation();
     }
-    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==18){PushManager.tokenChanged(this,api);message.setText(PushManager.report());return;}if(code==10){awaitingLocationPermission=false;if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED||checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED)startLocation();else {stopLocation();message.setText("Puedes elegir el punto en el mapa o escribir la dirección.");}}}
+    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==18){requestingNotices=false;PushManager.activate(this,api);updateFreshness();if(!PushManager.permitted(this))message.setText(PushManager.report());return;}if(code==10){awaitingLocationPermission=false;if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED||checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED)startLocation();else {stopLocation();message.setText("Puedes elegir el punto en el mapa o escribir la dirección.");}}}
     @SuppressWarnings("deprecation")
     @android.annotation.SuppressLint("MissingPermission")
     private void startLocation(){

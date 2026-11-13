@@ -17,7 +17,7 @@ final class PushManager {
     private static final String CHANNEL = "client_service_events_v1";
     private static final String TAG = "fletya_client_events";
     private static final ExecutorService worker = Executors.newSingleThreadExecutor();
-    private static volatile String report = "Avisos pendientes de activar";
+    private static volatile String report = "Conectando avisos…";
     private static boolean pending;
     private static volatile long generation;
     private static long lastSync;
@@ -28,6 +28,15 @@ final class PushManager {
         return (channel == null || channel.getImportance() != NotificationManager.IMPORTANCE_NONE)
             && (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
             && context.getSystemService(NotificationManager.class).areNotificationsEnabled();
+    }
+    // Android owns the grant. Remember only whether we already showed the first-use prompt.
+    static boolean shouldRequestOnFirstUse(Context context) {
+        return BuildConfig.PUSH_ENABLED && Build.VERSION.SDK_INT >= 33
+            && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            && !prefs(context).getBoolean("notification_permission_requested", false);
+    }
+    static void markPermissionRequested(Context context) {
+        prefs(context).edit().putBoolean("notification_permission_requested", true).apply();
     }
     static synchronized void activate(Context context, ClientApi api) {
         if (!BuildConfig.PUSH_ENABLED || !api.signedIn()) return;
@@ -62,7 +71,14 @@ final class PushManager {
         report = "Activando avisos…";
         FirebaseMessaging.getInstance().setAutoInitEnabled(true);
         FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
-            if (!task.isSuccessful()) { synchronized (PushManager.class) { pending = false; report = "No se pudieron activar los avisos. Revisa la conexión."; } return; }
+            if (!task.isSuccessful()) {
+                synchronized (PushManager.class) {
+                    pending = false;
+                    if (currentGeneration != generation) syncIfActive(context, api);
+                    else report = "Avisos sin confirmar. Reintentando automáticamente.";
+                }
+                return;
+            }
             worker.execute(() -> {
                 try {
                     if (!user.equals(api.userId()) || !nonce.equals(prefs.getString("nonce", ""))) return;
@@ -70,7 +86,9 @@ final class PushManager {
                     if (currentGeneration == generation && user.equals(api.userId()) && nonce.equals(prefs.getString("nonce", ""))) {
                         lastSync = SystemClock.elapsedRealtime(); report = "Teléfono registrado para avisos de tus servicios";
                     }
-                } catch (Exception error) { report = "Avisos sin confirmar. Toca Activar avisos para reintentar."; }
+                } catch (Exception error) {
+                    if (currentGeneration == generation) report = "Avisos sin confirmar. Reintentando automáticamente.";
+                }
                 finally { synchronized (PushManager.class) {
                     pending = false;
                     if (currentGeneration != generation) syncIfActive(context, api);
@@ -84,7 +102,7 @@ final class PushManager {
         String[] registration = {prefs.getString("installation", ""), prefs.getString("nonce", "")};
         prefs.edit().remove("user").remove("nonce").remove("seen").commit();
         lastSync = 0; generation++;
-        report = "Avisos desactivados";
+        report = "Conectando avisos…";
         if (BuildConfig.PUSH_ENABLED) FirebaseMessaging.getInstance().setAutoInitEnabled(false);
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         for (android.service.notification.StatusBarNotification notification : manager.getActiveNotifications()) {

@@ -28,7 +28,7 @@ public final class MainActivity extends Activity {
     private TextView message;
     private ScrollView currentScroll;
     private String renderedScreen = "";
-    private boolean visible, busy, permissionExplained;
+    private boolean visible, busy, permissionExplained, requestingNotices;
     private long revision;
     private String screen = "login";
     private JSONObject active;
@@ -186,7 +186,7 @@ public final class MainActivity extends Activity {
     }
     private record Panel(JSONObject profile, JSONArray active, JSONArray offers) {}
     private void refresh() {
-        if (busy || !visible || !api.signedIn()) return;
+        if (busy || !visible || requestingNotices || !api.signedIn()) return;
         if ("history".equals(screen)) { history(); return; }
         if ("profile".equals(screen)) return;
         task(() -> {
@@ -203,6 +203,9 @@ public final class MainActivity extends Activity {
                 LinearLayout pending=card("pending".equals(panel.profile().optString("driver_status"))?"Cuenta pendiente de aprobación":"Cuenta no autorizada");
                 text(pending,"Completa tu nombre, teléfono, vehículo y placas en Mi perfil. Administración debe revisar tu cuenta antes de que puedas recibir o aceptar servicios.",16,false);
                 button(pending,"Completar mi perfil",this::profile);button(root,"Consultar aprobación",this::refresh);message.setText("");return;
+            }
+            if (panel.active().length() == 0 && PushManager.shouldRequestOnFirstUse(this)) {
+                requestNoticePermission();
             }
             active = panel.active().length() == 1 ? panel.active().getJSONObject(0) : null;
             if (panel.active().length() > 1) {
@@ -222,7 +225,11 @@ public final class MainActivity extends Activity {
                 button(box, picked ? "Completar servicio" : "Carga recogida", () -> confirmTransition(job, picked ? "completed" : "picked_up"));
                 if (!picked) button(box, "Liberar antes de recoger", () -> release(job));
                 text(box, TrackingService.report(), 14, false);
-                button(box, "Revisar permisos y activar ubicación", () -> requestTracking(null, true));
+                if (!trackingPermissionsGranted()) {
+                    button(box, "Revisar permisos y activar ubicación", () -> requestTracking(null, true));
+                } else if (!TrackingService.runningFor(job.optString("id"))) {
+                    button(box, "Reintentar seguimiento", () -> requestTracking(null, true));
+                }
                 requestTracking(null, false);
                 LinearLayout mapBox = card("Ruta de recogida a entrega");
                 text(mapBox, "Referencia del servicio. Usa Navegar para recibir indicaciones desde tu ubicación.", 13, false);
@@ -272,8 +279,10 @@ public final class MainActivity extends Activity {
                 case 4 -> new AlertDialog.Builder(this).setTitle("Avisos de solicitudes")
                     .setMessage(PushManager.report()).setNegativeButton("Volver", null)
                     .setPositiveButton("Activar avisos", (d, w) -> {
-                        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18);
+                        if (PushManager.shouldRequestOnFirstUse(this)
+                            || (Build.VERSION.SDK_INT >= 33 && shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))) {
+                            requestNoticePermission();
+                        }
                         else if (!PushManager.permitted(this)) open("package:" + getPackageName(), android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                         else { PushManager.tokenChanged(this, api); message.setText(PushManager.report()); }
                     }).show();
@@ -298,32 +307,56 @@ public final class MainActivity extends Activity {
     private String vehicleLabel(String value) {
         return switch (value) { case "pickup" -> "Pickup / Estaquita"; case "camioneta" -> "Camioneta"; case "camion" -> "Camión"; default -> "Sin registrar"; };
     }
+    private void requestNoticePermission() {
+        PushManager.markPermissionRequested(this);
+        requestingNotices = true;
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18);
+    }
+    private boolean preciseLocationGranted() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+    private boolean noticePermissionGranted() {
+        return Build.VERSION.SDK_INT < 33
+            || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+    }
+    private boolean trackingPermissionsGranted() {
+        return preciseLocationGranted() && noticePermissionGranted();
+    }
     private void requestTracking(String acceptingId, boolean explicit) {
         if (!visible) return;
         if (acceptingId == null && active == null) return;
         if (acceptingId == null && TrackingService.runningFor(active.optString("id"))) return;
-        boolean fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        boolean notifications = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        if (fine && notifications) { afterPermissions(acceptingId); return; }
+        if (trackingPermissionsGranted()) { afterPermissions(acceptingId); return; }
         if (!explicit && permissionExplained) return;
         permissionExplained = true;
         new AlertDialog.Builder(this).setTitle("Ubicación durante tu servicio")
-            .setMessage("FLETYA compartirá tu ubicación con el cliente del servicio activo, incluso mientras usas Google Maps o apagas la pantalla. Verás un aviso de seguimiento. Se detendrá al completar, liberar el servicio o cerrar sesión. Permite ubicación precisa y notificaciones para esta prueba.")
+            .setMessage("FLETYA compartirá tu ubicación con el cliente del servicio activo, incluso mientras usas Google Maps o apagas la pantalla. Verás un aviso de seguimiento. Se detendrá al completar, liberar el servicio o cerrar sesión. Se te pedirán los permisos pendientes.")
             .setPositiveButton("Continuar", (dialog, which) -> {
                 permissionAcceptId = acceptingId;
-                if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS}, 17);
-                else requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 17);
+                var missing = new java.util.ArrayList<String>();
+                if (!preciseLocationGranted()) {
+                    missing.add(Manifest.permission.ACCESS_FINE_LOCATION);
+                    missing.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+                }
+                if (!noticePermissionGranted()) {
+                    PushManager.markPermissionRequested(this);
+                    missing.add(Manifest.permission.POST_NOTIFICATIONS);
+                }
+                if (missing.isEmpty()) afterPermissions(acceptingId);
+                else requestPermissions(missing.toArray(new String[0]), 17);
             }).setNegativeButton("Ahora no", null).show();
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == 18) {
+            requestingNotices = false;
+            if (api.signedIn()) { PushManager.activate(this, api); refresh(); }
+            return;
+        }
         if (!api.signedIn()) return;
-        if (requestCode == 18) { PushManager.activate(this, api); refresh(); return; }
         if (requestCode != 17) return;
         String acceptingId = permissionAcceptId; permissionAcceptId = null;
-        boolean fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        boolean notifications = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        if (fine && notifications) afterPermissions(acceptingId);
+        if (trackingPermissionsGranted()) afterPermissions(acceptingId);
         else {
             message.setText("Se necesita ubicación precisa y notificaciones para activar el seguimiento.");
             new AlertDialog.Builder(this).setMessage("Puedes habilitar los permisos desde los ajustes de esta app.")
