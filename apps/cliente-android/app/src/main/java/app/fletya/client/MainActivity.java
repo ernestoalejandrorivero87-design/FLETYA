@@ -160,7 +160,7 @@ public final class MainActivity extends Activity {
         watch(originField,true);watch(destField,false);
         spinner(intro,"Vehículo",new String[]{"Pickup / Estaquita","Camioneta","Camión"},vehicleChoice,0);
         spinner(intro,"Ayudantes",new String[]{"Sin ayudante","1 ayudante","2 ayudantes"},helperChoice,1);
-        spinner(intro,"Servicio",BuildConfig.TEST_ROUTE_PRICING ? TEST_SERVICES : ClientRules.SERVICES,serviceChoice,2);
+        spinner(intro,"Servicio",availableServices(),serviceChoice,2);
         button(intro,"Ver precio y ruta",this::calculate);
         quoteArea=new LinearLayout(this);quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();
     }
@@ -170,8 +170,11 @@ public final class MainActivity extends Activity {
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int position,long id){int old=kind==0?vehicleChoice:kind==1?helperChoice:serviceChoice;if(old==position)return;if(kind==0)vehicleChoice=position;else if(kind==1)helperChoice=position;else serviceChoice=position;invalidateQuote();}});
     }
     private void invalidateQuote(){draftRevision++;quote=null;testQuote=null;requestId="";clearPreview();if(quoteArea!=null){quoteArea.removeAllViews();text(quoteArea,"Calcula el precio después de elegir tu ruta.",14,false);}}
+    private String[] availableServices() {
+        return "PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? TEST_SERVICES : ClientRules.SERVICES;
+    }
     private void calculate(){
-        String from=originDraft,to=destDraft,vehicle=ClientRules.VEHICLES[vehicleChoice],service=(BuildConfig.TEST_ROUTE_PRICING ? TEST_SERVICES : ClientRules.SERVICES)[serviceChoice];int helpers=helperChoice;long draft=draftRevision;
+        String from=originDraft,to=destDraft,vehicle=ClientRules.VEHICLES[vehicleChoice],service=availableServices()[serviceChoice];int helpers=helperChoice;long draft=draftRevision;
         task(()->BuildConfig.TEST_ROUTE_PRICING ? api.quoteForTest(from,to,vehicle,helpers,service) : new ClientApi.TestQuote(api.quote(from,to,vehicle,helpers,service), null),value->{if(draft!=draftRevision){message.setText("La ruta cambió. Calcula de nuevo el precio.");return;}testQuote=value;quote=value.quote();requestId=UUID.randomUUID().toString();showQuote();message.setText("Revisa el precio y confirma cuando estés listo.");});
     }
     private void showQuote(){
