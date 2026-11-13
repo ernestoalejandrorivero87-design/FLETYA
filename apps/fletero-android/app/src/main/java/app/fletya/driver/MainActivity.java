@@ -28,7 +28,7 @@ public final class MainActivity extends Activity {
     private TextView message;
     private ScrollView currentScroll;
     private String renderedScreen = "";
-    private boolean visible, busy, permissionExplained, requestingNotices;
+    private boolean visible, busy, requestingNotices;
     private long revision;
     private String screen = "login";
     private JSONObject active;
@@ -177,7 +177,7 @@ public final class MainActivity extends Activity {
             String secret = password.getText().toString();
             if (address.trim().isEmpty() || secret.trim().isEmpty()) { message.setText("Escribe tu correo y contraseña."); return; }
             task(() -> { api.login(address, secret); return true; }, result -> {
-                password.setText(""); permissionExplained = false; screen = "home"; refresh();
+                password.setText(""); screen = "home"; refresh();
             });
         });
         button(box,"Crear cuenta de fletero",this::registrationScreen);
@@ -327,8 +327,7 @@ public final class MainActivity extends Activity {
         if (acceptingId == null && active == null) return;
         if (acceptingId == null && TrackingService.runningFor(active.optString("id"))) return;
         if (trackingPermissionsGranted()) { afterPermissions(acceptingId); return; }
-        if (!explicit && permissionExplained) return;
-        permissionExplained = true;
+        if (!explicit) return;
         new AlertDialog.Builder(this).setTitle("Ubicación durante tu servicio")
             .setMessage("FLETYA compartirá tu ubicación con el cliente del servicio activo, incluso mientras usas Google Maps o apagas la pantalla. Verás un aviso de seguimiento. Se detendrá al completar, liberar el servicio o cerrar sesión. Se te pedirán los permisos pendientes.")
             .setPositiveButton("Continuar", (dialog, which) -> {
@@ -461,7 +460,7 @@ public final class MainActivity extends Activity {
                 task(() -> {
                     try { api.unregisterPush(registration[0], registration[1]); } catch (Exception ignored) { /* Local nonce already invalid. */ }
                     api.logout(); return true;
-                }, result -> { revision++; active = null; permissionExplained = false; loginScreen(); });
+                }, result -> { revision++; active = null; loginScreen(); });
             }).setNegativeButton("Cancelar", null).show();
     }
 }
