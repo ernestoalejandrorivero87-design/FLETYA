@@ -2279,14 +2279,14 @@ async function markJobPaid(jobId) {
     }
     // Read the selected service again before showing the amount to confirm.
     const { data: job, error: jobError } = await supabaseClient.from('jobs')
-      .select('id, origin, destination, price, driver_id, status, driver_paid')
+      .select('id, origin, destination, price, driver_id, status, driver_paid, payment_method')
       .eq('id', jobId).maybeSingle();
     if (!stillCurrent()) return;
     if (jobError || !job) {
       toast('No se pudo comprobar el servicio. No se registró el pago.');
       return;
     }
-    if (job.status !== 'completed' || job.driver_paid !== false || !job.driver_id) {
+    if (job.payment_method === 'cash' || job.status !== 'completed' || job.driver_paid !== false || !job.driver_id) {
       toast(job.driver_paid === true ? 'Este servicio ya tiene el pago registrado.'
         : 'Solo se puede registrar el pago de un servicio completado y pendiente.');
       return;
@@ -2471,7 +2471,7 @@ const filteredServices = services.filter(job => {
     const net = netCents / 100;
 
     const pendingJobs = driverJobs.filter(
-      job => job.driver_paid !== true
+      job => job.payment_method !== 'cash' && job.driver_paid !== true
     );
     const pendingCents = pendingJobs.reduce(
       (sum, job) => sum + jobNetCents(job),
@@ -2486,7 +2486,10 @@ const filteredServices = services.filter(job => {
   commission,
   net,
   pendingJobs: pendingJobs.length,
-  pendingTotal
+  pendingTotal,
+  cashUncollected: driverJobs.filter(job => job.payment_method === 'cash' && !job.cash_collected_at).length,
+  cashPending: driverJobs.filter(job => job.payment_method === 'cash' && job.cash_collected_at && !job.cash_commission_settled_at)
+    .reduce((sum, job) => sum + jobCommissionCents(job), 0) / 100
 };
   });
  const accountPage=localPage('adminAccounts',driverAccounts);
@@ -2505,7 +2508,7 @@ const filteredServices = services.filter(job => {
             <th>Generado</th>
             <th>Comisión</th>
             <th>Neto</th>
-            <th>Pendiente</th>
+            <th>Por pagar al fletero</th><th>Comisión en efectivo por recibir</th>
             <th>Acción</th>
           </tr>
 
@@ -2516,11 +2519,13 @@ const filteredServices = services.filter(job => {
               <td>$${money2(driver.total)}</td>
               <td>$${money2(driver.commission)}</td>
               <td>$${money2(driver.net)}</td>
-              <td>$${money2(driver.pendingTotal)}</td>
+              <td>$${money2(driver.pendingTotal)}</td><td>$${money2(driver.cashPending)}</td>
               <td>
-  ${driver.pendingTotal > 0
-  ? `<span>Abre «Ver» en cada servicio para registrar su pago.</span>`
-  : `<span>✅ Pagado</span>`
+  ${driver.cashUncollected > 0
+  ? `<span>Cobros en efectivo por confirmar: ${driver.cashUncollected}</span>`
+  : driver.pendingTotal > 0 || driver.cashPending > 0
+    ? `<span>Abre «Ver» en cada servicio para registrar el pago.</span>`
+    : `<span>Sin pagos pendientes</span>`
   }
 </td>
             </tr>
@@ -2728,6 +2733,53 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
       `
       : '<p class="muted">Todavía no hay servicios.</p>';
                     }
+async function recordCashPayment(jobId, event) {
+  if (activeSessionRole !== 'admin' || logoutPending || paymentJobsInFlight.has(jobId)) return;
+  const collecting = event === 'collected';
+  const prompt = collecting ? '¿Confirmas que el cliente ya pagó en efectivo al fletero?'
+    : '¿Confirmas que FLETYA ya recibió la comisión de este flete?';
+  if (!window.confirm(prompt)) return;
+
+  paymentJobsInFlight.add(jobId);
+  const revision = sessionRevision;
+  try {
+    const { data, error } = await supabaseClient.rpc('record_cash_payment', { p_job: jobId, p_event: event });
+    if (revision !== sessionRevision || logoutPending) return;
+    if (error || data?.id !== jobId) {
+      toast('No se pudo confirmar el registro. Abre el servicio para consultar su estado.');
+      return;
+    }
+    toast(collecting ? 'Cobro en efectivo registrado.' : 'Comisión recibida registrada.');
+    await Promise.all([renderAdmin(), currentJobDetailsId === jobId ? viewJob(jobId) : null]);
+  } catch {
+    if (revision === sessionRevision && !logoutPending) toast('Revisa la conexión y vuelve a consultar el servicio.');
+  } finally {
+    paymentJobsInFlight.delete(jobId);
+  }
+}
+
+function renderCashPayment(box, job, payment) {
+  for (const label of [
+    'Método de pago: Efectivo al entregar',
+    'Cobro al cliente: ' + (job.cash_collected_at ? 'Registrado' : job.status === 'cancelled' ? 'No corresponde' : 'Pendiente'),
+    'Comisión FLETYA: $' + money2(payment.commission) + ' MXN · ' +
+      (job.cash_commission_settled_at ? 'Recibida' : job.status === 'cancelled' ? 'No corresponde' : 'Pendiente')
+  ]) {
+    const row = document.createElement('p');
+    row.textContent = label;
+    box.appendChild(row);
+  }
+  if (job.status !== 'completed' || !job.driver_id || job.cash_commission_settled_at) return;
+
+  const collected = Boolean(job.cash_collected_at);
+  const button = document.createElement('button');
+  button.className = 'btn';
+  button.type = 'button';
+  button.textContent = collected ? 'Registrar comisión recibida' : 'Registrar cobro en efectivo';
+  button.onclick = () => recordCashPayment(job.id, collected ? 'commission_settled' : 'collected');
+  box.appendChild(button);
+}
+
   async function viewJob(jobId){
   const revision = sessionRevision;
   const detailsRevision = ++jobDetailsRevision;
@@ -2774,6 +2826,9 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
 const payment = driverPaymentFor(job);
 const paymentBox = document.createElement('div');
 paymentBox.className = 'card';
+if (job.payment_method === 'cash') {
+  renderCashPayment(paymentBox, job, payment);
+} else {
 const paymentStatus = document.createElement('p');
 paymentStatus.textContent = job.status === 'cancelled' ? 'Pago al fletero: No corresponde (servicio cancelado)'
   : 'Pago al fletero: ' + (job.driver_paid === true ? 'Registrado' : 'Pendiente');
@@ -2794,6 +2849,7 @@ if (job.status === 'completed' && job.driver_paid === false && job.driver_id) {
   button.textContent = 'Registrar pago de este servicio';
   button.onclick = () => markJobPaid(job.id);
   paymentBox.appendChild(button);
+}
 }
 }
 document.getElementById('jobModalContent').appendChild(paymentBox);
