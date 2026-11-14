@@ -17,6 +17,20 @@ final class RouteMapData {
         if (points.length() < 2) throw new IllegalArgumentException("Ruta incompleta");
         return points;
     }
+    static JSONArray fromLongitudeFirst(JSONArray source) throws Exception {
+        if (source.length() < 2 || source.length() > 50_000) throw new IllegalArgumentException("Ruta inválida");
+        JSONArray points = new JSONArray();
+        for (int index = 0; index < source.length(); index++) {
+            JSONArray pair = source.getJSONArray(index);
+            double lng = pair.getDouble(0), lat = pair.getDouble(1);
+            if (!Double.isFinite(lat) || !Double.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+                throw new IllegalArgumentException("Coordenadas inválidas");
+            }
+            points.put(new JSONArray().put(lat).put(lng));
+        }
+        return points;
+    }
+
     private static long component(String value, int[] cursor) {
         long result = 0;
         for (int shift = 0; shift <= 30; shift += 5) {

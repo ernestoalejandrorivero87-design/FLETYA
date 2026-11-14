@@ -72,9 +72,11 @@ final class ClientMapView extends WebView {
     }
     void route(String polyline) throws Exception {
         if (disposed || polyline.equals(currentPolyline)) return;
-        String points=RouteMapData.decode(polyline).toString();
-        page("const p="+points+";const route=L.polyline(p,{color:'#087f88',weight:5}).addTo(map);map.fitBounds(route.getBounds(),{padding:[24,24]});L.circleMarker(p[0],{color:'#087f88',radius:7,fillOpacity:1}).addTo(map).bindTooltip('Recogida');L.circleMarker(p[p.length-1],{color:'#c85229',radius:7,fillOpacity:1}).addTo(map).bindTooltip('Entrega');");
+        route(RouteMapData.decode(polyline));
         currentPolyline=polyline;
+    }
+    void route(JSONArray points) throws Exception {
+        page("const p="+points+";const route=L.polyline(p,{color:'#087f88',weight:5}).addTo(map);map.fitBounds(route.getBounds(),{padding:[24,24]});L.circleMarker(p[0],{color:'#087f88',radius:7,fillOpacity:1}).addTo(map).bindTooltip('Recogida');L.circleMarker(p[p.length-1],{color:'#c85229',radius:7,fillOpacity:1}).addTo(map).bindTooltip('Entrega');");
     }
     void updateDriver(JSONObject value) {
         fix=value;

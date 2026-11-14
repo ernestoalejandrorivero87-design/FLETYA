@@ -5,8 +5,12 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { stripTypeScriptTypes } = require('node:module');
 
-const source = stripTypeScriptTypes(fs.readFileSync(path.join(__dirname,
-  '../../supabase/functions/fletya-routes/index.ts'), 'utf8'));
+const routeDirectory = path.join(__dirname, '../../supabase/functions/fletya-routes');
+const source = ['route-geometry.ts', 'pilot-endpoints.ts', 'index.ts']
+  .map(file => fs.readFileSync(path.join(routeDirectory, file), 'utf8')
+    .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, ''))
+  .map(code => stripTypeScriptTypes(code))
+  .join('\n');
 function runtime() {
   let handler;
   const calls = [];
