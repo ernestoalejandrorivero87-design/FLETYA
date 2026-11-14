@@ -204,6 +204,28 @@ public final class ClientApi {
             total, route.getString("route_polyline"), route.optString("duration_text"), System.nanoTime()), routeId);
     }
 
+    public synchronized JSONObject sandboxPayment(TestQuote selected, String id, String method) throws Exception {
+        return sandboxPayment(selected == null ? "status" : "start", selected, id, method);
+    }
+
+    public synchronized JSONObject cancelSandboxPayment() throws Exception {
+        return sandboxPayment("cancel", null, null, null);
+    }
+
+    private JSONObject sandboxPayment(String action, TestQuote selected, String id, String method) throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+            throw new Failure(403, "Los pagos de prueba solo están disponibles en FLETYA Pruebas.");
+        }
+        JSONObject body = new JSONObject().put("action", action);
+        if (selected != null) {
+            Quote quote = selected.quote();
+            body.put("id", id).put("quote", selected.routeId()).put("method", method)
+                .put("amount", quote.price()).put("vehicle", quote.vehicle()).put("helpers", quote.helpers())
+                .put("service", quote.service());
+        }
+        return new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body());
+    }
+
     public synchronized JSONObject createForTest(TestQuote selected, String requestId) throws Exception {
         return confirmRouteQuote(selected, requestId, "confirm_test_route_quote");
     }
