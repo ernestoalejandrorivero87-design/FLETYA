@@ -8,7 +8,7 @@ const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 const application = scripts.find(script => script.includes('const state='));
 
-function runtime(responses = []) {
+function runtime(responses = [], pathname = "/") {
   const intervals = new Map();
   const clearedWatches = [];
   const queries = [];
@@ -73,7 +73,7 @@ function runtime(responses = []) {
     };
   }
   const context = vm.createContext({
-    document, console: { error() {}, warn() {}, log() {} }, supabaseClient: api,
+    document, window: { location: { pathname } }, console: { error() {}, warn() {}, log() {} }, supabaseClient: api,
     navigator: { geolocation: { clearWatch(id) { clearedWatches.push(id); } } },
     localStorage: { getItem() { return null; } },
     L: { map() { return map; }, marker, polyline() { return { addTo() {return this;}, getBounds() {return [];} }; }, tileLayer() { return { addTo() {} }; } },
@@ -83,7 +83,7 @@ function runtime(responses = []) {
   });
   vm.runInContext(application, context);
   const authScript = scripts.find(script => script.includes('async function logoutClient()'));
-  vm.runInContext(authScript.slice(authScript.indexOf('function setClientSessionIdentity')).replace("showAccess('client');\nrestoreRoleSession();", ''), context);
+  vm.runInContext(authScript.slice(authScript.indexOf('function setClientSessionIdentity')).replace(/if \(adminPortal\) \{\n  document.title[\s\S]*?\nrestoreRoleSession\(\);/, ''), context);
   vm.runInContext('toast = recordMessage', context);
   return { context, intervals, clearedWatches, queries, messages, document, api,
     run: code => vm.runInContext(code, context), get signOuts() { return signOuts; } };
@@ -1061,4 +1061,30 @@ test('password recovery requires matching passwords and signs out only the web r
 });
 test('pending driver cannot render or poll available services through the web panel',async()=>{
  const r=runtime([{data:{role:'driver',full_name:'Pending',driver_status:'pending'}}]);await r.run('renderDriver()');assert.equal(r.queries.length,1);assert.match(r.document.getElementById('jobCard').textContent,/pendiente de aprobación/);
+});
+
+test('admin URL rejects client and driver sessions before loading private data', async () => {
+  for (const role of ['client', 'driver']) {
+    const r = runtime([{ data: { role } }], '/admin/');
+    await r.run('restoreRoleSession()');
+    assert.equal(r.signOuts, 1);
+    assert.deepEqual(r.queries.map(query => query.table), ['profiles']);
+    assert.equal(r.run('activeSessionRole'), null);
+    assert.equal(r.document.getElementById('admin').classList.contains('hidden'), true);
+    assert.equal(r.document.getElementById('authAdmin').classList.contains('hidden'), false);
+    assert.equal(r.document.getElementById('authClient').classList.contains('hidden'), true);
+    await r.run("navigateToRole('driver')");
+    assert.equal(r.queries.length, 1);
+  }
+});
+
+test('admin URL restores an admin session and returns to admin login at signout', async () => {
+  const r = runtime([{ data: { role: 'admin', full_name: 'Ernesto' } }], '/admin');
+  r.run('adminRenderCount=0; renderAdmin=async()=>{adminRenderCount++};');
+  await r.run('restoreRoleSession()');
+  assert.equal(r.run('adminRenderCount'), 1);
+  assert.equal(r.document.getElementById('admin').classList.contains('hidden'), false);
+  r.run('clearSignedOutView()');
+  assert.equal(r.document.getElementById('admin').classList.contains('hidden'), true);
+  assert.equal(r.document.getElementById('authAdmin').classList.contains('hidden'), false);
 });

@@ -77,7 +77,6 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
   <nav aria-label="Tipo de cuenta">
     <button id="nav-client" type="button" onclick="navigateToRole('client')">Cliente</button>
     <button id="nav-driver" type="button" onclick="navigateToRole('driver')">Fletero</button>
-    <button id="nav-admin" type="button" onclick="navigateToRole('admin')">Admin</button>
   </nav>
 </header>
 
@@ -89,7 +88,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
     <p id="accessDescription">Entra como cliente para solicitar y seguir tu flete.</p>
   </div>
   <div class="access-card card">
-    <p class="muted">Elige tu acceso en los botones de arriba.</p>
+    <p id="accessHint" class="muted">Elige tu acceso en los botones de arriba.</p>
     <form id="authClient" onsubmit="event.preventDefault(); loginClient()">
       <h2>Acceso de cliente</h2>
       <label for="authEmail">Correo electrónico</label>
@@ -390,7 +389,9 @@ const state={jobs:[],active:null,accepted:false,status:'Pendiente'};
 let sessionRevision = 0;
 let logoutPending = false;
 let activeSessionRole = null;
-let selectedAccessRole = 'client';
+const adminPortal = typeof window !== 'undefined' && /^\/admin\/?$/.test(window.location.pathname);
+const defaultAccessRole = adminPortal ? 'admin' : 'client';
+let selectedAccessRole = defaultAccessRole;
 const roleTitles = { client: 'Cliente', driver: 'Fletero', admin: 'Administrador' };
 const rate={pickup:35,camioneta:45,camion:65};
 const panelPageSizes = {clientHistory:5,driverHistory:5,driverReleaseHistory:5,notifications:3,requests:5,adminServices:10,adminUsers:10,adminAccounts:10};
@@ -446,12 +447,13 @@ function quote(){
 function updateRoleNavigation(role) {
   for (const key of ['client', 'driver', 'admin']) {
     const button = document.getElementById('nav-' + key);
+    if (!button) continue;
     if (key === role) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
 }
-function showAccess(role = 'client') {
-  selectedAccessRole = Object.hasOwn(roleTitles, role) ? role : 'client';
+function showAccess(role = defaultAccessRole) {
+  selectedAccessRole = adminPortal ? 'admin' : Object.hasOwn(roleTitles, role) ? role : 'client';
   stopFletyaGps();
   document.getElementById('access').classList.remove('hidden');
   document.getElementById('sessionBar').classList.add('hidden');
@@ -470,6 +472,7 @@ function showAccess(role = 'client') {
   updateRoleNavigation(selectedAccessRole);
 }
 function show(id){
+ if (adminPortal && id !== 'admin') { showAccess(); return; }
  if(id !== 'driver' && typeof stopFletyaGps === 'function') stopFletyaGps();
  document.getElementById('access').classList.add('hidden');
  document.getElementById('sessionBar').classList.toggle('hidden', !activeSessionRole);
@@ -481,7 +484,7 @@ function show(id){
 }
 async function navigateToRole(target) {
   if(recoveryPending){showPasswordRecovery();return;}
-  if (!Object.hasOwn(roleTitles, target) || logoutPending) return;
+  if ((adminPortal && target !== 'admin') || !Object.hasOwn(roleTitles, target) || logoutPending) return;
   if (!supabaseClient) { toast('No se pudo verificar la sesión'); return; }
   const revision = sessionRevision;
   const { data: { user }, error } = await supabaseClient.auth.getUser();
@@ -1915,7 +1918,9 @@ function clearSignedOutView() {
   document.getElementById('clientStatus').textContent = 'Inicia sesión para ver tu servicio.';
   document.getElementById('clientHistory').textContent = 'Inicia sesión para ver tu historial.';
   document.getElementById('jobCard').textContent = '';
-  document.getElementById('adminTable').textContent = '';
+  for (const id of ['adminTable', 'adminUsersTable', 'driverAccountsTable', 'driverApplications']) {
+    document.getElementById(id).textContent = '';
+  }
   for (const id of ['authPassword', 'driverPassword', 'adminPassword']) {
     document.getElementById(id).value = '';
   }
@@ -1925,7 +1930,7 @@ function clearSignedOutView() {
   activeSessionRole = null;
   document.getElementById('sessionName').textContent = '';
   document.getElementById('sessionRoleLabel').textContent = '';
-  showAccess('client');
+  showAccess();
 }
 
 async function logoutSession() {
@@ -1933,7 +1938,8 @@ async function logoutSession() {
   logoutPending = true;
   sessionRevision++;
   const revision = sessionRevision;
-  document.getElementById('authMessage').textContent = 'Cerrando sesión…';
+  const message = document.getElementById(adminPortal ? 'adminMessage' : 'authMessage');
+  message.textContent = 'Cerrando sesión…';
   toast('Cerrando sesión…');
   try {
     // Local scope clears this device first, even if server revocation fails.
@@ -1942,13 +1948,13 @@ async function logoutSession() {
     if (result?.error && !cleared) throw result.error;
     if (!cleared) clearSignedOutView();
     if (result?.error) {
-      document.getElementById('authMessage').textContent =
+      message.textContent =
         'Sesión cerrada en este dispositivo. No se pudo confirmar el cierre en el servidor.';
     }
     toast('Sesión cerrada');
   } catch (error) {
     console.error('Error cerrando sesión:', error);
-    document.getElementById('authMessage').textContent =
+    message.textContent =
       'No se pudo cerrar sesión. Revisa la conexión y vuelve a pulsar Cerrar sesión.';
     toast('No se pudo cerrar sesión. Inténtalo de nuevo.');
   } finally {
@@ -2409,8 +2415,8 @@ const filteredUsers = adminUsers.filter(user =>
   (user.email || '').toLowerCase().includes(userSearch)
 );
 const filteredServices = services.filter(job => {
-  const clientName = nameById[job.client_id] || 'Sin cliente';
-  const driverName = nameById[job.driver_id] || 'Sin fletero';
+  const clientName = escapeText(nameById[job.client_id] || 'Sin cliente');
+  const driverName = escapeText(nameById[job.driver_id] || 'Sin fletero');
   const service = job.service_type || '';
   const status = job.status || '';
   const id = job.id || '';
@@ -2505,7 +2511,7 @@ const filteredServices = services.filter(job => {
 
           ${accountPage.items.map(driver => `
             <tr>
-              <td>${driver.full_name || 'Sin nombre'}</td>
+              <td>${escapeText(driver.full_name || 'Sin nombre')}</td>
               <td>${driver.jobs}</td>
               <td>$${money2(driver.total)}</td>
               <td>$${money2(driver.commission)}</td>
@@ -2537,14 +2543,14 @@ const filteredServices = services.filter(job => {
 
           ${userPage.items.map(user => `
             <tr>
-              <td>${user.full_name || 'Sin nombre'}</td>
-              <td>${user.email || 'Sin correo'}</td>
-              <td>${user.phone || 'Sin teléfono'}</td>
+              <td>${escapeText(user.full_name || 'Sin nombre')}</td>
+              <td>${escapeText(user.email || 'Sin correo')}</td>
+              <td>${escapeText(user.phone || 'Sin teléfono')}</td>
               <td>${
                 user.role === 'admin' ? '🛡️ Administrador' :
                 user.role === 'driver' ? '🚚 Fletero' :
                 user.role === 'client' ? '👤 Cliente' :
-                user.role || 'Sin rol'
+                escapeText(user.role || 'Sin rol')
               }</td>
               <td>${user.created_at ? new Date(user.created_at).toLocaleDateString('es-MX') : 'Sin fecha'}</td>
             </tr>
@@ -2704,11 +2710,11 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
           ${servicePage.items.map(job => `
             <tr>
               <td>${job.id}</td>
-              <td>${nameById[job.client_id] || 'Sin cliente'}</td>
-              <td>${nameById[job.driver_id] || 'Sin fletero'}</td>
-              <td>${job.origin || 'Sin origen'}</td>
-<td>${job.destination || 'Sin destino'}</td>
-              <td>${job.service_type || 'Sin especificar'}</td>
+              <td>${escapeText(nameById[job.client_id] || 'Sin cliente')}</td>
+              <td>${escapeText(nameById[job.driver_id] || 'Sin fletero')}</td>
+              <td>${escapeText(job.origin || 'Sin origen')}</td>
+<td>${escapeText(job.destination || 'Sin destino')}</td>
+              <td>${escapeText(job.service_type || 'Sin especificar')}</td>
               <td>${money(Number(job.price || 0))}</td>
               <td>${
   jobStatusLabel(job.status)
@@ -2751,14 +2757,14 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
   );
   document.getElementById('jobModalContent').innerHTML = `
   <p><strong>🆔 ID:</strong><br>${job.id}</p>
-  <p><strong>👤 Cliente:</strong> ${clientProfile?.full_name || 'Sin cliente'}</p>
-<p><strong>🚚 Fletero:</strong> ${driverProfile?.full_name || 'Sin fletero'}</p>
-  <p><strong>📍 Origen:</strong> ${job.origin || 'Sin origen'}</p>
-  <p><strong>🏁 Destino:</strong> ${job.destination || 'Sin destino'}</p>
-  <p><strong>📦 Servicio:</strong> ${job.service_type || 'Sin especificar'}</p>
-  <p><strong>📏 Distancia:</strong> ${job.distance_km || 0} km</p>
-  <p><strong>🚚 Vehículo:</strong> ${job.vehicle_type || 'Sin especificar'}</p>
-  <p><strong>👷 Ayudantes:</strong> ${job.helpers || 0}</p>
+  <p><strong>👤 Cliente:</strong> ${escapeText(clientProfile?.full_name || 'Sin cliente')}</p>
+<p><strong>🚚 Fletero:</strong> ${escapeText(driverProfile?.full_name || 'Sin fletero')}</p>
+  <p><strong>📍 Origen:</strong> ${escapeText(job.origin || 'Sin origen')}</p>
+  <p><strong>🏁 Destino:</strong> ${escapeText(job.destination || 'Sin destino')}</p>
+  <p><strong>📦 Servicio:</strong> ${escapeText(job.service_type || 'Sin especificar')}</p>
+  <p><strong>📏 Distancia:</strong> ${escapeText(job.distance_km || 0)} km</p>
+  <p><strong>🚚 Vehículo:</strong> ${escapeText(job.vehicle_type || 'Sin especificar')}</p>
+  <p><strong>👷 Ayudantes:</strong> ${escapeText(job.helpers || 0)}</p>
   <p><strong>💰 Precio:</strong> $${Number(job.price || 0).toLocaleString('es-MX')}</p>
   <p><strong>🔵 Estado:</strong> ${
   jobStatusLabel(job.status)
@@ -2847,13 +2853,14 @@ const SUPABASE_PUBLISHABLE_KEY = IS_FLETYA_PRODUCTION_HOST
   ? 'sb_publishable_55QV-5z5xSpDHvWmtT-XAA_-1XVW-2O'
   : 'sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89';
 
-recoveryPending = /(?:^#|&)type=recovery(?:&|$)/.test(String(window.location?.hash||''));
+recoveryPending = !adminPortal && /(?:^#|&)type=recovery(?:&|$)/.test(String(window.location?.hash||''));
 const supabaseClient =
   window.supabase && window.supabase.createClient
     ? window.supabase.createClient(
         SUPABASE_URL,
         SUPABASE_PUBLISHABLE_KEY,
-        { global: { fetch: (url, options = {}) => {
+        { ...(adminPortal ? { auth: { storageKey: 'fletya-admin-' + new URL(SUPABASE_URL).hostname,
+          detectSessionInUrl: false } } : {}), global: { fetch: (url, options = {}) => {
           // Bound only the best-effort logout request; leave other API calls alone.
           const isLogout = String(url).includes('/auth/v1/logout');
           return fetch(url, isLogout
@@ -2885,6 +2892,12 @@ function setClientSessionIdentity(user, fullName) {
 }
 
 async function activateRoleSession(user, profile) {
+  if (adminPortal && profile.role !== 'admin') {
+    await supabaseClient.auth.signOut({ scope: 'local' });
+    showAccess();
+    document.getElementById('adminMessage').textContent = 'Esta cuenta no es de administrador.';
+    return;
+  }
   activeSessionRole = profile.role;
   updateLocationControls();
   document.getElementById('sessionRoleLabel').textContent = roleTitles[profile.role];
@@ -2921,7 +2934,12 @@ async function restoreRoleSession() {
     toast('No se pudo recuperar la sesión. Revisa la conexión.');
   }
 }
-showAccess('client');
+if (adminPortal) {
+  document.title = 'FLETYA Administración';
+  document.getElementById('appHeader').querySelector('nav').hidden = true;
+  document.getElementById('accessHint').hidden = true;
+}
+showAccess();
 restoreRoleSession();
 
 function showPasswordRecovery(){
@@ -3113,7 +3131,7 @@ async function saveDriverProfile() {
 
 let loginPending = false;
 async function loginForRole(expectedRole) {
-  if (loginPending || logoutPending || activeSessionRole) return;
+  if ((adminPortal && expectedRole !== 'admin') || loginPending || logoutPending || activeSessionRole) return;
   const ids = {
     client: ['authEmail', 'authPassword', 'authMessage'],
     driver: ['driverEmail', 'driverPassword', 'driverMessage'],
