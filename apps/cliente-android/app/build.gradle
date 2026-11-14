@@ -64,8 +64,8 @@ android {
             if (pilotSigning.store) signingConfig signingConfigs.pilotDistribution
             manifestPlaceholders = [fletyaMapsAndroidKey: pilotMapsKey ?: "disabled"]
             buildConfigField 'boolean', 'NATIVE_ROUTE_MAP', (!pilotMapsKey.isEmpty()).toString()
-            versionCode 11
-            versionName '0.3.4'
+            versionCode 12
+            versionName '0.3.5'
             buildConfigField 'boolean', 'TEST_ROUTE_PRICING', 'true'
             buildConfigField 'boolean', 'PUSH_ENABLED', firebaseClient?'true':'false'
             if(firebaseClient){

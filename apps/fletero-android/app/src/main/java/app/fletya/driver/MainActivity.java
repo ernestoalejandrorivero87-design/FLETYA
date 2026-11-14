@@ -300,6 +300,9 @@ public final class MainActivity extends Activity {
         text(box, job.optString("distance_km", "—") + " km · Ayudantes: " + job.optInt("helpers"), 15, false);
         NumberFormat money = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX"));
         text(box, money.format(job.optDouble("price", 0)) + " MXN", 24, true).setTextColor(TEAL);
+        if ("cash".equals(job.optString("payment_method"))) {
+            text(box, "Cobras en efectivo al entregar", 16, true);
+        }
         if (BuildConfig.TEST_ROUTE_PRICING && !job.isNull("test_driver_payout")) {
             text(box, "Recibes " + money.format(job.optDouble("test_driver_payout")) + " MXN", 16, true);
         }

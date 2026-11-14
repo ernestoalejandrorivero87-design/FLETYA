@@ -194,19 +194,25 @@ public final class MainActivity extends Activity {
                 catch (Exception error) { message.setText("No se pudo abrir la ruta."); }
             });
         }
+        if (offersCashPayment()) text(quoteArea, "Pago en efectivo al entregar", 15, true);
         button(quoteArea,"Solicitar FLETYA",this::confirmRequest);
+    }
+    private boolean offersCashPayment() {
+        return BuildConfig.TEST_ROUTE_PRICING && !"PRUEBAS".equals(BuildConfig.ENVIRONMENT);
     }
     private void confirmRequest(){
         if(quote==null)return;var selected=quote;String id=requestId;long draft=draftRevision;
         picking=true;
-        dialog().setTitle("¿Confirmar el flete?").setMessage(selected.origin()+"\n→ "+selected.destination()+"\n\n"+money(selected.price())+"\nSujeto a disponibilidad de fleteros.")
+        boolean cash = offersCashPayment();
+        dialog().setTitle("¿Confirmar el flete?").setMessage(selected.origin()+"\n→ "+selected.destination()+"\n\n"+money(selected.price())+(cash ? "\nPago en efectivo al entregar." : "")+"\nSujeto a disponibilidad de fleteros.")
             .setNegativeButton("Volver",null).setPositiveButton("Confirmar solicitud",(d,w)->{
                 if(quote!=selected||draft!=draftRevision)return;
                 ClientApi.TestQuote selectedTest = testQuote;
-                task(()->BuildConfig.TEST_ROUTE_PRICING ? api.createForTest(selectedTest,id) : api.create(selected,id),job->{resetDraft();active=job;clearPreview();refresh();});
+                task(()->cash ? api.createCashRequest(selectedTest,id) : BuildConfig.TEST_ROUTE_PRICING ? api.createForTest(selectedTest,id) : api.create(selected,id),job->{resetDraft();active=job;clearPreview();refresh();});
             }).setOnDismissListener(d->picking=false).show();
     }
     private void details(LinearLayout box,JSONObject job){
+        if ("cash".equals(job.optString("payment_method"))) text(box, "Pago en efectivo al entregar", 15, true);
         text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
         text(box,job.optString("service_type")+" · "+ClientRules.vehicle(job.optString("vehicle_type")),15,false);
         text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(TEAL);

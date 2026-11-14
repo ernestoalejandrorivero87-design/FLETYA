@@ -205,14 +205,23 @@ public final class ClientApi {
     }
 
     public synchronized JSONObject createForTest(TestQuote selected, String requestId) throws Exception {
+        return confirmRouteQuote(selected, requestId, "confirm_test_route_quote");
+    }
+
+    public synchronized JSONObject createCashRequest(TestQuote selected, String requestId) throws Exception {
+        return confirmRouteQuote(selected, requestId, "confirm_cash_route_quote");
+    }
+
+    private JSONObject confirmRouteQuote(TestQuote selected, String requestId, String function) throws Exception {
         Quote quote = selected.quote();
         JSONObject body = new JSONObject().put("p_quote", selected.routeId()).put("p_request", requestId)
             .put("p_vehicle", quote.vehicle()).put("p_helpers", quote.helpers()).put("p_service", quote.service())
             .put("p_expected_price", quote.price());
-        JSONObject job = new JSONObject(call("POST", "/rest/v1/rpc/confirm_test_route_quote", body, null).body());
+        JSONObject job = new JSONObject(call("POST", "/rest/v1/rpc/" + function, body, null).body());
         if (!ClientRules.owns(job, userId()) || !requestId.equals(job.optString("id"))
             || !selected.routeId().equals(job.optString("route_quote_id"))
-            || quote.price() != job.optDouble("price")) {
+            || quote.price() != job.optDouble("price")
+            || ("confirm_cash_route_quote".equals(function) && !"cash".equals(job.optString("payment_method")))) {
             throw new Failure(409, "No se pudo verificar el pedido. Actualiza el seguimiento.");
         }
         return job;
