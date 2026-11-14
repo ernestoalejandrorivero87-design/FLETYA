@@ -13,7 +13,6 @@ export async function runSandboxPayments(key, request = fetch, report = console.
     async function stripe(path, step, form, allowDecline = false) {
         const headers = {
             Authorization: 'Bearer ' + key,
-            'Stripe-Version': '2026-10-28.endive',
         };
         if (form) headers['Idempotency-Key'] = run + '-' + step;
         const response = await request('https://api.stripe.com/v1' + path, {
@@ -28,7 +27,19 @@ export async function runSandboxPayments(key, request = fetch, report = console.
             return result.error.payment_intent;
         }
         if (!response.ok) {
-            throw new Error(step + ': Stripe respondió HTTP ' + response.status);
+            const error = result?.error ?? {};
+            const requestId = response.headers.get('request-id');
+            const details = [error.type, error.code, error.param, requestId]
+                .filter(value => typeof value === 'string' && /^[a-zA-Z0-9_[\].-]{1,100}$/.test(value)
+                    && !/^(?:sk|rk|pk)_(?:test|live)_/.test(value));
+            const message = typeof error.message === 'string'
+                ? error.message.replaceAll(key, '[clave oculta]')
+                    .replace(/\b(?:sk|rk|pk)_(?:test|live)_[\w.-]+/g, '[clave oculta]')
+                    .replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 300)
+                : '';
+            throw new Error(step + ': Stripe respondió HTTP ' + response.status
+                + (details.length ? ' (' + details.join(', ') + ')' : '')
+                + (message ? ' · ' + message : ''));
         }
         if (result.livemode !== false) throw new Error(step + ': Stripe no confirmó el modo de prueba.');
         return result;
