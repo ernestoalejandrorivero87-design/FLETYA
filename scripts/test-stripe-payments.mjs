@@ -55,13 +55,13 @@ export async function runSandboxPayments(key, request = fetch, report = console.
 
     const payment = { amount: String(amount), currency, confirm: 'true' };
     const card = await stripe('/payment_intents', 'tarjeta-aprobada', {
-        ...payment, 'payment_method_types[]': 'card', payment_method: 'pm_card_visa',
+        ...payment, 'allowed_payment_method_types[]': 'card', return_url: 'https://fletya.vercel.app/', payment_method: 'pm_card_visa',
     });
     verify(card, 'succeeded', amount);
     report('Tarjeta de prueba aprobada · $400.00 MXN');
 
     const declined = await stripe('/payment_intents', 'tarjeta-rechazada', {
-        ...payment, 'payment_method_types[]': 'card', payment_method: 'pm_card_chargeDeclined',
+        ...payment, 'allowed_payment_method_types[]': 'card', return_url: 'https://fletya.vercel.app/', payment_method: 'pm_card_chargeDeclined',
     }, true);
     verify(declined, 'requires_payment_method', 0);
     report('Tarjeta de prueba rechazada · $0.00 MXN cobrados');
@@ -71,7 +71,7 @@ export async function runSandboxPayments(key, request = fetch, report = console.
     const transfer = await stripe('/payment_intents', 'transferencia-pendiente', {
         ...payment,
         customer: customer.id,
-        'payment_method_types[]': 'customer_balance',
+        'allowed_payment_method_types[]': 'customer_balance',
         'payment_method_data[type]': 'customer_balance',
         'payment_method_options[customer_balance][funding_type]': 'bank_transfer',
         'payment_method_options[customer_balance][bank_transfer][type]': 'mx_bank_transfer',
