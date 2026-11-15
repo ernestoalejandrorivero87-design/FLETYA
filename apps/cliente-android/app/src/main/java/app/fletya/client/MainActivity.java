@@ -298,6 +298,7 @@ public final class MainActivity extends Activity {
                 case "requested" -> "Reembolso solicitado · " + money(job.optDouble("price"));
                 case "confirmed" -> "Reembolso confirmado · " + money(job.optDouble("price"));
                 case "review" -> "Reembolso en revisión";
+                case "denied" -> "Reembolso rechazado";
                 default -> "";
             };
             if (!refund.isEmpty()) text(box, refund, 15, true);
