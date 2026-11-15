@@ -51,6 +51,7 @@ begin
   if p_action = 'current' then
     select * into attempt from private.stripe_sandbox_orders
       where client_id = p_client and state in ('pending','review');
+    if not found then return null; end if;
     return to_jsonb(attempt);
   end if;
 
