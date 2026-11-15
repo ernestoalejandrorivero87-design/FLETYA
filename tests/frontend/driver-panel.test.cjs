@@ -454,6 +454,34 @@ test('net plus commission always matches the service total in cents', () => {
   }
 });
 
+test('sandbox admin identifies FLETYA funding only for a completed and fully refunded card service', async () => {
+  const job = {
+    ...paymentJob, price: 621.55, sandbox_payment_method: 'card', sandbox_refund_state: 'confirmed'
+  };
+  for (const [production, patch, covered] of [
+    [false, {}, true],
+    [false, { driver_paid: true }, true],
+    [false, { sandbox_refund_state: 'denied' }, false],
+    [false, { status: 'picked_up' }, false],
+    [true, {}, false]
+  ]) {
+    const service = { ...job, ...patch };
+    const r = runtime([{ data: service }, { data: [] }]);
+    r.context.IS_FLETYA_PRODUCTION_HOST = production;
+    await r.run("viewJob('payment-job')");
+    const [status, amounts] = r.document.getElementById('jobModalContent').children[0].children;
+    assert.equal(status.textContent.includes('Cubre FLETYA'), covered);
+    assert.match(status.textContent, service.driver_paid ? /registrado/i : /pendiente/i);
+    assert.match(amounts.textContent, /528\.32/);
+    assert.equal(amounts.textContent.includes('Reembolso total confirmado'), covered);
+  }
+  const r = paymentRuntime([{ data: { role: 'admin' } }, { data: job }], false);
+  await r.run("markJobPaid('payment-job')");
+  assert.match(r.confirmations[0], /528\.32 MXN/);
+  assert.match(r.confirmations[0], /Cubre FLETYA/);
+  assert.equal(r.queries.length, 2);
+});
+
 
 test('guest role navigation shows exactly one access form and no service panels', async () => {
   const r = runtime();
