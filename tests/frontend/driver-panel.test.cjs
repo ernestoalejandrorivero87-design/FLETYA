@@ -74,6 +74,7 @@ function runtime(responses = []) {
   }
   const context = vm.createContext({
     document, console: { error() {}, warn() {}, log() {} }, supabaseClient: api,
+    IS_FLETYA_PRODUCTION_HOST: false,
     navigator: { geolocation: { clearWatch(id) { clearedWatches.push(id); } } },
     localStorage: { getItem() { return null; } },
     L: { map() { return map; }, marker, polyline() { return { addTo() {return this;}, getBounds() {return [];} }; }, tileLayer() { return { addTo() {} }; } },

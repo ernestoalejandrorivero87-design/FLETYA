@@ -25,7 +25,7 @@ declare
   actor uuid := auth.uid();
   attempt private.stripe_sandbox_orders;
   job public.jobs;
-  state text;
+  next_refund_state text;
   note text := btrim(p_note);
 begin
   if actor is null or not private.is_admin() then raise insufficient_privilege; end if;
@@ -61,14 +61,14 @@ begin
   insert into private.stripe_sandbox_refund_decisions(order_id,reviewer_id,approved,note)
     values(p_id,actor,p_approved,note) on conflict(order_id) do nothing;
   if not found then return null; end if;
-  state := case when p_approved then 'requested' else 'denied' end;
-  update private.stripe_sandbox_orders set refund_state=state where id=p_id;
-  update public.jobs set sandbox_refund_state=state where id=p_id;
+  next_refund_state := case when p_approved then 'requested' else 'denied' end;
+  update private.stripe_sandbox_orders set refund_state=next_refund_state where id=p_id;
+  update public.jobs set sandbox_refund_state=next_refund_state where id=p_id;
   insert into public.notifications(user_id,job_id,title,message,type)
     values(job.client_id,p_id,
       case when p_approved then 'Reembolso aprobado' else 'Reembolso rechazado' end,
       note, case when p_approved then 'client_refund_approved' else 'client_refund_denied' end);
-  return jsonb_build_object('id',p_id,'refund_state',state);
+  return jsonb_build_object('id',p_id,'refund_state',next_refund_state);
 end $$;
 create function public.review_sandbox_refund(p_id uuid default null,p_approved boolean default null,p_note text default null)
 returns jsonb language sql security invoker set search_path='' as $$
