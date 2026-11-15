@@ -257,6 +257,18 @@ public final class ClientApi {
         return route.getJSONArray("points");
     }
 
+    public synchronized JSONObject requestSandboxCardRefund(String id) throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) throw new Failure(403, "Reembolso de prueba no disponible.");
+        java.util.UUID.fromString(id);
+        JSONObject body = new JSONObject().put("action", "refund_card").put("id", id);
+        JSONObject result = new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body())
+            .getJSONObject("job");
+        if (!ClientRules.owns(result, userId()) || !id.equals(result.optString("id"))) {
+            throw new Failure(409, "No se pudo confirmar la devolución. Revisa el historial.");
+        }
+        return result;
+    }
+
     public synchronized JSONObject cancel(String id) throws Exception {
         profile();
         JSONObject job = job(id);

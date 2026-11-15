@@ -294,17 +294,48 @@ public final class MainActivity extends Activity {
                 default -> "Pago confirmado · " + paymentLabel(job.optString("sandbox_payment_method")) + " de prueba";
             };
             text(box, label, 15, true);
+            String refund = switch (job.optString("sandbox_refund_state")) {
+                case "requested" -> "Reembolso solicitado · " + money(job.optDouble("price"));
+                case "confirmed" -> "Reembolso confirmado · " + money(job.optDouble("price"));
+                case "review" -> "Reembolso en revisión";
+                default -> "";
+            };
+            if (!refund.isEmpty()) text(box, refund, 15, true);
         }
         if ("cash".equals(job.optString("payment_method"))) text(box, "Pago en efectivo al entregar", 15, true);
         text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
         text(box,job.optString("service_type")+" · "+ClientRules.vehicle(job.optString("vehicle_type")),15,false);
         text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(TEAL);
     }
+    private void addSandboxRefundButton(LinearLayout box, JSONObject job) {
+        if (!sandboxPayments() || !"paid".equals(job.optString("sandbox_card_state"))
+            || !job.isNull("sandbox_refund_state")) return;
+        String status = job.optString("status");
+        boolean review = "picked_up".equals(status) || "completed".equals(status);
+        if (!review && !"en_route".equals(status) && !"requested".equals(status)) return;
+        String label = review ? "Solicitar revisión de reembolso" : "Cancelar y solicitar reembolso";
+        button(box, label, () -> dialog().setTitle(label)
+            .setMessage(review ? "Administración revisará el caso. El servicio conserva su estado."
+                : "Se cancelará la solicitud y se pedirá la devolución de " + money(job.optDouble("price")) + ".")
+            .setNegativeButton("Volver", null)
+            .setPositiveButton(review ? "Solicitar revisión" : "Confirmar cancelación", (d, w) ->
+                task(() -> api.requestSandboxCardRefund(job.getString("id")), result -> {
+                    if ("cancelled".equals(result.optString("status"))) {
+                        active = null;
+                        clearTrackingMap();
+                    }
+                    historyPage = 0;
+                    history();
+                })).show());
+    }
+
     private void renderActive(ClientApi.Tracking tracking,boolean trackingError){
         screen="home";shell();trackingStatus=null;originField=null;destField=null;quoteArea=null;
         JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);text(box,"accepted".equals(job.optString("status")) ? "Confirmando aceptación" : ClientRules.status(job.optString("status")),19,true);details(box,job);
         if("requested".equals(job.optString("status"))&&!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
-        if("requested".equals(job.optString("status"))&&job.isNull("driver_id"))button(box,"Cancelar solicitud",()->dialog().setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
+        addSandboxRefundButton(box, job);
+        if("requested".equals(job.optString("status"))&&job.isNull("driver_id")
+            && !(sandboxPayments() && "paid".equals(job.optString("sandbox_card_state"))))button(box,"Cancelar solicitud",()->dialog().setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
         if(ClientRules.assigned(job.optString("status"))){
             var driverBox=card("Tu fletero asignado");var driver=tracking.driver();var fix=tracking.fix();
             if(driver!=null){text(driverBox,driver.optString("full_name","Sin nombre"),18,true);text(driverBox,"Vehículo: "+ClientRules.vehicle(driver.optString("vehicle_type")),15,false);text(driverBox,"Placas: "+driver.optString("plates","Sin registrar"),16,true);}else text(driverBox,trackingError?"No se pudo actualizar la identificación del fletero.":"Consultando la identificación del fletero…",15,false);
@@ -375,7 +406,7 @@ public final class MainActivity extends Activity {
             clearTrackingMap();screen="notice";shell();LinearLayout box=card(ClientRules.status(job.optString("status")));details(box,job);button(root,"Historial de servicios",()->{historyPage=0;history();});button(root,"Volver a solicitar",()->{screen="home";refresh();});message.setText("");
         });
     }
-    private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));details(box,job);text(box,job.optString("created_at").split("T")[0],13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
+    private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));details(box,job);addSandboxRefundButton(box,job);text(box,job.optString("created_at").split("T")[0],13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});if(sandboxPayments())button(root,"Actualizar historial",this::history);button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private void profile(){task(api::profile,p->{screen="profile";shell();var box=card("Mi perfil de cliente");var name=field(box,"Nombre completo",p.optString("full_name"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);button(box,"Guardar perfil",()->task(()->{api.saveName(name.getText().toString());return true;},ok->message.setText("Perfil guardado.")));button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(this).setOnDismissListener(d->picking=false);}
     private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();String[] device=PushManager.disableLocally(this);task(()->{try{api.unregisterPush(device[0],device[1]);}catch(Exception ignored){}api.logout();return true;},ok->{revision++;login();});}).show();}

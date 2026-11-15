@@ -23,3 +23,9 @@ El servidor consulta Checkout al regresar a la app o al pulsar **Consultar pago*
 Usa Cliente Pruebas 0.4.6 y Fletero Pruebas 0.6.4. Aplica también `scripts/release/activate-sandbox-card-authorization.sql` antes de desplegar la función. La cotización pagada por tarjeta de prueba primero autoriza el importe en Stripe, luego se publica para los fleteros. Al aceptar, el servidor reclama la solicitud y captura el pago de forma idempotente. Solo una captura confirmada habilita la recogida.
 
 Prueba también una solicitud sin aceptación. En el entorno Pruebas el plazo es de 15 minutos desde la autorización registrada por FLETYA. El proceso programado revisa los vencimientos y libera la autorización en Stripe. La cancelación de una solicitud con tarjeta autorizada antes de la aceptación también libera la autorización. El flujo de SPEI documentado arriba sigue en la modalidad de prueba anterior.
+
+## Cancelación después del cobro de tarjeta
+
+Aplica `scripts/release/activate-sandbox-card-refunds.sql` antes de desplegar la función. Usa Cliente Pruebas 0.4.7 con Fletero Pruebas 0.6.4. Tras aceptar una solicitud de tarjeta y verificar el cobro, toca **Cancelar y solicitar reembolso** en Cliente antes de marcar la recogida. El historial muestra **Reembolso solicitado** y, tras la confirmación de Stripe, **Reembolso confirmado**. Para comprobarlo, actualiza el historial y revisa el pago original en Stripe. Debe mostrar un solo reembolso por el importe completo.
+
+Después de marcar la recogida, **Solicitar revisión de reembolso** registra un caso y avisa a los administradores del proyecto de pruebas. El servicio conserva su estado. El administrador debe resolver ese caso de forma manual.

@@ -2,6 +2,7 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const sandboxProject = "https://ccdtpwvalqznasstnqxj.supabase.co";
 const returnPage = sandboxProject + "/functions/v1/fletya-stripe-sandbox";
 const intentId = /^pi_[A-Za-z0-9]+$/;
+const refundId = /^re_[A-Za-z0-9]+$/;
 const testSession = /^cs_test_[A-Za-z0-9]+$/;
 
 function json(data: unknown, status = 200) {
@@ -53,6 +54,11 @@ Deno.serve(async (request) => {
   const card = (action: string, id: string, actor?: string, intent?: string) =>
     rpc("stripe_sandbox_card", { p_action: action, p_id: id, p_actor: actor, p_intent: intent });
 
+  const refund = (action: string, id: string, actor?: string, status?: string, stripeId?: string) =>
+    rpc("stripe_sandbox_refund", {
+      p_action: action, p_id: id, p_actor: actor, p_status: status, p_refund: stripeId,
+    });
+
   const stripe = async (path: string, form?: Record<string, string>, id?: string) => {
     const headers = new Headers({ Authorization: "Bearer " + stripeKey });
     if (id) headers.set("Idempotency-Key", id);
@@ -66,7 +72,14 @@ Deno.serve(async (request) => {
       throw new Error("stripe_failure");
     }
     const data = await response.json();
-    if (data.livemode !== false) throw new Error("live_object");
+    // Refunds omit livemode. This helper runs only after verifying a test-mode PaymentIntent.
+    if (path.startsWith("/refunds?")) {
+      if (data.object !== "list" || !Array.isArray(data.data) || data.data.some((row: any) => row.object !== "refund" || row.livemode === true)) {
+        throw new Error("invalid_refund_list");
+      }
+    } else if (path === "/refunds" || path.startsWith("/refunds/")) {
+      if (data.object !== "refund" || data.livemode === true) throw new Error("invalid_refund");
+    } else if (data.livemode !== false) throw new Error("live_object");
     return data;
   };
 
@@ -102,13 +115,48 @@ Deno.serve(async (request) => {
     return result;
   };
 
+  const settleRefund = async (record: any) => {
+    const order = record?.order;
+    if (order?.refund_state !== "requested") return record;
+    const id = order.card_intent;
+    const cents = Math.round(Number(order.amount) * 100);
+    const intent = await retrieveIntent(id, cents);
+    if (intent.status !== "succeeded" || intent.amount_received !== cents) throw new Error("refund_payment_mismatch");
+    let entry;
+    if (order.refund_id) {
+      if (!refundId.test(order.refund_id)) throw new Error("invalid_refund_id");
+      entry = await stripe("/refunds/" + order.refund_id);
+    } else {
+      // Reconcile with Stripe before retrying, even after an idempotency key has expired.
+      const list = await stripe("/refunds?payment_intent=" + id + "&limit=100");
+      const relevant = list.data.filter((row: any) =>
+        row.metadata?.fletya_order === order.id || !["failed","canceled"].includes(row.status));
+      if (list.has_more || relevant.length > 1 || (relevant.length === 1 && relevant[0].amount !== cents)) {
+        return await refund("record", order.id, undefined, "review");
+      }
+      entry = relevant[0] ?? await stripe("/refunds", {
+        payment_intent: id, amount: String(cents), reason: "requested_by_customer",
+        "metadata[fletya_order]": order.id,
+      }, "fletya-refund-" + order.id);
+    }
+    if (!refundId.test(entry.id) || entry.payment_intent !== id ||
+        entry.currency !== "mxn" || entry.amount !== cents ||
+        (order.refund_id && order.refund_id !== entry.id)) throw new Error("refund_mismatch");
+    const state = entry.status === "succeeded" ? "confirmed" : entry.status === "pending" ? "requested" : "review";
+    return await refund("record", order.id, undefined, state, entry.id);
+  };
+
   try {
     const body = await request.json().catch(() => null);
     if (body?.action === "sweep") {
       const schedule = request.headers.get("X-Fletya-Schedule");
       if (!schedule || !uuid.test(schedule)) return json({ message: "No autorizado." }, 401);
       const due = await rpc("stripe_sandbox_due", { p_token: schedule });
-      const results = await Promise.allSettled(due.map(async (id: string) => settleCard(await card("sweep", id))));
+      const results = await Promise.allSettled(due.map(async (id: string) => {
+        const record = await card("sweep", id);
+        if (record?.order?.refund_state === "requested") await settleRefund(record);
+        else await settleCard(record);
+      }));
       const failed = results.filter(result => result.status === "rejected").length;
       if (failed) console.error("FLETYA Stripe Sandbox reconcile_failed", failed);
       return json({ processed: results.length - failed, failed });
@@ -119,8 +167,15 @@ Deno.serve(async (request) => {
     });
     if (!auth.ok) return json({ message: "Inicia sesión como cliente." }, 401);
     const user = (await auth.json()).id;
-    if (!uuid.test(user) || !body || !["start", "status", "cancel", "accept_card", "cancel_card"].includes(body.action)) {
+    if (!uuid.test(user) || !body || !["start", "status", "cancel", "accept_card", "cancel_card", "refund_card"].includes(body.action)) {
       return json({ message: "Solicitud de pago inválida." }, 400);
+    }
+    if (body.action === "refund_card") {
+      if (!uuid.test(body.id)) return json({ message: "Solicitud inválida." }, 400);
+      const result = await refund("request", body.id, user);
+      if (!result?.job?.id) return json({ message: "El servicio no está disponible para devolución." }, 409);
+      // The database records cancellation and the scheduler handles Stripe retries.
+      return json({ job: result.job });
     }
     if (body.action === "accept_card" || body.action === "cancel_card") {
       if (!uuid.test(body.id)) return json({ message: "Solicitud inválida." }, 400);
