@@ -8,10 +8,16 @@ function json(data: unknown, status = 200) {
 }
 
 function checkoutUrl(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("https://checkout.stripe.com/c/pay/cs_test_")) {
+  // The URL comes from the authenticated Stripe API for a verified test
+  // session. Stripe owns the URL format and may use a configured domain.
+  if (typeof value !== "string" || !value.startsWith("https://")) {
     throw new Error("invalid_checkout_url");
   }
-  return value;
+  const url = URL.parse(value);
+  if (!url || url.protocol !== "https:" || !url.hostname || url.username || url.password) {
+    throw new Error("invalid_checkout_url");
+  }
+  return url.href;
 }
 
 Deno.serve(async (request) => {
