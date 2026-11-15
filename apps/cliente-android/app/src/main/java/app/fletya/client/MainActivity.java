@@ -215,7 +215,7 @@ public final class MainActivity extends Activity {
         }
         if (offersCashPayment()) text(quoteArea, "Pago en efectivo al entregar", 15, true);
         if (sandboxPayments()) {
-            button(quoteArea, "Pagar con tarjeta de prueba", () -> beginPayment("card"));
+            button(quoteArea, "Autorizar tarjeta de prueba", () -> beginPayment("card"));
             button(quoteArea, "Pagar por SPEI de prueba", () -> beginPayment("spei"));
         } else {
             button(quoteArea,"Solicitar FLETYA",this::confirmRequest);
@@ -231,7 +231,8 @@ public final class MainActivity extends Activity {
         String id = requestId;
         picking = true;
         dialog().setTitle("Confirmar pago de prueba")
-            .setMessage(paymentLabel(method) + " · " + money(selected.quote().price()))
+            .setMessage(paymentLabel(method) + " · " + money(selected.quote().price())
+                + ("card".equals(method) ? "\nEl importe se reserva. Solo se cobra si un fletero acepta." : ""))
             .setNegativeButton("Volver", null)
             .setPositiveButton("Ir a Stripe", (d, w) -> task(() -> api.sandboxPayment(selected, id, method), payment -> {
                 if (!"pending".equals(payment.optString("state"))) {
@@ -286,7 +287,13 @@ public final class MainActivity extends Activity {
     }
     private void details(LinearLayout box,JSONObject job){
         if (sandboxPayments() && !job.isNull("sandbox_payment_method")) {
-            text(box, "Pago confirmado · " + paymentLabel(job.optString("sandbox_payment_method")) + " de prueba", 15, true);
+            String label = switch (job.optString("sandbox_card_state")) {
+                case "held" -> "Tarjeta autorizada · Cobro al confirmar fletero";
+                case "capturing" -> "Confirmando cobro con Stripe";
+                case "released" -> "Reserva de tarjeta liberada";
+                default -> "Pago confirmado · " + paymentLabel(job.optString("sandbox_payment_method")) + " de prueba";
+            };
+            text(box, label, 15, true);
         }
         if ("cash".equals(job.optString("payment_method"))) text(box, "Pago en efectivo al entregar", 15, true);
         text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
@@ -295,7 +302,7 @@ public final class MainActivity extends Activity {
     }
     private void renderActive(ClientApi.Tracking tracking,boolean trackingError){
         screen="home";shell();trackingStatus=null;originField=null;destField=null;quoteArea=null;
-        JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);text(box,ClientRules.status(job.optString("status")),19,true);details(box,job);
+        JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);text(box,"accepted".equals(job.optString("status")) ? "Confirmando aceptación" : ClientRules.status(job.optString("status")),19,true);details(box,job);
         if("requested".equals(job.optString("status"))&&!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
         if("requested".equals(job.optString("status"))&&job.isNull("driver_id"))button(box,"Cancelar solicitud",()->dialog().setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
         if(ClientRules.assigned(job.optString("status"))){

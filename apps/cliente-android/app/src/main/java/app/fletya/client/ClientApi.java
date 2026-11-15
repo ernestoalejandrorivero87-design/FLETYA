@@ -123,7 +123,7 @@ public final class ClientApi {
     }
     public synchronized JSONArray activeJobs() throws Exception {
         token();
-        return get("jobs?select=*&client_id=eq." + eq(userId()) + "&status=in.(requested,en_route,picked_up)&order=created_at.desc,id.desc&limit=2");
+        return get("jobs?select=*&client_id=eq." + eq(userId()) + "&status=in.(" + ("PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? "requested,accepted,en_route,picked_up" : "requested,en_route,picked_up") + ")&order=created_at.desc,id.desc&limit=2");
     }
     public synchronized JSONArray notifications(int offset) throws Exception {
         return get("notifications?select=id,title,message,type,read,created_at,job_id&user_id=eq."+eq(userId())+"&type=like.client_*&order=created_at.desc,id.desc&limit=13&offset="+Math.max(0,offset));
@@ -220,6 +220,7 @@ public final class ClientApi {
         if (selected != null) {
             Quote quote = selected.quote();
             body.put("id", id).put("quote", selected.routeId()).put("method", method)
+                .put("flow", "authorize_then_capture")
                 .put("amount", quote.price()).put("vehicle", quote.vehicle()).put("helpers", quote.helpers())
                 .put("service", quote.service());
         }
@@ -259,6 +260,10 @@ public final class ClientApi {
     public synchronized JSONObject cancel(String id) throws Exception {
         profile();
         JSONObject job = job(id);
+        if (job != null && "held".equals(job.optString("sandbox_card_state"))) {
+            JSONObject body = new JSONObject().put("action","cancel_card").put("id",id);
+            return new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body()).getJSONObject("job");
+        }
         if (job == null || !"requested".equals(job.optString("status")) || !job.isNull("driver_id") || job.optBoolean("driver_paid"))
             throw new Failure(409,"El servicio cambió o ya fue aceptado. Actualiza el seguimiento.");
         JSONArray rows = new JSONArray(call("PATCH","/rest/v1/jobs?id=eq." + eq(id) + "&client_id=eq." + eq(userId())

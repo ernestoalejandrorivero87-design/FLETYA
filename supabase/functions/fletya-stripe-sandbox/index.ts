@@ -1,6 +1,7 @@
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const sandboxProject = "https://ccdtpwvalqznasstnqxj.supabase.co";
 const returnPage = sandboxProject + "/functions/v1/fletya-stripe-sandbox";
+const intentId = /^pi_[A-Za-z0-9]+$/;
 const testSession = /^cs_test_[A-Za-z0-9]+$/;
 
 function json(data: unknown, status = 200) {
@@ -35,17 +36,22 @@ Deno.serve(async (request) => {
     return json({ message: "El entorno de pagos de prueba aún no está configurado." }, 503);
   }
   const token = request.headers.get("Authorization");
-  if (!token?.startsWith("Bearer ")) return json({ message: "Inicia sesión como cliente." }, 401);
 
-  const db = async (action: string, client: string, params: Record<string, unknown> = {}) => {
-    const response = await fetch(url + "/rest/v1/rpc/stripe_sandbox_order", {
+
+  const rpc = async (name: string, params: Record<string, unknown>) => {
+    const response = await fetch(url + "/rest/v1/rpc/" + name, {
       method: "POST", headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ p_action: action, p_client: client, ...params }),
+      body: JSON.stringify(params),
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw new Error("db_" + response.status);
     return await response.json();
   };
+
+  const db = (action: string, client: string, params: Record<string, unknown> = {}) =>
+    rpc("stripe_sandbox_order", { p_action: action, p_client: client, ...params });
+  const card = (action: string, id: string, actor?: string, intent?: string) =>
+    rpc("stripe_sandbox_card", { p_action: action, p_id: id, p_actor: actor, p_intent: intent });
 
   const stripe = async (path: string, form?: Record<string, string>, id?: string) => {
     const headers = new Headers({ Authorization: "Bearer " + stripeKey });
@@ -64,21 +70,74 @@ Deno.serve(async (request) => {
     return data;
   };
 
+  const retrieveIntent = async (id: string, amount: number, manual = true) => {
+    if (!intentId.test(id)) throw new Error("invalid_card_intent");
+    const intent = await stripe("/payment_intents/" + id);
+    if (intent.id !== id || intent.currency !== "mxn" || intent.amount !== amount ||
+        (manual && intent.capture_method !== "manual")) throw new Error("card_intent_mismatch");
+    return intent;
+  };
+
+  const settleCard = async (result: any) => {
+    const order = result?.order;
+    if (!order || !["capturing","releasing"].includes(order.card_state)) return result;
+    const id = order.card_intent;
+    const cents = Math.round(Number(order.amount) * 100);
+    let intent = await retrieveIntent(id, cents);
+    const capturing = order.card_state === "capturing";
+    if (capturing && intent.status === "requires_capture") {
+      intent = await stripe("/payment_intents/" + id + "/capture", {}, "fletya-capture-" + order.id);
+    }
+    if (intent.id !== id || intent.amount !== cents || intent.currency !== "mxn") throw new Error("card_intent_mismatch");
+    if (capturing && intent.status === "succeeded" && intent.amount_received === cents) {
+      return await card("captured", order.id, undefined, id);
+    }
+    if (intent.status === "requires_payment_method" || intent.status === "requires_action" ||
+        (!capturing && intent.status === "requires_capture")) {
+      intent = await stripe("/payment_intents/" + id + "/cancel", {}, "fletya-release-card-" + order.id);
+    }
+    if (intent.id === id && intent.status === "canceled") {
+      return await card("released", order.id, undefined, id);
+    }
+    return result;
+  };
+
   try {
+    const body = await request.json().catch(() => null);
+    if (body?.action === "sweep") {
+      const schedule = request.headers.get("X-Fletya-Schedule");
+      if (!schedule || !uuid.test(schedule)) return json({ message: "No autorizado." }, 401);
+      const due = await rpc("stripe_sandbox_due", { p_token: schedule });
+      const results = await Promise.allSettled(due.map(async (id: string) => settleCard(await card("sweep", id))));
+      const failed = results.filter(result => result.status === "rejected").length;
+      if (failed) console.error("FLETYA Stripe Sandbox reconcile_failed", failed);
+      return json({ processed: results.length - failed, failed });
+    }
+    if (!token?.startsWith("Bearer ")) return json({ message: "Inicia sesión." }, 401);
     const auth = await fetch(url + "/auth/v1/user", {
       headers: { apikey: serviceKey, Authorization: token }, signal: AbortSignal.timeout(8000),
     });
     if (!auth.ok) return json({ message: "Inicia sesión como cliente." }, 401);
     const user = (await auth.json()).id;
-    const body = await request.json().catch(() => null);
-    if (!uuid.test(user) || !body || !["start", "status", "cancel"].includes(body.action)) {
+    if (!uuid.test(user) || !body || !["start", "status", "cancel", "accept_card", "cancel_card"].includes(body.action)) {
       return json({ message: "Solicitud de pago inválida." }, 400);
+    }
+    if (body.action === "accept_card" || body.action === "cancel_card") {
+      if (!uuid.test(body.id)) return json({ message: "Solicitud inválida." }, 400);
+      const accepting = body.action === "accept_card";
+      const result = await card(accepting ? "claim" : "cancel", body.id, user);
+      if (!result?.job?.id) return json({ message: "El servicio ya cambió o no está disponible." }, 409);
+      const settled = await settleCard(result);
+      return json({ job: settled.job });
     }
     let order = await db("current", user);
     if (body.action === "cancel" && !order?.stripe_session) {
       return json({ message: "Consulta el pago de nuevo para recuperar la sesión de Stripe." }, 409);
     }
     if (body.action === "start") {
+      if (body.method === "card" && body.flow !== "authorize_then_capture") {
+        return json({ message: "Actualiza FLETYA Cliente Pruebas para autorizar la tarjeta." }, 426);
+      }
       if (!uuid.test(body.id) || !uuid.test(body.quote) || !["card", "spei"].includes(body.method)) {
         return json({ message: "Revisa la cotización y el método de pago." }, 400);
       }
@@ -121,7 +180,9 @@ Deno.serve(async (request) => {
         "adaptive_pricing[enabled]": "false",
         "allowed_payment_method_types[]": order.method === "spei" ? "customer_balance" : "card",
       };
-      if (order.method === "spei") {
+      if (order.method === "card") {
+        fields["payment_intent_data[capture_method]"] = "manual";
+      } else {
         const customer = await stripe("/customers", { description: "FLETYA prueba " + order.id }, "fletya-customer-" + order.id);
         fields.customer = customer.id;
         fields["payment_method_options[customer_balance][funding_type]"] = "bank_transfer";
@@ -134,6 +195,15 @@ Deno.serve(async (request) => {
       || session.currency !== "mxn" || session.mode !== "payment") throw new Error("session_mismatch");
     if (!order.stripe_session) {
       await db("attach", user, { p_id: order.id, p_session: session.id });
+    }
+    if (order.method === "card" && session.status === "complete") {
+      const intent = await retrieveIntent(session.payment_intent, cents, false);
+      if (intent.capture_method === "manual" && intent.status === "requires_capture" && intent.amount_capturable === cents) {
+        const authorized = await card("authorize", order.id, user, intent.id);
+        if (!authorized?.order) throw new Error("authorization_conflict");
+        const settled = await settleCard(authorized);
+        return json({ state: settled.order.state, method: order.method, amount: order.amount });
+      }
     }
     if (session.payment_status === "paid" && session.status === "complete") {
       const booked = await db("book", user, { p_id: order.id, p_session: session.id });

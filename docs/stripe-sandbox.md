@@ -17,3 +17,9 @@ El servidor consulta Checkout al regresar a la app o al pulsar **Consultar pago*
 
 - [Tarjetas de prueba de Stripe](https://docs.stripe.com/testing)
 - [Simular una transferencia entrante](https://docs.stripe.com/api/cash_balance_transactions/fund_cash_balance)
+
+## Autorización de tarjeta y cobro al aceptar
+
+Usa Cliente Pruebas 0.4.6 y Fletero Pruebas 0.6.4. Aplica también `scripts/release/activate-sandbox-card-authorization.sql` antes de desplegar la función. La cotización pagada por tarjeta de prueba primero autoriza el importe en Stripe, luego se publica para los fleteros. Al aceptar, el servidor reclama la solicitud y captura el pago de forma idempotente. Solo una captura confirmada habilita la recogida.
+
+Prueba también una solicitud sin aceptación. En el entorno Pruebas el plazo es de 15 minutos desde la autorización registrada por FLETYA. El proceso programado revisa los vencimientos y libera la autorización en Stripe. La cancelación de una solicitud con tarjeta autorizada antes de la aceptación también libera la autorización. El flujo de SPEI documentado arriba sigue en la modalidad de prueba anterior.
