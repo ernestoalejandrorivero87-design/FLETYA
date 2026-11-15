@@ -218,6 +218,12 @@ public final class MainActivity extends Activity {
                 JSONObject job = active;
                 LinearLayout box = card("Mi servicio actual");
                 jobDetails(box, job);
+                if ("accepted".equals(job.optString("status"))) {
+                    text(box, "Confirmando el cobro con Stripe. Espera antes de iniciar la recogida.", 16, true);
+                    button(root, "Actualizar panel", this::refresh);
+                    message.setText("");
+                    return;
+                }
                 boolean picked = "picked_up".equals(job.optString("status"));
                 text(box, picked ? "Carga recogida · Lleva la carga al destino" : "En camino a recoger", 17, true);
                 button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job));
@@ -370,7 +376,7 @@ public final class MainActivity extends Activity {
         if (acceptingId != null) {
             new AlertDialog.Builder(this).setTitle("¿Aceptar este servicio?")
                 .setMessage("Al aceptar comenzarás a compartir ubicación para recoger y entregar la carga.")
-                .setPositiveButton("Aceptar", (d, w) -> task(() -> api.transition(acceptingId, "requested", "en_route", null), job -> {
+                .setPositiveButton("Aceptar", (d, w) -> task(() -> api.acceptOffer(acceptingId), job -> {
                     active = job; startTracker(); refresh();
                 })).setNegativeButton("Cancelar", null).show();
         } else startTracker();

@@ -36,6 +36,7 @@ public final class MainActivity extends Activity {
     private boolean busy,visible,picking,menuOpen,routeLoading,routeFailed,awaitingLocationPermission,requestingNotices;
     private long revision,draftRevision,routeRevision;
     private JSONObject active;
+    private boolean showingPayment;
     private EditText originField,destField;
     private ClientApi.Quote quote;
     private ClientApi.TestQuote testQuote;
@@ -131,12 +132,21 @@ public final class MainActivity extends Activity {
         var menu=new PopupMenu(this,anchor);menu.getMenu().add(0,1,0,"Solicitar / Seguimiento");menu.getMenu().add(0,2,1,"Historial de servicios");menu.getMenu().add(0,3,2,"Mi perfil");menu.getMenu().add(0,4,5,"Cerrar sesión");menu.getMenu().add(0,5,3,"Avisos de mis servicios");if(BuildConfig.PUSH_ENABLED)menu.getMenu().add(0,6,4,"Activar avisos del teléfono");
         menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();case 5->{clearTrackingMap();noticePage=0;notices();}case 6->activateNotices();default->{return false;}}return true;});menuOpen=true;menu.setOnDismissListener(m->menuOpen=false);menu.show();
     }
-    private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError){}
+    private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError,JSONObject payment){}
     private void refresh(){
         if(!visible||busy||picking||requestingNotices||!api.signedIn())return;
         task(()->{var profile=api.profile();var jobs=api.activeJobs();var tracking=new ClientApi.Tracking(null,null);boolean error=false;
             if(jobs.length()==1&&ClientRules.assigned(jobs.getJSONObject(0).optString("status")))try{tracking=api.tracking(jobs.getJSONObject(0));}catch(Exception e){if(!api.signedIn())throw e;error=true;}
-            return new Panel(profile,jobs,tracking,error);
+            JSONObject payment = null;
+            if (sandboxPayments() && jobs.length() == 0) {
+                try {
+                    payment = api.sandboxPayment(null, null, null);
+                    if ("booked".equals(payment.optString("state"))) jobs = api.activeJobs();
+                } catch (ClientApi.Failure failure) {
+                    if (failure.status != 503) throw failure;
+                }
+            }
+            return new Panel(profile,jobs,tracking,error,payment);
         },panel->{
             if(!visible||!"home".equals(screen))return;
             PushManager.activate(this,api);
@@ -144,6 +154,15 @@ public final class MainActivity extends Activity {
             profileName=panel.profile().optString("full_name","cliente");
             if(panel.jobs().length()>1){clearTrackingMap();active=null;shell();text(card("Revisión necesaria"),"Tienes más de un servicio activo. Consulta con administración antes de pedir otro.",16,false);button(root,"Actualizar seguimiento",this::refresh);return;}
             JSONObject next=panel.jobs().length()==1?panel.jobs().getJSONObject(0):null;
+            if (next == null && panel.payment() != null && ("pending".equals(panel.payment().optString("state"))
+                || "review".equals(panel.payment().optString("state")))) {
+                renderPayment(panel.payment());
+                return;
+            }
+            if (showingPayment) {
+                showingPayment = false;
+                originField = null;
+            }
             if(next==null&&active==null&&originField!=null&&originField.getParent()!=null&&"home".equals(rendered)){message.setText("");return;}
             active=next;
             if(active==null){clearTrackingMap();form();}else{stopLocation();clearPreview();quote=null;testQuote=null;requestId="";renderActive(panel.tracking(),panel.trackingError());}
@@ -195,8 +214,63 @@ public final class MainActivity extends Activity {
             });
         }
         if (offersCashPayment()) text(quoteArea, "Pago en efectivo al entregar", 15, true);
-        button(quoteArea,"Solicitar FLETYA",this::confirmRequest);
+        if (sandboxPayments()) {
+            button(quoteArea, "Autorizar tarjeta de prueba", () -> beginPayment("card"));
+            button(quoteArea, "Pagar por SPEI de prueba", () -> beginPayment("spei"));
+        } else {
+            button(quoteArea,"Solicitar FLETYA",this::confirmRequest);
+        }
     }
+    private boolean sandboxPayments() {
+        return "PRUEBAS".equals(BuildConfig.ENVIRONMENT);
+    }
+
+    private void beginPayment(String method) {
+        if (testQuote == null) return;
+        ClientApi.TestQuote selected = testQuote;
+        String id = requestId;
+        picking = true;
+        dialog().setTitle("Confirmar pago de prueba")
+            .setMessage(paymentLabel(method) + " · " + money(selected.quote().price())
+                + ("card".equals(method) ? "\nEl importe se reserva. Solo se cobra si un fletero acepta." : ""))
+            .setNegativeButton("Volver", null)
+            .setPositiveButton("Ir a Stripe", (d, w) -> task(() -> api.sandboxPayment(selected, id, method), payment -> {
+                if (!"pending".equals(payment.optString("state"))) {
+                    refresh();
+                    return;
+                }
+                resetDraft();
+                renderPayment(payment);
+                if (!payment.isNull("url")) open(payment.getString("url"));
+            })).setOnDismissListener(d -> picking = false).show();
+    }
+
+    private void renderPayment(JSONObject payment) {
+        active = null;
+        showingPayment = true;
+        stopLocation();
+        clearPreview();
+        clearTrackingMap();
+        shell();
+        boolean review = "review".equals(payment.optString("state"));
+        var box = card(review ? "Pago en revisión" : "Pago de prueba pendiente");
+        text(box, paymentLabel(payment.optString("method")) + " · " + money(payment.optDouble("amount")), 16, true);
+        text(box, review ? "Stripe confirmó el pago. El servicio requiere revisión."
+            : "Al volver de Stripe, FLETYA consultará el pago. La solicitud se crea cuando Stripe lo confirme.", 15, false);
+        if (!payment.isNull("url")) {
+            button(box, "Abrir Stripe", () -> open(payment.optString("url")));
+            button(box, "Cancelar pago de prueba", () -> dialog().setTitle("¿Cancelar el pago de prueba?")
+                .setNegativeButton("Volver", null)
+                .setPositiveButton("Cancelar pago", (d, w) ->
+                    task(api::cancelSandboxPayment, result -> refresh())).show());
+        }
+        button(box, "Consultar pago", this::refresh);
+    }
+
+    private String paymentLabel(String method) {
+        return "spei".equals(method) ? "Transferencia SPEI" : "Tarjeta";
+    }
+
     private boolean offersCashPayment() {
         return BuildConfig.TEST_ROUTE_PRICING && !"PRUEBAS".equals(BuildConfig.ENVIRONMENT);
     }
@@ -212,16 +286,57 @@ public final class MainActivity extends Activity {
             }).setOnDismissListener(d->picking=false).show();
     }
     private void details(LinearLayout box,JSONObject job){
+        if (sandboxPayments() && !job.isNull("sandbox_payment_method")) {
+            String label = switch (job.optString("sandbox_card_state")) {
+                case "held" -> "Tarjeta autorizada · Cobro al confirmar fletero";
+                case "capturing" -> "Confirmando cobro con Stripe";
+                case "released" -> "Reserva de tarjeta liberada";
+                default -> "Pago confirmado · " + paymentLabel(job.optString("sandbox_payment_method")) + " de prueba";
+            };
+            text(box, label, 15, true);
+            String refund = switch (job.optString("sandbox_refund_state")) {
+                case "requested" -> "Reembolso solicitado · " + money(job.optDouble("price"));
+                case "confirmed" -> "Reembolso confirmado · " + money(job.optDouble("price"));
+                case "review" -> "Reembolso en revisión";
+                case "denied" -> "Reembolso rechazado";
+                default -> "";
+            };
+            if (!refund.isEmpty()) text(box, refund, 15, true);
+        }
         if ("cash".equals(job.optString("payment_method"))) text(box, "Pago en efectivo al entregar", 15, true);
         text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
         text(box,job.optString("service_type")+" · "+ClientRules.vehicle(job.optString("vehicle_type")),15,false);
         text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(TEAL);
     }
+    private void addSandboxRefundButton(LinearLayout box, JSONObject job) {
+        if (!sandboxPayments() || !"paid".equals(job.optString("sandbox_card_state"))
+            || !job.isNull("sandbox_refund_state")) return;
+        String status = job.optString("status");
+        boolean review = "picked_up".equals(status) || "completed".equals(status);
+        if (!review && !"en_route".equals(status) && !"requested".equals(status)) return;
+        String label = review ? "Solicitar revisión de reembolso" : "Cancelar y solicitar reembolso";
+        button(box, label, () -> dialog().setTitle(label)
+            .setMessage(review ? "Administración revisará el caso. El servicio conserva su estado."
+                : "Se cancelará la solicitud y se pedirá la devolución de " + money(job.optDouble("price")) + ".")
+            .setNegativeButton("Volver", null)
+            .setPositiveButton(review ? "Solicitar revisión" : "Confirmar cancelación", (d, w) ->
+                task(() -> api.requestSandboxCardRefund(job.getString("id")), result -> {
+                    if ("cancelled".equals(result.optString("status"))) {
+                        active = null;
+                        clearTrackingMap();
+                    }
+                    historyPage = 0;
+                    history();
+                })).show());
+    }
+
     private void renderActive(ClientApi.Tracking tracking,boolean trackingError){
         screen="home";shell();trackingStatus=null;originField=null;destField=null;quoteArea=null;
-        JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);text(box,ClientRules.status(job.optString("status")),19,true);details(box,job);
+        JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);text(box,"accepted".equals(job.optString("status")) ? "Confirmando aceptación" : ClientRules.status(job.optString("status")),19,true);details(box,job);
         if("requested".equals(job.optString("status"))&&!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
-        if("requested".equals(job.optString("status"))&&job.isNull("driver_id"))button(box,"Cancelar solicitud",()->dialog().setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
+        addSandboxRefundButton(box, job);
+        if("requested".equals(job.optString("status"))&&job.isNull("driver_id")
+            && !(sandboxPayments() && "paid".equals(job.optString("sandbox_card_state"))))button(box,"Cancelar solicitud",()->dialog().setTitle("¿Cancelar la solicitud?").setMessage("Solo puedes cancelar antes de que un fletero acepte. Quedará en tu historial.").setNegativeButton("Volver",null).setPositiveButton("Cancelar solicitud",(d,w)->task(()->api.cancel(job.optString("id")),result->{active=null;clearTrackingMap();refresh();})).show());
         if(ClientRules.assigned(job.optString("status"))){
             var driverBox=card("Tu fletero asignado");var driver=tracking.driver();var fix=tracking.fix();
             if(driver!=null){text(driverBox,driver.optString("full_name","Sin nombre"),18,true);text(driverBox,"Vehículo: "+ClientRules.vehicle(driver.optString("vehicle_type")),15,false);text(driverBox,"Placas: "+driver.optString("plates","Sin registrar"),16,true);}else text(driverBox,trackingError?"No se pudo actualizar la identificación del fletero.":"Consultando la identificación del fletero…",15,false);
@@ -292,7 +407,7 @@ public final class MainActivity extends Activity {
             clearTrackingMap();screen="notice";shell();LinearLayout box=card(ClientRules.status(job.optString("status")));details(box,job);button(root,"Historial de servicios",()->{historyPage=0;history();});button(root,"Volver a solicitar",()->{screen="home";refresh();});message.setText("");
         });
     }
-    private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));details(box,job);text(box,job.optString("created_at").split("T")[0],13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
+    private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));details(box,job);addSandboxRefundButton(box,job);text(box,job.optString("created_at").split("T")[0],13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});if(sandboxPayments())button(root,"Actualizar historial",this::history);button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private void profile(){task(api::profile,p->{screen="profile";shell();var box=card("Mi perfil de cliente");var name=field(box,"Nombre completo",p.optString("full_name"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);button(box,"Guardar perfil",()->task(()->{api.saveName(name.getText().toString());return true;},ok->message.setText("Perfil guardado.")));button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(this).setOnDismissListener(d->picking=false);}
     private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();String[] device=PushManager.disableLocally(this);task(()->{try{api.unregisterPush(device[0],device[1]);}catch(Exception ignored){}api.logout();return true;},ok->{revision++;login();});}).show();}

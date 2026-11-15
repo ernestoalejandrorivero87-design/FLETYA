@@ -37,6 +37,7 @@ function runtime(responses = []) {
   }
   const document = {
     getElementById(id) { if (!nodes.has(id)) nodes.set(id, element(id)); return nodes.get(id); },
+    querySelectorAll: () => [],
     createElement: () => element('')
   };
   const api = {
@@ -74,6 +75,7 @@ function runtime(responses = []) {
   }
   const context = vm.createContext({
     document, console: { error() {}, warn() {}, log() {} }, supabaseClient: api,
+    IS_FLETYA_PRODUCTION_HOST: false,
     navigator: { geolocation: { clearWatch(id) { clearedWatches.push(id); } } },
     localStorage: { getItem() { return null; } },
     L: { map() { return map; }, marker, polyline() { return { addTo() {return this;}, getBounds() {return [];} }; }, tileLayer() { return { addTo() {} }; } },
@@ -453,6 +455,34 @@ test('net plus commission always matches the service total in cents', () => {
   }
 });
 
+test('sandbox admin identifies FLETYA funding only for a completed and fully refunded card service', async () => {
+  const job = {
+    ...paymentJob, price: 621.55, sandbox_payment_method: 'card', sandbox_refund_state: 'confirmed'
+  };
+  for (const [production, patch, covered] of [
+    [false, {}, true],
+    [false, { driver_paid: true }, true],
+    [false, { sandbox_refund_state: 'denied' }, false],
+    [false, { status: 'picked_up' }, false],
+    [true, {}, false]
+  ]) {
+    const service = { ...job, ...patch };
+    const r = runtime([{ data: service }, { data: [] }]);
+    r.context.IS_FLETYA_PRODUCTION_HOST = production;
+    await r.run("viewJob('payment-job')");
+    const [status, amounts] = r.document.getElementById('jobModalContent').children[0].children;
+    assert.equal(status.textContent.includes('Cubre FLETYA'), covered);
+    assert.match(status.textContent, service.driver_paid ? /registrado/i : /pendiente/i);
+    assert.match(amounts.textContent, /528\.32/);
+    assert.equal(amounts.textContent.includes('Reembolso total confirmado'), covered);
+  }
+  const r = paymentRuntime([{ data: { role: 'admin' } }, { data: job }], false);
+  await r.run("markJobPaid('payment-job')");
+  assert.match(r.confirmations[0], /528\.32 MXN/);
+  assert.match(r.confirmations[0], /Cubre FLETYA/);
+  assert.equal(r.queries.length, 2);
+});
+
 
 test('guest role navigation shows exactly one access form and no service panels', async () => {
   const r = runtime();
@@ -792,6 +822,32 @@ test('cancelled services are excluded from admin financial amounts and counted s
  assert.equal(r.document.getElementById('reportJobs').textContent,2);
  assert.equal(r.document.getElementById('cancelledCount').textContent,1);
  assert.match(r.document.getElementById('adminTable').innerHTML,/Cancelado/);
+});
+
+test('Stripe test report reconciles completed refunds and supports checking a single service', async () => {
+ const created_at=new Date().toISOString();
+ const paid={status:'completed',driver_id:'driver-1',sandbox_payment_method:'card',sandbox_card_state:'paid',created_at};
+ const jobs=[
+  {...paid,id:'refunded-job',price:621.55,sandbox_refund_state:'confirmed'},
+  {...paid,id:'retained-job',price:623.65,sandbox_refund_state:'denied'},
+  {...paid,id:'hold',price:900,status:'requested',sandbox_card_state:'held'},
+  {...paid,id:'legacy',price:800,sandbox_payment_method:null}
+ ];
+ const batch=()=>[{data:{role:'admin'}},{data:jobs},{data:[{id:'driver-1',role:'driver'}]},{data:[]}];
+ const r=runtime([...batch(),...batch(),...batch()]);
+ r.document.getElementById('adminReportPeriod').value='all';
+ const filter=r.document.getElementById('sandboxFinanceJobId');
+ filter.value='';
+ const values=()=>['sandboxGross','sandboxRefundsTotal','sandboxNet','sandboxCommission','sandboxDriverNet','sandboxCovered']
+  .map(id=>r.document.getElementById(id).textContent);
+ await r.run('renderAdmin()');
+ assert.deepEqual(values(),['$1,245.20','$621.55','$623.65','$93.55','$1,058.42','$528.32']);
+ filter.value=' REFUNDED-JOB ';
+ await r.run('renderAdmin()');
+ assert.deepEqual(values(),['$621.55','$621.55','$0.00','$0.00','$528.32','$528.32']);
+ filter.value='retained-job';
+ await r.run('renderAdmin()');
+ assert.deepEqual(values(),['$623.65','$0.00','$623.65','$93.55','$530.10','$0.00']);
 });
 
 function releaseRuntime(responses=[], status='en_route') {
