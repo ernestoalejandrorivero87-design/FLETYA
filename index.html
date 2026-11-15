@@ -218,22 +218,22 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <div class="hero"><h1>FLETYA Admin</h1><p>Control básico de servicios, ventas y comisión.</p></div>
 <div class="grid">
 <div class="card"><h3>Servicios</h3><div class="price" id="jobsCount">0</div><span class="muted">solicitudes</span></div>
-<div class="card"><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
-<div class="card"><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
-<div class="card"><h3>Fletero recibe</h3><div class="price" id="driverNet">$0</div><span class="muted">85% en este demo</span></div>
+<div class="card" data-legacy-finances><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
+<div class="card" data-legacy-finances><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
+<div class="card" data-legacy-finances><h3>Fletero recibe</h3><div class="price" id="driverNet">$0</div><span class="muted">85% en este demo</span></div>
  <div class="card"><h3>🟡 Solicitados</h3><div class="price" id="requestedCount">0</div><span class="muted">servicios pendientes</span></div>
 <div class="card"><h3>🔵 En camino</h3><div class="price" id="enRouteCount">0</div><span class="muted">servicios activos</span></div>
 <div class="card"><h3>🟢 Completados</h3><div class="price" id="completedCount">0</div><span class="muted">servicios terminados</span></div>
 <div class="card"><h3>⚪ Cancelados</h3><div class="price" id="cancelledCount">0</div><span class="muted">solicitudes canceladas</span></div>
- <div class="card"><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">ventas realizadas</span></div>
+ <div class="card" data-legacy-finances><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">ventas realizadas</span></div>
 
 <div class="card"><h3>🚚 Servicios del mes</h3><div class="price" id="monthlyJobs">0</div><span class="muted">servicios registrados</span></div>
 
-<div class="card"><h3>💵 Comisión del mes</h3><div class="price" id="monthlyCommission">$0</div><span class="muted">15% de comisión</span></div>
+<div class="card" data-legacy-finances><h3>💵 Comisión del mes</h3><div class="price" id="monthlyCommission">$0</div><span class="muted">15% de comisión</span></div>
 </div>
  <div class="card" style="margin-top:18px">
   <h2>📊 Reporte financiero</h2>
-  <p class="muted">Consulta el rendimiento de FLETYA por período. Los importes excluyen solicitudes canceladas.</p>
+  <p class="muted" data-legacy-finances>Consulta el rendimiento de FLETYA por período. Los importes excluyen solicitudes canceladas.</p>
 <p class="muted" id="reportPeriodLabel">📅 Período: Este mes</p>
   <select
     id="adminReportPeriod"
@@ -246,7 +246,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
     <option value="all">Todo el tiempo</option>
   </select>
 
-  <div class="grid" style="margin-top:12px">
+  <div class="grid" style="margin-top:12px" data-legacy-finances>
     <div class="card">
       <h3>💰 Ventas</h3>
       <div class="price" id="reportSales">$0</div>
@@ -267,6 +267,23 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
       <div class="price" id="reportDriverNet">$0</div>
     </div>
   </div>
+  <section id="sandboxFinances" class="hidden">
+    <h3>Pagos de Stripe · Pruebas</h3>
+    <p class="muted">Agrupados por fecha de creación del servicio. Los importes de fleteros corresponden a servicios completados.</p>
+    <form onsubmit="event.preventDefault();renderAdmin()">
+      <label for="sandboxFinanceJobId">ID del servicio (opcional)</label>
+      <input id="sandboxFinanceJobId" type="search" placeholder="Pega el ID completo">
+      <button class="btn light" type="submit">Aplicar filtro</button>
+    </form>
+    <div class="grid" style="margin-top:12px">
+      <div class="card"><h3>Cobros confirmados</h3><div class="price" id="sandboxGross">$0.00</div></div>
+      <div class="card"><h3>Reembolsos confirmados</h3><div class="price" id="sandboxRefundsTotal">$0.00</div></div>
+      <div class="card"><h3>Cobros netos del cliente</h3><div class="price" id="sandboxNet">$0.00</div></div>
+      <div class="card"><h3>Comisión FLETYA</h3><div class="price" id="sandboxCommission">$0.00</div></div>
+      <div class="card"><h3>Neto de fleteros</h3><div class="price" id="sandboxDriverNet">$0.00</div></div>
+      <div class="card"><h3>Pago a fleteros a cargo de FLETYA</h3><div class="price" id="sandboxCovered">$0.00</div></div>
+    </div>
+  </section>
   <div class="card" style="margin-top:18px">
   <h3>📊 Resumen rápido</h3>
   <p class="muted">Estado actual de los servicios</p>
@@ -2258,6 +2275,25 @@ function fletyaCoversDriverPayment(job) {
 function coveredDriverPaymentStatus(job) {
   return 'Pago al fletero ' + (job.driver_paid === true ? 'registrado' : 'pendiente') + ' · Cubre FLETYA';
 }
+function summarizeSandboxPayments(jobs) {
+  const cents = { gross: 0, refunded: 0, commission: 0, driverNet: 0, covered: 0 };
+  for (const job of jobs) {
+    // Before manual capture was introduced, a card job was created only after payment.
+    const captured = job.sandbox_payment_method === 'card' &&
+      (job.sandbox_card_state == null || job.sandbox_card_state === 'paid');
+    if (!captured && job.sandbox_payment_method !== 'spei') continue;
+    const payment = driverPaymentFor(job);
+    const refunded = job.sandbox_refund_state === 'confirmed';
+    cents.gross += Math.round(payment.total * 100);
+    if (refunded) cents.refunded += Math.round(payment.total * 100);
+    if (job.status !== 'completed' || !job.driver_id) continue;
+    const net = Math.round(payment.net * 100);
+    cents.driverNet += net;
+    if (fletyaCoversDriverPayment(job)) cents.covered += net;
+    if (!refunded) cents.commission += Math.round(payment.commission * 100);
+  }
+  return { ...cents, net: cents.gross - cents.refunded };
+}
 const paymentJobsInFlight = new Set();
 let currentJobDetailsId = null;
 let jobDetailsRevision = 0;
@@ -2376,6 +2412,10 @@ async function renderAdmin(){
   }
 
   document.getElementById('sandboxRefunds')?.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
+  document.getElementById('sandboxFinances').classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
+  for (const element of document.querySelectorAll('[data-legacy-finances]')) {
+    element.classList.toggle('hidden', !IS_FLETYA_PRODUCTION_HOST);
+  }
 
   const { data: jobs, error: jobsError } =
     await supabaseClient
@@ -2475,10 +2515,10 @@ const filteredServices = services.filter(job => {
       0
     );
     const commissionCents = driverJobs.reduce(
-      (sum, job) => sum + jobCommissionCents(job),
+      (sum, job) => sum + (fletyaCoversDriverPayment(job) ? 0 : jobCommissionCents(job)),
       0
     );
-    const netCents = totalCents - commissionCents;
+    const netCents = driverJobs.reduce((sum, job) => sum + jobNetCents(job), 0);
     const total = totalCents / 100;
     const commission = commissionCents / 100;
     const net = netCents / 100;
@@ -2609,36 +2649,32 @@ if (reportPeriodLabel) {
     reportPeriod === 'month' ? '📅 Período: Este mes' :
     '📅 Período: Todo el tiempo';
 }
-let reportServices = billableServices;
-
 const nowReport = new Date();
-
-if (reportPeriod === 'today') {
-  reportServices = billableServices.filter(job => {
-    const d = new Date(job.created_at);
-    return d.toDateString() === nowReport.toDateString();
-  });
+const startWeek = new Date(nowReport);
+startWeek.setDate(nowReport.getDate() - 7);
+function withinReportPeriod(job) {
+  const created = new Date(job.created_at);
+  if (reportPeriod === 'today') return created.toDateString() === nowReport.toDateString();
+  if (reportPeriod === 'week') return created >= startWeek;
+  if (reportPeriod === 'month') return created >= startOfMonth;
+  return true;
 }
-
-if (reportPeriod === 'week') {
-  const startWeek = new Date(nowReport);
-  startWeek.setDate(nowReport.getDate() - 7);
-
-  reportServices = billableServices.filter(job =>
-    new Date(job.created_at) >= startWeek
-  );
-}
-
-if (reportPeriod === 'month') {
-  const startMonth = new Date(
-    nowReport.getFullYear(),
-    nowReport.getMonth(),
-    1
-  );
-
-  reportServices = billableServices.filter(job =>
-    new Date(job.created_at) >= startMonth
-  );
+const reportServices = billableServices.filter(withinReportPeriod);
+if (!IS_FLETYA_PRODUCTION_HOST) {
+  const id = document.getElementById('sandboxFinanceJobId').value.trim().toLowerCase();
+  const sandboxJobs = services.filter(job => withinReportPeriod(job) && (!id || job.id === id));
+  const finances = summarizeSandboxPayments(sandboxJobs);
+  const amountsByElement = {
+    sandboxGross: finances.gross,
+    sandboxRefundsTotal: finances.refunded,
+    sandboxNet: finances.net,
+    sandboxCommission: finances.commission,
+    sandboxDriverNet: finances.driverNet,
+    sandboxCovered: finances.covered
+  };
+  for (const [elementId, cents] of Object.entries(amountsByElement)) {
+    document.getElementById(elementId).textContent = '$' + money2(cents / 100);
+  }
 }
 
 const reportSales = reportServices.reduce(
