@@ -22,10 +22,10 @@ function checkoutUrl(value: unknown): string {
 
 Deno.serve(async (request) => {
   if (request.method === "GET" && Deno.env.get("SUPABASE_URL") === sandboxProject) {
-    return new Response('<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>FLETYA Pruebas</title><h1>Vuelve a FLETYA Cliente · Pruebas</h1><p>Abre la app y toca Consultar pago para ver el estado que confirma Stripe.</p></html>', {
-      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
-        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
-    });
+    return new Response(
+      "FLETYA Cliente - Pruebas\n\nVuelve a la app y toca Consultar pago para comprobar el estado del pago de prueba.",
+      { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } },
+    );
   }
   if (request.method !== "POST") return json({ message: "Método no permitido." }, 405);
   const url = Deno.env.get("SUPABASE_URL");
