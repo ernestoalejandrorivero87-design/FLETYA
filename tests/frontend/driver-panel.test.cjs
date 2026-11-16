@@ -37,6 +37,7 @@ function runtime(responses = [], pathname = "/") {
   }
   const document = {
     getElementById(id) { if (!nodes.has(id)) nodes.set(id, element(id)); return nodes.get(id); },
+    querySelectorAll: () => [],
     createElement: () => element('')
   };
   const api = {
@@ -74,6 +75,7 @@ function runtime(responses = [], pathname = "/") {
   }
   const context = vm.createContext({
     document, window: { location: { pathname } }, console: { error() {}, warn() {}, log() {} }, supabaseClient: api,
+    IS_FLETYA_PRODUCTION_HOST: false,
     navigator: { geolocation: { clearWatch(id) { clearedWatches.push(id); } } },
     localStorage: { getItem() { return null; } },
     L: { map() { return map; }, marker, polyline() { return { addTo() {return this;}, getBounds() {return [];} }; }, tileLayer() { return { addTo() {} }; } },
@@ -369,6 +371,19 @@ test('payment confirmation shows exact cents and updates only the selected unpai
   assert.ok(r.messages.includes('Pago registrado para este servicio.'));
 });
 
+test('cash collection stays separate from driver payment registration in both environments', async () => {
+  for (const production of [true, false]) {
+    const r = paymentRuntime([{ data: { role: 'admin' } }, { data: { ...paymentJob, payment_method: 'cash' } }]);
+    r.context.IS_FLETYA_PRODUCTION_HOST = production;
+    await r.run("markJobPaid('payment-job')");
+    const fields = r.queries[1].calls.find(([method]) => method === 'select')[1];
+    assert.match(fields, /payment_method/);
+    assert.equal(fields.includes('sandbox_refund_state'), !production);
+    assert.equal(r.queries.length, 2);
+    assert.equal(r.confirmations.length, 0);
+  }
+});
+
 test('cancelling payment confirmation sends no update', async () => {
   const r = paymentRuntime([{ data: { role: 'admin' } }, { data: paymentJob }], false);
   await r.run("markJobPaid('payment-job')");
@@ -451,6 +466,34 @@ test('net plus commission always matches the service total in cents', () => {
     const amounts = r.run('driverPaymentFor({price:' + price + '})');
     assert.equal(Math.round(amounts.net * 100) + Math.round(amounts.commission * 100), Math.round(price * 100));
   }
+});
+
+test('sandbox admin identifies FLETYA funding only for a completed and fully refunded card service', async () => {
+  const job = {
+    ...paymentJob, price: 621.55, sandbox_payment_method: 'card', sandbox_refund_state: 'confirmed'
+  };
+  for (const [production, patch, covered] of [
+    [false, {}, true],
+    [false, { driver_paid: true }, true],
+    [false, { sandbox_refund_state: 'denied' }, false],
+    [false, { status: 'picked_up' }, false],
+    [true, {}, false]
+  ]) {
+    const service = { ...job, ...patch };
+    const r = runtime([{ data: service }, { data: [] }]);
+    r.context.IS_FLETYA_PRODUCTION_HOST = production;
+    await r.run("viewJob('payment-job')");
+    const [status, amounts] = r.document.getElementById('jobModalContent').children[0].children;
+    assert.equal(status.textContent.includes('Cubre FLETYA'), covered);
+    assert.match(status.textContent, service.driver_paid ? /registrado/i : /pendiente/i);
+    assert.match(amounts.textContent, /528\.32/);
+    assert.equal(amounts.textContent.includes('Reembolso total confirmado'), covered);
+  }
+  const r = paymentRuntime([{ data: { role: 'admin' } }, { data: job }], false);
+  await r.run("markJobPaid('payment-job')");
+  assert.match(r.confirmations[0], /528\.32 MXN/);
+  assert.match(r.confirmations[0], /Cubre FLETYA/);
+  assert.equal(r.queries.length, 2);
 });
 
 
@@ -794,6 +837,32 @@ test('cancelled services are excluded from admin financial amounts and counted s
  assert.match(r.document.getElementById('adminTable').innerHTML,/Cancelado/);
 });
 
+test('Stripe test report reconciles completed refunds and supports checking a single service', async () => {
+ const created_at=new Date().toISOString();
+ const paid={status:'completed',driver_id:'driver-1',sandbox_payment_method:'card',sandbox_card_state:'paid',created_at};
+ const jobs=[
+  {...paid,id:'refunded-job',price:621.55,sandbox_refund_state:'confirmed'},
+  {...paid,id:'retained-job',price:623.65,sandbox_refund_state:'denied'},
+  {...paid,id:'hold',price:900,status:'requested',sandbox_card_state:'held'},
+  {...paid,id:'legacy',price:800,sandbox_payment_method:null}
+ ];
+ const batch=()=>[{data:{role:'admin'}},{data:jobs},{data:[{id:'driver-1',role:'driver'}]},{data:[]}];
+ const r=runtime([...batch(),...batch(),...batch()]);
+ r.document.getElementById('adminReportPeriod').value='all';
+ const filter=r.document.getElementById('sandboxFinanceJobId');
+ filter.value='';
+ const values=()=>['sandboxGross','sandboxRefundsTotal','sandboxNet','sandboxCommission','sandboxDriverNet','sandboxCovered']
+  .map(id=>r.document.getElementById(id).textContent);
+ await r.run('renderAdmin()');
+ assert.deepEqual(values(),['$1,245.20','$621.55','$623.65','$93.55','$1,058.42','$528.32']);
+ filter.value=' REFUNDED-JOB ';
+ await r.run('renderAdmin()');
+ assert.deepEqual(values(),['$621.55','$621.55','$0.00','$0.00','$528.32','$528.32']);
+ filter.value='retained-job';
+ await r.run('renderAdmin()');
+ assert.deepEqual(values(),['$623.65','$0.00','$623.65','$93.55','$530.10','$0.00']);
+});
+
 function releaseRuntime(responses=[], status='en_route') {
  const r=runtime(responses);
  r.context.window={confirm:()=>true};
@@ -1030,14 +1099,29 @@ test('late route result cannot restore navigation after releasing or signing out
  finish({data:{polyline:'_p~iF~ps|U_ulLnnqC_mqNvxq`@'}});await pending;
  assert.equal(r.document.getElementById('driverNavigation').hidden,true);assert.equal(r.run('driverRouteReady'),false);
 });
-test('route API failure keeps the navigation link usable and supports explicit retry',async()=>{
+test('route API failure keeps safe navigation available and supports explicit retry',async()=>{
  const r=runtime();let requests=0;r.api.functions={invoke:async()=>{requests++;return {error:{message:'offline'}}}};
  r.run("activeSessionRole='driver';state.active={id:'nav',driver_id:'driver-1',status:'en_route',origin:'A',destination:'B'}");
  await r.run('updateDriverNavigation(state.active)');assert.match(r.document.getElementById('driverRouteInfo').textContent,/No se pudo/);
- assert.match(r.document.getElementById('driverNavigateLink').attributes.href,/google.com/);
+ assert.equal(r.document.getElementById('driverNavigateLink').attributes.href,undefined);
+ assert.equal(typeof r.document.getElementById('driverNavigateLink').onclick,'function');
  await r.run('updateDriverNavigation(state.active,true)');assert.equal(requests,2);
 });
 
+test('driver navigation checks the live stage and keeps protected routes in FLETYA',async()=>{
+ const r=runtime();const calls=[];
+ r.context.navigator.geolocation.getCurrentPosition=send=>send({coords:{latitude:21.133,longitude:-86.85}});
+ r.context.window.location.assign=()=>assert.fail('A protected route opened Google Maps');
+ r.api.functions={invoke:async(_name,{body})=>{
+   calls.push(body);return {data:{polyline:'_p~iF~ps|U_ulLnnqC_mqNvxq`@',navigation_mode:'fletya',distance_km:19.5}};}};
+ r.run("activeSessionRole='driver';state.active={id:'nav',driver_id:'driver-1',status:'picked_up',origin:'A',destination:'21.10, -86.77'}");
+ await r.run('updateDriverNavigation(state.active)');
+ await r.run("document.getElementById('driverNavigateLink').onclick()");
+ assert.equal(calls[1].purpose,'navigation');
+ assert.equal(calls[1].origin,'21.133,-86.85');
+ assert.equal(calls[1].destination,'21.10, -86.77');
+ assert.match(r.document.getElementById('driverRouteInfo').textContent,/sin cruzar el Puente Nichupté/);
+});
 test('server-referenced GPS age ignores client clocks one hour ahead or behind',async()=>{
  for(const skew of [-3600000,3600000]){
   const r=runtime();const server='2026-11-09T15:45:51Z',received='2026-11-09T15:45:07Z';

@@ -1,5 +1,6 @@
 package app.fletya.driver;
 
+import app.fletya.maps.RouteMapActivity;
 import android.Manifest;
 import android.app.*;
 import android.content.*;
@@ -27,7 +28,7 @@ public final class MainActivity extends Activity {
     private TextView message;
     private ScrollView currentScroll;
     private String renderedScreen = "";
-    private boolean visible, busy, permissionExplained;
+    private boolean visible, busy, requestingNotices;
     private long revision;
     private String screen = "login";
     private JSONObject active;
@@ -176,7 +177,7 @@ public final class MainActivity extends Activity {
             String secret = password.getText().toString();
             if (address.trim().isEmpty() || secret.trim().isEmpty()) { message.setText("Escribe tu correo y contraseña."); return; }
             task(() -> { api.login(address, secret); return true; }, result -> {
-                password.setText(""); permissionExplained = false; screen = "home"; refresh();
+                password.setText(""); screen = "home"; refresh();
             });
         });
         button(box,"Crear cuenta de fletero",this::registrationScreen);
@@ -185,7 +186,7 @@ public final class MainActivity extends Activity {
     }
     private record Panel(JSONObject profile, JSONArray active, JSONArray offers) {}
     private void refresh() {
-        if (busy || !visible || !api.signedIn()) return;
+        if (busy || !visible || requestingNotices || !api.signedIn()) return;
         if ("history".equals(screen)) { history(); return; }
         if ("profile".equals(screen)) return;
         task(() -> {
@@ -203,6 +204,9 @@ public final class MainActivity extends Activity {
                 text(pending,"Completa tu nombre, teléfono, vehículo y placas en Mi perfil. Administración debe revisar tu cuenta antes de que puedas recibir o aceptar servicios.",16,false);
                 button(pending,"Completar mi perfil",this::profile);button(root,"Consultar aprobación",this::refresh);message.setText("");return;
             }
+            if (panel.active().length() == 0 && PushManager.shouldRequestOnFirstUse(this)) {
+                requestNoticePermission();
+            }
             active = panel.active().length() == 1 ? panel.active().getJSONObject(0) : null;
             if (panel.active().length() > 1) {
                 clearRoute();
@@ -214,6 +218,12 @@ public final class MainActivity extends Activity {
                 JSONObject job = active;
                 LinearLayout box = card("Mi servicio actual");
                 jobDetails(box, job);
+                if ("accepted".equals(job.optString("status"))) {
+                    text(box, "Confirmando el cobro con Stripe. Espera antes de iniciar la recogida.", 16, true);
+                    button(root, "Actualizar panel", this::refresh);
+                    message.setText("");
+                    return;
+                }
                 boolean picked = "picked_up".equals(job.optString("status"));
                 text(box, picked ? "Carga recogida · Lleva la carga al destino" : "En camino a recoger", 17, true);
                 button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job));
@@ -221,7 +231,11 @@ public final class MainActivity extends Activity {
                 button(box, picked ? "Completar servicio" : "Carga recogida", () -> confirmTransition(job, picked ? "completed" : "picked_up"));
                 if (!picked) button(box, "Liberar antes de recoger", () -> release(job));
                 text(box, TrackingService.report(), 14, false);
-                button(box, "Revisar permisos y activar ubicación", () -> requestTracking(null, true));
+                if (!trackingPermissionsGranted()) {
+                    button(box, "Revisar permisos y activar ubicación", () -> requestTracking(null, true));
+                } else if (!TrackingService.runningFor(job.optString("id"))) {
+                    button(box, "Reintentar seguimiento", () -> requestTracking(null, true));
+                }
                 requestTracking(null, false);
                 LinearLayout mapBox = card("Ruta de recogida a entrega");
                 text(mapBox, "Referencia del servicio. Usa Navegar para recibir indicaciones desde tu ubicación.", 13, false);
@@ -229,6 +243,13 @@ public final class MainActivity extends Activity {
                 if (routeMap.getParent() instanceof ViewGroup parent) parent.removeView(routeMap);
                 mapBox.addView(routeMap);
                 routeMap.show(job, api.userId());
+                if (BuildConfig.NATIVE_ROUTE_MAP) {
+                    button(mapBox, "Ver ruta en mapa", () -> task(() -> {
+                        JSONObject route = api.route(job.getString("id"));
+                        return route.has("points") ? RouteMapData.fromLongitudeFirst(route.getJSONArray("points"))
+                            : RouteMapData.decode(route.getString("polyline"));
+                    }, points -> RouteMapActivity.show(this, points)));
+                }
             } else {
                 clearRoute();
                 stopService(new Intent(this, TrackingService.class));
@@ -254,7 +275,8 @@ public final class MainActivity extends Activity {
         menu.getMenu().add(0, 2, 1, "Mi perfil");
         menu.getMenu().add(0, 3, 2, "Mis servicios completados");
         if (BuildConfig.PUSH_ENABLED) menu.getMenu().add(0, 4, 3, "Avisos de solicitudes");
-        menu.getMenu().add(0, 5, 4, "Cerrar sesión");
+        menu.getMenu().add(0, 6, 4, "Comisión en efectivo");
+        menu.getMenu().add(0, 5, 5, "Cerrar sesión");
         menu.setOnMenuItemClickListener(item -> {
             if (busy) return true;
             switch (item.getItemId()) {
@@ -264,12 +286,15 @@ public final class MainActivity extends Activity {
                 case 4 -> new AlertDialog.Builder(this).setTitle("Avisos de solicitudes")
                     .setMessage(PushManager.report()).setNegativeButton("Volver", null)
                     .setPositiveButton("Activar avisos", (d, w) -> {
-                        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18);
+                        if (PushManager.shouldRequestOnFirstUse(this)
+                            || (Build.VERSION.SDK_INT >= 33 && shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))) {
+                            requestNoticePermission();
+                        }
                         else if (!PushManager.permitted(this)) open("package:" + getPackageName(), android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                         else { PushManager.tokenChanged(this, api); message.setText(PushManager.report()); }
                     }).show();
                 case 5 -> confirmLogout();
+                case 6 -> showCashCommissionCuts();
                 default -> { return false; }
             }
             return true;
@@ -283,36 +308,65 @@ public final class MainActivity extends Activity {
         text(box, job.optString("distance_km", "—") + " km · Ayudantes: " + job.optInt("helpers"), 15, false);
         NumberFormat money = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX"));
         text(box, money.format(job.optDouble("price", 0)) + " MXN", 24, true).setTextColor(TEAL);
+        if ("cash".equals(job.optString("payment_method"))) {
+            text(box, "Cobras en efectivo al entregar", 16, true);
+        }
+        if (BuildConfig.TEST_ROUTE_PRICING && !job.isNull("test_driver_payout")) {
+            text(box, "Recibes " + money.format(job.optDouble("test_driver_payout")) + " MXN", 16, true);
+        }
     }
     private String vehicleLabel(String value) {
         return switch (value) { case "pickup" -> "Pickup / Estaquita"; case "camioneta" -> "Camioneta"; case "camion" -> "Camión"; default -> "Sin registrar"; };
+    }
+    private void requestNoticePermission() {
+        PushManager.markPermissionRequested(this);
+        requestingNotices = true;
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18);
+    }
+    private boolean preciseLocationGranted() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+    private boolean noticePermissionGranted() {
+        return Build.VERSION.SDK_INT < 33
+            || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+    }
+    private boolean trackingPermissionsGranted() {
+        return preciseLocationGranted() && noticePermissionGranted();
     }
     private void requestTracking(String acceptingId, boolean explicit) {
         if (!visible) return;
         if (acceptingId == null && active == null) return;
         if (acceptingId == null && TrackingService.runningFor(active.optString("id"))) return;
-        boolean fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        boolean notifications = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        if (fine && notifications) { afterPermissions(acceptingId); return; }
-        if (!explicit && permissionExplained) return;
-        permissionExplained = true;
+        if (trackingPermissionsGranted()) { afterPermissions(acceptingId); return; }
+        if (!explicit) return;
         new AlertDialog.Builder(this).setTitle("Ubicación durante tu servicio")
-            .setMessage("FLETYA compartirá tu ubicación con el cliente del servicio activo, incluso mientras usas Google Maps o apagas la pantalla. Verás un aviso de seguimiento. Se detendrá al completar, liberar el servicio o cerrar sesión. Permite ubicación precisa y notificaciones para esta prueba.")
+            .setMessage("FLETYA compartirá tu ubicación con el cliente del servicio activo, incluso mientras usas Google Maps o apagas la pantalla. Verás un aviso de seguimiento. Se detendrá al completar, liberar el servicio o cerrar sesión. Se te pedirán los permisos pendientes.")
             .setPositiveButton("Continuar", (dialog, which) -> {
                 permissionAcceptId = acceptingId;
-                if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS}, 17);
-                else requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 17);
+                var missing = new java.util.ArrayList<String>();
+                if (!preciseLocationGranted()) {
+                    missing.add(Manifest.permission.ACCESS_FINE_LOCATION);
+                    missing.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+                }
+                if (!noticePermissionGranted()) {
+                    PushManager.markPermissionRequested(this);
+                    missing.add(Manifest.permission.POST_NOTIFICATIONS);
+                }
+                if (missing.isEmpty()) afterPermissions(acceptingId);
+                else requestPermissions(missing.toArray(new String[0]), 17);
             }).setNegativeButton("Ahora no", null).show();
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == 18) {
+            requestingNotices = false;
+            if (api.signedIn()) { PushManager.activate(this, api); refresh(); }
+            return;
+        }
         if (!api.signedIn()) return;
-        if (requestCode == 18) { PushManager.activate(this, api); refresh(); return; }
         if (requestCode != 17) return;
         String acceptingId = permissionAcceptId; permissionAcceptId = null;
-        boolean fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        boolean notifications = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        if (fine && notifications) afterPermissions(acceptingId);
+        if (trackingPermissionsGranted()) afterPermissions(acceptingId);
         else {
             message.setText("Se necesita ubicación precisa y notificaciones para activar el seguimiento.");
             new AlertDialog.Builder(this).setMessage("Puedes habilitar los permisos desde los ajustes de esta app.")
@@ -324,7 +378,7 @@ public final class MainActivity extends Activity {
         if (acceptingId != null) {
             new AlertDialog.Builder(this).setTitle("¿Aceptar este servicio?")
                 .setMessage("Al aceptar comenzarás a compartir ubicación para recoger y entregar la carga.")
-                .setPositiveButton("Aceptar", (d, w) -> task(() -> api.transition(acceptingId, "requested", "en_route", null), job -> {
+                .setPositiveButton("Aceptar", (d, w) -> task(() -> api.acceptOffer(acceptingId), job -> {
                     active = job; startTracker(); refresh();
                 })).setNegativeButton("Cancelar", null).show();
         } else startTracker();
@@ -337,15 +391,75 @@ public final class MainActivity extends Activity {
             catch (RuntimeException error) { message.setText("No se pudo iniciar el seguimiento. Revisa los permisos y vuelve a intentar."); }
         }
     }
+    private void showCashCommissionCuts() {
+        task(api::cashCommissionCuts, cuts -> {
+            screen = "cash-cuts";
+            shell();
+            LinearLayout header = card("Comisión en efectivo");
+            text(header, "El corte cierra el domingo y se paga hasta el martes siguiente.", 15, false);
+            if (cuts.length() == 0) text(header, "Aún no tienes comisiones en efectivo.", 15, false);
+            NumberFormat money = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX"));
+            for (int i = 0; i < cuts.length(); i++) {
+                JSONObject cut = cuts.getJSONObject(i);
+                String state = cut.optInt("pending_count") == 0 ? "Pagado" : cut.optBoolean("closed") ? "Cerrado" : "En curso";
+                LinearLayout box = card("Semana del " + cut.optString("week_start") + " · " + state);
+                text(box, "Pendiente: " + money.format(cut.optLong("pending_cents") / 100.0) + " MXN", 16, true);
+                text(box, "Fecha límite: " + cut.optString("due_on"), 15, false);
+                if (cut.optBoolean("closed") && cut.optInt("pending_count") > 0) {
+                    JSONObject account = cut.optJSONObject("spei_account");
+                    String reference = cut.optString("spei_reference", "");
+                    if (account == null || reference.isEmpty()) {
+                        text(box, "Los datos para transferir aún no están disponibles.", 15, false);
+                    } else {
+                        String clabe = account.getString("clabe");
+                        text(box, "Transferencia SPEI · " + account.getString("bank"), 16, true);
+                        text(box, "Beneficiario: " + account.getString("beneficiary"), 15, false);
+                        text(box, "CLABE: " + clabe, 15, false);
+                        text(box, "Referencia SPEI: " + reference, 15, false);
+                        button(box, "Copiar CLABE", () -> copyPaymentField("CLABE", clabe));
+                        button(box, "Copiar referencia", () -> copyPaymentField("Referencia SPEI", reference));
+                    }
+                }
+                JSONArray jobs = cut.getJSONArray("jobs");
+                for (int j = 0; j < jobs.length(); j++) {
+                    JSONObject job = jobs.getJSONObject(j);
+                    text(box, job.optString("date") + " · " + money.format(job.optLong("commission_cents") / 100.0)
+                        + " · " + (job.optBoolean("settled") ? "Pagado" : "Pendiente")
+                        + "\n" + job.optString("id"), 14, false);
+                }
+            }
+            button(root, "Actualizar cortes", this::showCashCommissionCuts);
+            button(root, "Volver al panel", () -> { screen = "home"; refresh(); });
+            message.setText("");
+        });
+    }
+
+    private void copyPaymentField(String label, String value) {
+        ClipboardManager clipboard = getSystemService(ClipboardManager.class);
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, value));
+        message.setText(label + " copiada.");
+    }
+
     private void confirmTransition(JSONObject job, String next) {
         boolean complete = "completed".equals(next);
-        new AlertDialog.Builder(this).setTitle(complete ? "¿Completaste la entrega?" : "¿Ya recogiste la carga?")
-            .setMessage(complete ? "El servicio quedará completado y dejarás de compartir ubicación." : "Después de confirmar la recogida ya no podrás liberar el servicio.")
-            .setPositiveButton("Confirmar", (d, w) -> task(() -> api.transition(job.optString("id"), job.optString("status"), next, null), updated -> {
-                if (complete) { stopService(new Intent(this, TrackingService.class)); active = null; }
-                else active = updated;
-                refresh();
-            })).setNegativeButton("Cancelar", null).show();
+        boolean cash = complete && "cash".equals(job.optString("payment_method"));
+        String id = job.optString("id");
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this)
+            .setTitle(cash ? "¿Recibiste el efectivo?" : complete ? "¿Completaste la entrega?" : "¿Ya recogiste la carga?")
+            .setMessage(cash ? "Confirma cuando hayas entregado la carga y recibido el efectivo completo."
+                : complete ? "El servicio quedará completado y dejarás de compartir ubicación."
+                : "Después de confirmar la recogida ya no podrás liberar el servicio.")
+            .setPositiveButton(cash ? "Sí, recibí el efectivo" : "Confirmar", (d, w) -> task(
+                () -> cash ? api.completeCashDelivery(id) : api.transition(id, job.optString("status"), next, null), updated -> {
+                    if (complete) { stopService(new Intent(this, TrackingService.class)); active = null; }
+                    else active = updated;
+                    refresh();
+                }))
+            .setNegativeButton("Cancelar", null);
+        if (cash) dialog.setNeutralButton("Reportar falta de pago", (d, w) ->
+            task(() -> { api.reportCashCollectionIssue(id); return true; },
+                ignored -> message.setText("Avisaste a Administración. El servicio sigue abierto.")));
+        dialog.show();
     }
     private void release(JSONObject job) {
         EditText reason = new EditText(this); reason.setHint("Motivo de 10 a 300 caracteres"); reason.setMinLines(2);
@@ -361,10 +475,29 @@ public final class MainActivity extends Activity {
         })); dialog.show();
     }
     private void navigate(JSONObject job) {
-        String point = DriverRules.navigationPoint(job.optString("status"), job.optString("origin"), job.optString("destination"));
-        if (point.trim().isEmpty()) { message.setText("No hay una ubicación válida para navegar."); return; }
-        if (!point.matches("\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*") && !point.toLowerCase(Locale.ROOT).contains("méxico")) point += ", Quintana Roo, México";
-        open("https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination=" + Uri.encode(point));
+        String id = job.optString("id");
+        String status = job.optString("status");
+        var fix = TrackingService.recentNavigationFix(id);
+        if (fix == null) {
+            message.setText("Espera una ubicación GPS reciente y vuelve a tocar Navegar.");
+            requestTracking(null, false);
+            return;
+        }
+        String origin = fix.getLatitude() + "," + fix.getLongitude();
+        task(() -> api.navigationRoute(id, status, origin), route -> {
+            if (active == null || !id.equals(active.optString("id")) || !status.equals(active.optString("status"))) return;
+            if ("external".equals(route.optString("navigation_mode"))) {
+                open("https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination="
+                    + Uri.encode(route.getString("navigation_destination")));
+                return;
+            }
+            RouteMapView map = new RouteMapView(this, api);
+            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Ruta para carga")
+                .setView(map).setPositiveButton("Cerrar", null).create();
+            dialog.setOnDismissListener(ignored -> map.dispose());
+            dialog.show();
+            map.showNavigation(route);
+        });
     }
     private void open(String uri) { open(uri, Intent.ACTION_VIEW); }
     private void open(String uri, String action) {
@@ -417,7 +550,7 @@ public final class MainActivity extends Activity {
                 task(() -> {
                     try { api.unregisterPush(registration[0], registration[1]); } catch (Exception ignored) { /* Local nonce already invalid. */ }
                     api.logout(); return true;
-                }, result -> { revision++; active = null; permissionExplained = false; loginScreen(); });
+                }, result -> { revision++; active = null; loginScreen(); });
             }).setNegativeButton("Cancelar", null).show();
     }
 }

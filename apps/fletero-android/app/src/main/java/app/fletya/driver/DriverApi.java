@@ -123,7 +123,7 @@ public final class DriverApi {
     }
     public synchronized JSONArray activeJobs() throws Exception {
         token();
-        return get("jobs?select=*&driver_id=eq." + eq(userId()) + "&status=in.(en_route,picked_up)&order=created_at.desc,id.desc&limit=2");
+        return get("jobs?select=*&driver_id=eq." + eq(userId()) + "&status=in.(" + ("PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? "accepted,en_route,picked_up" : "en_route,picked_up") + ")&order=created_at.desc,id.desc&limit=2");
     }
     public synchronized JSONArray offers() throws Exception {
         return get("jobs?select=*&status=eq.requested&driver_id=is.null&order=created_at.desc,id.desc&limit=20");
@@ -136,6 +136,18 @@ public final class DriverApi {
         JSONArray rows = get("jobs?select=*&id=eq." + eq(id));
         return rows.length() == 1 ? rows.getJSONObject(0) : null;
     }
+    public synchronized JSONObject acceptOffer(String id) throws Exception {
+        if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+            JSONObject offer = job(id);
+            if (offer != null && "held".equals(offer.optString("sandbox_card_state"))) {
+                JSONObject body = new JSONObject().put("action","accept_card").put("id",id);
+                return new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body())
+                    .getJSONObject("job");
+            }
+        }
+        return transition(id, "requested", "en_route", null);
+    }
+
     public synchronized JSONObject transition(String id, String from, String to, String reason) throws Exception {
         token();
         String user = userId();
@@ -165,6 +177,24 @@ public final class DriverApi {
             throw new Failure(409, "No se pudo confirmar el cambio de estado.");
         return job;
     }
+    public synchronized JSONObject completeCashDelivery(String id) throws Exception {
+        var job = new JSONObject(call("POST", "/rest/v1/rpc/complete_cash_delivery",
+            new JSONObject().put("p_job", id), null).body());
+        if (!id.equals(job.optString("id")) || !userId().equals(job.optString("driver_id"))
+            || !"completed".equals(job.optString("status")) || job.isNull("cash_collected_at")) {
+            throw new Failure(409, "No se pudo confirmar la entrega en efectivo.");
+        }
+        return job;
+    }
+
+    public synchronized JSONArray cashCommissionCuts() throws Exception {
+        return new JSONArray(call("POST", "/rest/v1/rpc/cash_commission_cuts", new JSONObject(), null).body());
+    }
+
+    public synchronized void reportCashCollectionIssue(String id) throws Exception {
+        call("POST", "/rest/v1/rpc/report_cash_collection_issue", new JSONObject().put("p_job", id), null);
+    }
+
     public synchronized void arrive(String jobId,String stop) throws Exception {
         JSONObject current=job(jobId);
         String expected="pickup".equals(stop)?"en_route":"delivery".equals(stop)?"picked_up":"";
@@ -201,10 +231,31 @@ public final class DriverApi {
         check(response);
         return true;
     }
+    public synchronized JSONObject navigationRoute(String jobId, String status, String origin) throws Exception {
+        JSONObject assigned = job(jobId);
+        if (assigned == null || !status.equals(assigned.optString("status")) ||
+            !DriverRules.ownsActive(status, assigned.optString("driver_id"), userId()))
+            throw new Failure(409, "Cambió el servicio. Actualiza el panel antes de navegar.");
+        String destination = DriverRules.navigationPoint(status, assigned.optString("origin"), assigned.optString("destination"));
+        if (destination.trim().isEmpty()) throw new Failure(400, "No hay ubicación de destino.");
+        if (!destination.matches("\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*")
+            && !destination.toLowerCase(java.util.Locale.ROOT).contains("méxico")) {
+            destination += ", Quintana Roo, México";
+        }
+        JSONObject route = new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
+            .put("origin", origin).put("destination", destination).put("purpose", "navigation"), null).body());
+        return route.put("navigation_destination", destination);
+    }
     public synchronized JSONObject route(String jobId) throws Exception {
         JSONObject assigned = job(jobId);
         if (assigned == null || !DriverRules.ownsActive(assigned.optString("status"), assigned.optString("driver_id"), userId()))
             throw new Failure(403, "El servicio ya no está asignado a tu cuenta.");
+        if (!assigned.isNull("route_quote_id")) {
+            JSONObject route = new JSONObject(call("POST", "/rest/v1/rpc/get_job_delivery_route",
+                new JSONObject().put("p_job", jobId), null).body());
+            if (!route.optBoolean("available")) throw new Failure(409, "La ruta ya no está disponible.");
+            return route;
+        }
         return new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
             .put("origin", assigned.optString("origin")).put("destination", assigned.optString("destination")), null).body());
     }

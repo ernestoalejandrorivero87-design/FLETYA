@@ -40,19 +40,41 @@ final class RouteMapView extends LinearLayout {
         worker.execute(() -> {
             try {
                 JSONObject route = api.route(requestedId);
-                String coordinates = RouteMapData.decode(route.optString("polyline")).toString();
+                String coordinates = (route.has("points") ? RouteMapData.fromLongitudeFirst(route.getJSONArray("points"))
+                    : RouteMapData.decode(route.getString("polyline"))).toString();
                 String css = asset("leaflet.css"), js = asset("leaflet.js");
                 String detail = route.optString("distance_km", "—") + " km · " + route.optString("duration_text", "");
                 post(() -> {
                     if (disposed || generation != request || !requestedOwner.equals(api.userId())) return;
-                    try { render(css, js, coordinates); status.setText(detail); retry.setText("Recargar mapa"); retry.setVisibility(VISIBLE); }
-                    catch (RuntimeException error) { clearMap(); status.setText("No se pudo abrir el mapa. Puedes usar Navegar."); retry.setVisibility(VISIBLE); }
+                    try { render(css, js, coordinates, false); status.setText(detail); retry.setText("Recargar mapa"); retry.setVisibility(VISIBLE); }
+                    catch (RuntimeException error) { clearMap(); status.setText("No se pudo abrir el mapa. Reintenta."); retry.setVisibility(VISIBLE); }
                 });
             } catch (Exception error) {
                 post(() -> {
                     if (disposed || generation != request || !requestedOwner.equals(api.userId())) return;
-                    status.setText("No se pudo cargar la ruta. Revisa tu conexión o usa Navegar."); retry.setVisibility(VISIBLE);
+                    status.setText("No se pudo cargar la ruta. Revisa tu conexión y reintenta."); retry.setVisibility(VISIBLE);
                 });
+            }
+        });
+    }
+    void showNavigation(JSONObject route) {
+        worker.execute(() -> {
+            try {
+                String coordinates = RouteMapData.decode(route.getString("polyline")).toString();
+                String css = asset("leaflet.css"), js = asset("leaflet.js");
+                post(() -> {
+                    if (disposed) return;
+                    try {
+                        render(css, js, coordinates, true);
+                        status.setText(route.optString("distance_km") + " km · " + route.optString("duration_text")
+                            + "\nSigue la línea marcada. Ruta para carga sin cruzar el Puente Nichupté.");
+                    } catch (RuntimeException failure) {
+                        clearMap();
+                        status.setText("No se pudo abrir la ruta. Cierra y vuelve a calcularla.");
+                    }
+                });
+            } catch (Exception failure) {
+                post(() -> { if (!disposed) status.setText("No se pudo mostrar la ruta. Cierra y vuelve a calcularla."); });
             }
         });
     }
@@ -60,7 +82,7 @@ final class RouteMapView extends LinearLayout {
         try (var input = getContext().getAssets().open(name)) { var output = new java.io.ByteArrayOutputStream(); byte[] buffer = new byte[8192]; int count; while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count); return output.toString(StandardCharsets.UTF_8.name()); }
     }
     @SuppressLint({"SetJavaScriptEnabled", "ClickableViewAccessibility"})
-    private void render(String css, String js, String points) {
+    private void render(String css, String js, String points, boolean navigation) {
         map = new WebView(getContext());
         map.getSettings().setJavaScriptEnabled(true);
         map.getSettings().setAllowFileAccess(false); map.getSettings().setAllowContentAccess(false);
@@ -88,12 +110,12 @@ final class RouteMapView extends LinearLayout {
         String html = "<!doctype html><html lang='es'><meta name='viewport' content='width=device-width,initial-scale=1'>"
             + "<meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src https://tile.openstreetmap.org data:; style-src 'unsafe-inline'; script-src 'unsafe-inline';\">"
             + "<style>" + css + "html,body,#map{height:100%;margin:0}#notice{position:absolute;bottom:24px;left:8px;z-index:999;background:white;font:12px sans-serif;padding:4px}</style>"
-            + "<div id='map' aria-label='Ruta del servicio'></div><div id='notice' hidden>Mapa base sin conexión. Usa Navegar o reintenta el mapa.</div><script>" + js
+            + "<div id='map' aria-label='Ruta del servicio'></div><div id='notice' hidden>Mapa base sin conexión. Reintenta al recuperar la señal.</div><script>" + js
             + "\nconst points=" + points + ";const map=L.map('map',{scrollWheelZoom:false});"
             + "L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors'}).on('tileerror',()=>document.getElementById('notice').hidden=false).addTo(map);"
             + "const line=L.polyline(points,{color:'#087f88',weight:5}).addTo(map);map.fitBounds(line.getBounds(),{padding:[25,25]});"
-            + "L.circleMarker(points[0],{radius:8,color:'#087f88',fillOpacity:1}).addTo(map).bindTooltip('Recogida');"
-            + "L.circleMarker(points[points.length-1],{radius:8,color:'#c85229',fillOpacity:1}).addTo(map).bindTooltip('Entrega');</script></html>";
+            + "L.circleMarker(points[0],{radius:8,color:'#087f88',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Tu ubicación" : "Recogida") + "');"
+            + "L.circleMarker(points[points.length-1],{radius:8,color:'#c85229',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Destino de esta etapa" : "Entrega") + "');</script></html>";
         map.loadDataWithBaseURL("https://fletya.vercel.app/", html, "text/html", "UTF-8", null);
     }
     private void clearMap() {

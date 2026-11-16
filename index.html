@@ -183,7 +183,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <div class="card"><h2>Trabajo actual y solicitudes</h2><div id="jobCard"><span class="pill">Cargando servicios…</span></div></div>
 <section id="driverNavigation" class="card" style="margin-top:18px" hidden>
 <h2 id="driverNavigationTitle">Ruta del servicio</h2><p id="driverNavigationAddress"></p>
-<a id="driverNavigateLink" class="btn" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none">Abrir Google Maps</a>
+<button id="driverNavigateLink" class="btn" type="button">Navegar</button>
 <p class="muted">Google Maps abre las indicaciones desde tu ubicación actual. Al abrir otra app, el navegador puede pausar el GPS de FLETYA.</p>
 <h3>Ruta de entrega: origen → destino</h3><div id="driverRouteMap" style="height:280px;border-radius:12px;overflow:hidden"></div>
 <p id="driverRouteInfo" class="muted" role="status"></p>
@@ -208,26 +208,31 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <button id="saveRecoveryPassword" class="btn" onclick="finishPasswordRecovery()">Guardar contraseña nueva</button><p id="passwordRecoveryMessage" role="status"></p>
 </section>
 <section id="admin" class="hidden">
+<div class="card hidden" id="sandboxRefunds">
+  <h2>Reembolsos de tarjeta · Pruebas</h2>
+  <button class="btn light" type="button" onclick="loadSandboxRefunds()">Consultar reembolsos</button>
+  <div id="sandboxRefundCases" aria-live="polite"></div>
+</div>
 <div class="card"><h2>Nuevas cuentas de fletero</h2><p>Revisa los datos y la documentación del conductor antes de autorizar su acceso al piloto.</p><button class="btn light" onclick="loadDriverApplications()">Consultar cuentas pendientes</button><div id="driverApplications"></div></div>
 <div class="hero"><h1>FLETYA Admin</h1><p>Control básico de servicios, ventas y comisión.</p></div>
 <div class="grid">
 <div class="card"><h3>Servicios</h3><div class="price" id="jobsCount">0</div><span class="muted">solicitudes</span></div>
-<div class="card"><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
-<div class="card"><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
-<div class="card"><h3>Fletero recibe</h3><div class="price" id="driverNet">$0</div><span class="muted">85% en este demo</span></div>
+<div class="card" data-legacy-finances><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
+<div class="card" data-legacy-finances><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
+<div class="card" data-legacy-finances><h3>Fletero recibe</h3><div class="price" id="driverNet">$0</div><span class="muted">85% en este demo</span></div>
  <div class="card"><h3>🟡 Solicitados</h3><div class="price" id="requestedCount">0</div><span class="muted">servicios pendientes</span></div>
 <div class="card"><h3>🔵 En camino</h3><div class="price" id="enRouteCount">0</div><span class="muted">servicios activos</span></div>
 <div class="card"><h3>🟢 Completados</h3><div class="price" id="completedCount">0</div><span class="muted">servicios terminados</span></div>
 <div class="card"><h3>⚪ Cancelados</h3><div class="price" id="cancelledCount">0</div><span class="muted">solicitudes canceladas</span></div>
- <div class="card"><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">ventas realizadas</span></div>
+ <div class="card" data-legacy-finances><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">ventas realizadas</span></div>
 
 <div class="card"><h3>🚚 Servicios del mes</h3><div class="price" id="monthlyJobs">0</div><span class="muted">servicios registrados</span></div>
 
-<div class="card"><h3>💵 Comisión del mes</h3><div class="price" id="monthlyCommission">$0</div><span class="muted">15% de comisión</span></div>
+<div class="card" data-legacy-finances><h3>💵 Comisión del mes</h3><div class="price" id="monthlyCommission">$0</div><span class="muted">15% de comisión</span></div>
 </div>
  <div class="card" style="margin-top:18px">
   <h2>📊 Reporte financiero</h2>
-  <p class="muted">Consulta el rendimiento de FLETYA por período. Los importes excluyen solicitudes canceladas.</p>
+  <p class="muted" data-legacy-finances>Consulta el rendimiento de FLETYA por período. Los importes excluyen solicitudes canceladas.</p>
 <p class="muted" id="reportPeriodLabel">📅 Período: Este mes</p>
   <select
     id="adminReportPeriod"
@@ -240,7 +245,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
     <option value="all">Todo el tiempo</option>
   </select>
 
-  <div class="grid" style="margin-top:12px">
+  <div class="grid" style="margin-top:12px" data-legacy-finances>
     <div class="card">
       <h3>💰 Ventas</h3>
       <div class="price" id="reportSales">$0</div>
@@ -261,6 +266,23 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
       <div class="price" id="reportDriverNet">$0</div>
     </div>
   </div>
+  <section id="sandboxFinances" class="hidden">
+    <h3>Pagos de Stripe · Pruebas</h3>
+    <p class="muted">Agrupados por fecha de creación del servicio. Los importes de fleteros corresponden a servicios completados.</p>
+    <form onsubmit="event.preventDefault();renderAdmin()">
+      <label for="sandboxFinanceJobId">ID del servicio (opcional)</label>
+      <input id="sandboxFinanceJobId" type="search" placeholder="Pega el ID completo">
+      <button class="btn light" type="submit">Aplicar filtro</button>
+    </form>
+    <div class="grid" style="margin-top:12px">
+      <div class="card"><h3>Cobros confirmados</h3><div class="price" id="sandboxGross">$0.00</div></div>
+      <div class="card"><h3>Reembolsos confirmados</h3><div class="price" id="sandboxRefundsTotal">$0.00</div></div>
+      <div class="card"><h3>Cobros netos del cliente</h3><div class="price" id="sandboxNet">$0.00</div></div>
+      <div class="card"><h3>Comisión FLETYA</h3><div class="price" id="sandboxCommission">$0.00</div></div>
+      <div class="card"><h3>Neto de fleteros</h3><div class="price" id="sandboxDriverNet">$0.00</div></div>
+      <div class="card"><h3>Pago a fleteros a cargo de FLETYA</h3><div class="price" id="sandboxCovered">$0.00</div></div>
+    </div>
+  </section>
   <div class="card" style="margin-top:18px">
   <h3>📊 Resumen rápido</h3>
   <p class="muted">Estado actual de los servicios</p>
@@ -316,6 +338,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 
   <div id="adminUsersTable"></div><div id="adminUsersPager"></div>
   <div id="driverAccountsTable" style="margin-top:18px"></div><div id="adminAccountsPager"></div>
+  <div id="adminCashCuts" class="card hidden"></div>
  </div>
 </section>
 </main>
@@ -1753,7 +1776,7 @@ function driverDirectionsUrl(job){
 function clearDriverNavigation(){
  driverRouteRequest++;driverRouteKey='';driverRoutePending=null;driverRouteReady=false;
  const box=document.getElementById('driverNavigation');box.hidden=true;
- document.getElementById('driverNavigateLink').removeAttribute('href');
+ document.getElementById('driverNavigateLink').onclick=null;
  document.getElementById('driverNavigationAddress').textContent='';
  document.getElementById('driverRouteInfo').textContent='';
  if(driverRouteMap)driverRouteMap.remove?.();
@@ -1761,13 +1784,13 @@ function clearDriverNavigation(){
 }
 async function updateDriverNavigation(job,force=false){
  if(!job||!isDriverActiveStatus(job.status)||activeSessionRole!=='driver'||logoutPending){clearDriverNavigation();return;}
- const url=driverDirectionsUrl(job),box=document.getElementById('driverNavigation'),link=document.getElementById('driverNavigateLink');
+ const box=document.getElementById('driverNavigation'),link=document.getElementById('driverNavigateLink');
  box.hidden=false;
  const pickup=job.status==='en_route';
  document.getElementById('driverNavigationTitle').textContent=pickup?'Ve a recoger la carga':'Lleva la carga al destino';
  document.getElementById('driverNavigationAddress').textContent=(pickup?'Recogida: ':'Entrega: ')+(pickup?job.origin:job.destination);
  link.textContent=pickup?'Navegar al origen':'Navegar al destino';
- if(url)link.setAttribute('href',url);else link.removeAttribute('href');
+ link.onclick=()=>navigateDriverFromCurrentPosition(job);
  const key=JSON.stringify([sessionRevision,job.id,job.driver_id,job.origin,job.destination]);
  if(key===driverRouteKey&&!force){if(driverRoutePending)return driverRoutePending;if(driverRouteReady)return;return;}
  const revision=sessionRevision,request=++driverRouteRequest;
@@ -1792,10 +1815,45 @@ async function updateDriverNavigation(job,force=false){
   driverRouteLayers=[line,L.marker(originPoint?[originPoint.lat,originPoint.lng]:points[0]).addTo(driverRouteMap).bindPopup('Recogida'),L.marker(destPoint?[destPoint.lat,destPoint.lng]:points[points.length-1]).addTo(driverRouteMap).bindPopup('Entrega')];
   driverRouteMap.fitBounds(line.getBounds(),{padding:[25,25]});driverRouteReady=true;
   info.textContent=(data.distance_km??job.distance_km??'—')+' km · '+(data.duration_text||'Tiempo estimado')+' · Vista de referencia de la entrega';
- }catch(error){if(revision===sessionRevision&&request===driverRouteRequest&&!logoutPending)info.textContent='No se pudo cargar el mapa de la ruta. Puedes usar el botón de Google Maps o volver a intentarlo.';}
+ }catch(error){if(revision===sessionRevision&&request===driverRouteRequest&&!logoutPending)info.textContent='No se pudo cargar el mapa de la entrega. Vuelve a intentarlo.';}
  finally{if(request===driverRouteRequest)driverRoutePending=null;}
  })();
  driverRoutePending=work;return work;
+}
+
+async function navigateDriverFromCurrentPosition(job) {
+ const link=document.getElementById('driverNavigateLink'), info=document.getElementById('driverRouteInfo');
+ const url=driverDirectionsUrl(job);
+ if(!url||link.disabled)return;
+ if(!navigator.geolocation?.getCurrentPosition){info.textContent='Activa tu ubicación para calcular la ruta.';return;}
+ const revision=sessionRevision, status=job.status;
+ const current=()=>revision===sessionRevision&&!logoutPending&&activeSessionRole==='driver'&&
+   state.active?.id===job.id&&state.active?.driver_id===job.driver_id&&state.active?.status===status;
+ link.disabled=true;
+ info.textContent='Calculando ruta para carga desde tu ubicación…';
+ try{
+  const position=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,
+    {enableHighAccuracy:true,maximumAge:10000,timeout:12000}));
+  if(!current())return;
+  const origin=position.coords.latitude+','+position.coords.longitude;
+  const destination=prepareRouteAddress(String((status==='en_route'?job.origin:job.destination)||''));
+  const {data,error}=await supabaseClient.functions.invoke('fletya-routes',{body:{origin,destination,purpose:'navigation'}});
+  if(!current())return;
+  const points=data?.polyline?decodePolyline(data.polyline):[];
+  if(error||points.length<2)throw new Error('Route unavailable');
+  if(data.navigation_mode==='external'){window.location.assign(url);return;}
+  const map=driverRouteMap;
+  if(!map)throw new Error('Map unavailable');
+  for(const layer of driverRouteLayers)map.removeLayer(layer);
+  const line=L.polyline(points,{weight:5}).addTo(map);
+  driverRouteLayers=[line,L.marker(points[0]).addTo(map).bindPopup('Tu ubicación'),
+    L.marker(points.at(-1)).addTo(map).bindPopup('Destino de esta etapa')];
+  map.invalidateSize({pan:false});
+  map.fitBounds(line.getBounds(),{padding:[25,25]});
+  info.textContent=(data.distance_km??'—')+' km · '+(data.duration_text||'Tiempo estimado')+
+    ' · Sigue la ruta para carga sin cruzar el Puente Nichupté.';
+ }catch(error){if(current())info.textContent='No se pudo verificar una ruta desde tu ubicación. Revisa el GPS y vuelve a intentarlo.';}
+ finally{link.disabled=false;}
 }
 
 // GPS del fletero: seguimiento exclusivo del servicio activo y de la sesión actual.
@@ -2106,7 +2164,7 @@ async function releaseDriverJob() {
   // Consultar el servicio directamente para no depender de un estado local desactualizado.
   const { data: activeJob, error: activeError } = await supabaseClient
     .from('jobs')
-    .select('id, status')
+    .select('id, status, payment_method')
     .eq('driver_id', user.id)
     .eq('status', 'picked_up')
     .order('created_at', { ascending: false })
@@ -2127,8 +2185,11 @@ async function releaseDriverJob() {
     return;
   }
 
-  const { data: completedJob, error } = await supabaseClient
-    .from('jobs')
+  const cash = activeJob.payment_method === 'cash';
+  if (cash && !window.confirm('¿Ya entregaste la carga y recibiste el efectivo completo?')) return;
+  const { data: completedJob, error } = cash
+    ? await supabaseClient.rpc('complete_cash_delivery', {p_job: activeJob.id})
+    : await supabaseClient.from('jobs')
     .update({ status: 'completed' })
     .eq('id', activeJob.id)
     .eq('driver_id', user.id)
@@ -2252,6 +2313,32 @@ function driverPaymentFor(job) {
   return { total: totalCents / 100, commission: commissionCents / 100,
     net: (totalCents - commissionCents) / 100 };
 }
+function fletyaCoversDriverPayment(job) {
+  return !IS_FLETYA_PRODUCTION_HOST && job.status === 'completed' && Boolean(job.driver_id) &&
+    job.sandbox_payment_method === 'card' && job.sandbox_refund_state === 'confirmed';
+}
+function coveredDriverPaymentStatus(job) {
+  return 'Pago al fletero ' + (job.driver_paid === true ? 'registrado' : 'pendiente') + ' · Cubre FLETYA';
+}
+function summarizeSandboxPayments(jobs) {
+  const cents = { gross: 0, refunded: 0, commission: 0, driverNet: 0, covered: 0 };
+  for (const job of jobs) {
+    // Before manual capture was introduced, a card job was created only after payment.
+    const captured = job.sandbox_payment_method === 'card' &&
+      (job.sandbox_card_state == null || job.sandbox_card_state === 'paid');
+    if (!captured && job.sandbox_payment_method !== 'spei') continue;
+    const payment = driverPaymentFor(job);
+    const refunded = job.sandbox_refund_state === 'confirmed';
+    cents.gross += Math.round(payment.total * 100);
+    if (refunded) cents.refunded += Math.round(payment.total * 100);
+    if (job.status !== 'completed' || !job.driver_id) continue;
+    const net = Math.round(payment.net * 100);
+    cents.driverNet += net;
+    if (fletyaCoversDriverPayment(job)) cents.covered += net;
+    if (!refunded) cents.commission += Math.round(payment.commission * 100);
+  }
+  return { ...cents, net: cents.gross - cents.refunded };
+}
 const paymentJobsInFlight = new Set();
 let currentJobDetailsId = null;
 let jobDetailsRevision = 0;
@@ -2278,8 +2365,10 @@ async function markJobPaid(jobId) {
       return;
     }
     // Read the selected service again before showing the amount to confirm.
+    const paymentFields = 'id, origin, destination, price, driver_id, status, driver_paid, payment_method';
     const { data: job, error: jobError } = await supabaseClient.from('jobs')
-      .select('id, origin, destination, price, driver_id, status, driver_paid, payment_method')
+      .select(IS_FLETYA_PRODUCTION_HOST ? paymentFields
+        : paymentFields + ', sandbox_payment_method, sandbox_refund_state')
       .eq('id', jobId).maybeSingle();
     if (!stillCurrent()) return;
     if (jobError || !job) {
@@ -2297,11 +2386,14 @@ async function markJobPaid(jobId) {
       return;
     }
     const payment = driverPaymentFor(job);
+    const paymentSource = fletyaCoversDriverPayment(job)
+      ? 'Cubre FLETYA. El cliente recibió un reembolso total.'
+      : 'Comisión FLETYA (15% demo): $' + money2(payment.commission) + ' MXN';
     const confirmed = window.confirm(
       '¿Confirmas que ya entregaste $' + money2(payment.net) + ' MXN al fletero por este servicio?\n\n' +
       job.origin + ' → ' + job.destination + '\nID: ' + job.id +
       '\nTotal: $' + money2(payment.total) + ' MXN' +
-      '\nComisión FLETYA (15% demo): $' + money2(payment.commission) + ' MXN' +
+      '\n' + paymentSource +
       '\nNeto del fletero: $' + money2(payment.net) + ' MXN' +
       '\n\nEsto solo registra un pago ya realizado; no transfiere dinero.'
     );
@@ -2364,6 +2456,12 @@ async function renderAdmin(){
     return;
   }
 
+  document.getElementById('sandboxRefunds')?.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
+  document.getElementById('sandboxFinances').classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
+  for (const element of document.querySelectorAll('[data-legacy-finances]')) {
+    element.classList.toggle('hidden', !IS_FLETYA_PRODUCTION_HOST);
+  }
+
   const { data: jobs, error: jobsError } =
     await supabaseClient
       .from('jobs')
@@ -2404,6 +2502,9 @@ const nameById = Object.fromEntries(
     profile.full_name || 'Sin nombre'
   ])
 );
+  const cashCutsPanel = document.getElementById('adminCashCuts');
+  cashCutsPanel.classList.remove('hidden');
+  void renderCashCuts(cashCutsPanel, nameById, revision, renderVersion);
   const search = (document.getElementById('adminSearch')?.value || '').toLowerCase().trim();
 const userSearch =
   (document.getElementById('adminUsersSearch')?.value || '')
@@ -2462,10 +2563,10 @@ const filteredServices = services.filter(job => {
       0
     );
     const commissionCents = driverJobs.reduce(
-      (sum, job) => sum + jobCommissionCents(job),
+      (sum, job) => sum + (fletyaCoversDriverPayment(job) ? 0 : jobCommissionCents(job)),
       0
     );
-    const netCents = totalCents - commissionCents;
+    const netCents = driverJobs.reduce((sum, job) => sum + jobNetCents(job), 0);
     const total = totalCents / 100;
     const commission = commissionCents / 100;
     const net = netCents / 100;
@@ -2487,7 +2588,6 @@ const filteredServices = services.filter(job => {
   net,
   pendingJobs: pendingJobs.length,
   pendingTotal,
-  cashUncollected: driverJobs.filter(job => job.payment_method === 'cash' && !job.cash_collected_at).length,
   cashPending: driverJobs.filter(job => job.payment_method === 'cash' && job.cash_collected_at && !job.cash_commission_settled_at)
     .reduce((sum, job) => sum + jobCommissionCents(job), 0) / 100
 };
@@ -2521,11 +2621,11 @@ const filteredServices = services.filter(job => {
               <td>$${money2(driver.net)}</td>
               <td>$${money2(driver.pendingTotal)}</td><td>$${money2(driver.cashPending)}</td>
               <td>
-  ${driver.cashUncollected > 0
-  ? `<span>Cobros en efectivo por confirmar: ${driver.cashUncollected}</span>`
-  : driver.pendingTotal > 0 || driver.cashPending > 0
-    ? `<span>Abre «Ver» en cada servicio para registrar el pago.</span>`
-    : `<span>Sin pagos pendientes</span>`
+  ${driver.cashPending > 0
+    ? '<span>Revisa los cortes de efectivo.</span>'
+    : driver.pendingTotal > 0
+      ? '<span>Abre «Ver» en cada servicio para registrar el pago.</span>'
+      : '<span>Sin pagos pendientes</span>'
   }
 </td>
             </tr>
@@ -2601,36 +2701,32 @@ if (reportPeriodLabel) {
     reportPeriod === 'month' ? '📅 Período: Este mes' :
     '📅 Período: Todo el tiempo';
 }
-let reportServices = billableServices;
-
 const nowReport = new Date();
-
-if (reportPeriod === 'today') {
-  reportServices = billableServices.filter(job => {
-    const d = new Date(job.created_at);
-    return d.toDateString() === nowReport.toDateString();
-  });
+const startWeek = new Date(nowReport);
+startWeek.setDate(nowReport.getDate() - 7);
+function withinReportPeriod(job) {
+  const created = new Date(job.created_at);
+  if (reportPeriod === 'today') return created.toDateString() === nowReport.toDateString();
+  if (reportPeriod === 'week') return created >= startWeek;
+  if (reportPeriod === 'month') return created >= startOfMonth;
+  return true;
 }
-
-if (reportPeriod === 'week') {
-  const startWeek = new Date(nowReport);
-  startWeek.setDate(nowReport.getDate() - 7);
-
-  reportServices = billableServices.filter(job =>
-    new Date(job.created_at) >= startWeek
-  );
-}
-
-if (reportPeriod === 'month') {
-  const startMonth = new Date(
-    nowReport.getFullYear(),
-    nowReport.getMonth(),
-    1
-  );
-
-  reportServices = billableServices.filter(job =>
-    new Date(job.created_at) >= startMonth
-  );
+const reportServices = billableServices.filter(withinReportPeriod);
+if (!IS_FLETYA_PRODUCTION_HOST) {
+  const id = document.getElementById('sandboxFinanceJobId').value.trim().toLowerCase();
+  const sandboxJobs = services.filter(job => withinReportPeriod(job) && (!id || job.id === id));
+  const finances = summarizeSandboxPayments(sandboxJobs);
+  const amountsByElement = {
+    sandboxGross: finances.gross,
+    sandboxRefundsTotal: finances.refunded,
+    sandboxNet: finances.net,
+    sandboxCommission: finances.commission,
+    sandboxDriverNet: finances.driverNet,
+    sandboxCovered: finances.covered
+  };
+  for (const [elementId, cents] of Object.entries(amountsByElement)) {
+    document.getElementById(elementId).textContent = '$' + money2(cents / 100);
+  }
 }
 
 const reportSales = reportServices.reduce(
@@ -2723,7 +2819,7 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
               <td>${money(Number(job.price || 0))}</td>
               <td>${
   jobStatusLabel(job.status)
-}</td>
+}${fletyaCoversDriverPayment(job) ? '<br><span class="muted">' + coveredDriverPaymentStatus(job) + '</span>' : ''}</td>
   <td>
   <button onclick="viewJob('${job.id}')">Ver</button>
 </td>          
@@ -2733,28 +2829,94 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
       `
       : '<p class="muted">Todavía no hay servicios.</p>';
                     }
-async function recordCashPayment(jobId, event) {
-  if (activeSessionRole !== 'admin' || logoutPending || paymentJobsInFlight.has(jobId)) return;
-  const collecting = event === 'collected';
-  const prompt = collecting ? '¿Confirmas que el cliente ya pagó en efectivo al fletero?'
-    : '¿Confirmas que FLETYA ya recibió la comisión de este flete?';
-  if (!window.confirm(prompt)) return;
+const cashCutsInFlight = new Set();
 
-  paymentJobsInFlight.add(jobId);
+async function recordCashCut(cut) {
+  const key = cut.driver_id + ':' + cut.week_start;
+  if (activeSessionRole !== 'admin' || logoutPending || cashCutsInFlight.has(key)) return;
+  const amount = money2(cut.pending_cents / 100);
+  const prompt = IS_FLETYA_PRODUCTION_HOST
+    ? '¿Verificaste la recepción de $' + amount + ' MXN para el corte con referencia ' + cut.spei_reference + '?'
+    : '¿Confirmas la recepción simulada de $' + amount + ' MXN de este corte?';
+  if (!window.confirm(prompt)) return;
   const revision = sessionRevision;
+  cashCutsInFlight.add(key);
   try {
-    const { data, error } = await supabaseClient.rpc('record_cash_payment', { p_job: jobId, p_event: event });
+    const { data, error } = await supabaseClient.rpc('settle_cash_commission_cut', {
+      p_driver: cut.driver_id, p_week: cut.week_start,
+      p_expected_cents: cut.pending_cents, p_expected_count: cut.pending_count
+    });
     if (revision !== sessionRevision || logoutPending) return;
-    if (error || data?.id !== jobId) {
-      toast('No se pudo confirmar el registro. Abre el servicio para consultar su estado.');
-      return;
-    }
-    toast(collecting ? 'Cobro en efectivo registrado.' : 'Comisión recibida registrada.');
-    await Promise.all([renderAdmin(), currentJobDetailsId === jobId ? viewJob(jobId) : null]);
-  } catch {
-    if (revision === sessionRevision && !logoutPending) toast('Revisa la conexión y vuelve a consultar el servicio.');
+    toast(!error && data === cut.pending_count
+      ? 'Comisión del corte registrada.'
+      : 'No se registró el corte. Comprueba el saldo actualizado.');
+    await renderAdmin();
+  } catch (error) {
+    if (revision === sessionRevision && !logoutPending) toast('Revisa la conexión y vuelve a consultar el corte.');
   } finally {
-    paymentJobsInFlight.delete(jobId);
+    cashCutsInFlight.delete(key);
+  }
+}
+
+async function renderCashCuts(panel, names, revision, renderVersion) {
+  const current = () => revision === sessionRevision && renderVersion === adminRenderVersion && !logoutPending;
+  panel.textContent = 'Cargando cortes de efectivo…';
+  try {
+    const [cuts, issues] = await Promise.all([
+      supabaseClient.rpc('cash_commission_cuts'),
+      supabaseClient.rpc('cash_collection_issues_for_admin')
+    ]);
+    if (!current()) return;
+    if (cuts.error || issues.error) throw new Error('No se pudieron cargar los cortes');
+    panel.textContent = '';
+    const heading = document.createElement('h3');
+    heading.textContent = IS_FLETYA_PRODUCTION_HOST ? 'Cortes de comisiones en efectivo' : 'Cortes de comisiones en efectivo · Pruebas';
+    panel.appendChild(heading);
+    for (const issue of issues.data ?? []) {
+      const action = document.createElement('button');
+      action.className = 'btn';
+      action.type = 'button';
+      action.textContent = 'Revisar falta de pago · ' + issue.id;
+      action.onclick = () => viewJob(issue.id);
+      panel.appendChild(action);
+    }
+    if (!cuts.data?.length) {
+      const empty = document.createElement('p');
+      empty.textContent = 'Aún no hay comisiones por servicios en efectivo.';
+      panel.appendChild(empty);
+    }
+    for (const cut of cuts.data ?? []) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      const state = cut.pending_count === 0 ? 'Pagado' : cut.closed ? 'Cerrado' : 'En curso';
+      summary.textContent = (names[cut.driver_id] || 'Fletero') + ' · Semana del ' + cut.week_start + ' · ' + state;
+      details.appendChild(summary);
+      const due = document.createElement('p');
+      due.textContent = 'Pendiente: $' + money2(cut.pending_cents / 100) + ' MXN · Fecha límite: ' + cut.due_on;
+      details.appendChild(due);
+      if (cut.spei_reference) {
+        const reference = document.createElement('p');
+        reference.textContent = 'Referencia SPEI: ' + cut.spei_reference;
+        details.appendChild(reference);
+      }
+      for (const job of cut.jobs) {
+        const row = document.createElement('p');
+        row.textContent = job.date + ' · $' + money2(job.commission_cents / 100) + ' · ' +
+          (job.settled ? 'Pagado' : 'Pendiente') + ' · ' + job.id;
+        details.appendChild(row);
+      }
+      if (cut.closed && cut.pending_count > 0) {
+        const action = document.createElement('button');
+        action.className = 'btn';
+        action.type = 'button';
+        action.textContent = 'Registrar comisión del corte';
+        action.onclick = () => recordCashCut(cut);
+        details.appendChild(action);
+      }
+      panel.appendChild(details);
+    }
+  } catch (error) {
+    if (current()) panel.textContent = 'No se pudieron cargar los cortes de efectivo. Actualiza el panel.';
   }
 }
 
@@ -2769,15 +2931,6 @@ function renderCashPayment(box, job, payment) {
     row.textContent = label;
     box.appendChild(row);
   }
-  if (job.status !== 'completed' || !job.driver_id || job.cash_commission_settled_at) return;
-
-  const collected = Boolean(job.cash_collected_at);
-  const button = document.createElement('button');
-  button.className = 'btn';
-  button.type = 'button';
-  button.textContent = collected ? 'Registrar comisión recibida' : 'Registrar cobro en efectivo';
-  button.onclick = () => recordCashPayment(job.id, collected ? 'commission_settled' : 'collected');
-  box.appendChild(button);
 }
 
   async function viewJob(jobId){
@@ -2829,28 +2982,32 @@ paymentBox.className = 'card';
 if (job.payment_method === 'cash') {
   renderCashPayment(paymentBox, job, payment);
 } else {
-const paymentStatus = document.createElement('p');
-paymentStatus.textContent = job.status === 'cancelled' ? 'Pago al fletero: No corresponde (servicio cancelado)'
-  : 'Pago al fletero: ' + (job.driver_paid === true ? 'Registrado' : 'Pendiente');
-paymentBox.appendChild(paymentStatus);
-if (job.status !== 'cancelled') {
-const amounts = document.createElement('p');
-amounts.textContent = 'Comisión FLETYA (15% demo): $' + money2(payment.commission) +
-  ' MXN · Neto del fletero: $' + money2(payment.net) + ' MXN';
-paymentBox.appendChild(amounts);
-const note = document.createElement('p');
-note.className = 'muted';
-note.textContent = 'El registro no transfiere dinero. Confirma únicamente pagos ya realizados.';
-paymentBox.appendChild(note);
-if (job.status === 'completed' && job.driver_paid === false && job.driver_id) {
-  const button = document.createElement('button');
-  button.className = 'btn';
-  button.type = 'button';
-  button.textContent = 'Registrar pago de este servicio';
-  button.onclick = () => markJobPaid(job.id);
-  paymentBox.appendChild(button);
-}
-}
+  const coveredByFletya = fletyaCoversDriverPayment(job);
+  const paymentStatus = document.createElement('p');
+  paymentStatus.textContent = job.status === 'cancelled' ? 'Pago al fletero: No corresponde (servicio cancelado)'
+    : coveredByFletya ? coveredDriverPaymentStatus(job)
+    : 'Pago al fletero: ' + (job.driver_paid === true ? 'Registrado' : 'Pendiente');
+  paymentBox.appendChild(paymentStatus);
+  if (job.status !== 'cancelled') {
+    const amounts = document.createElement('p');
+    const driverNetLabel = 'Neto del fletero: $' + money2(payment.net) + ' MXN';
+    amounts.textContent = coveredByFletya
+      ? 'Reembolso total confirmado · ' + driverNetLabel
+      : 'Comisión FLETYA (15% demo): $' + money2(payment.commission) + ' MXN · ' + driverNetLabel;
+    paymentBox.appendChild(amounts);
+    const note = document.createElement('p');
+    note.className = 'muted';
+    note.textContent = 'El registro no transfiere dinero. Confirma únicamente pagos ya realizados.';
+    paymentBox.appendChild(note);
+    if (job.status === 'completed' && job.driver_paid === false && job.driver_id) {
+      const button = document.createElement('button');
+      button.className = 'btn';
+      button.type = 'button';
+      button.textContent = 'Registrar pago de este servicio';
+      button.onclick = () => markJobPaid(job.id);
+      paymentBox.appendChild(button);
+    }
+  }
 }
 document.getElementById('jobModalContent').appendChild(paymentBox);
 if (job.release_reason) {
@@ -3014,6 +3171,69 @@ async function finishPasswordRecovery(){
   recoveryPending=false;await supabaseClient.auth.signOut({scope:'local'});document.getElementById('passwordRecovery').classList.add('hidden');showAccess('client');
   document.getElementById('authMessage').textContent='Contraseña actualizada. Vuelve a tu app e inicia sesión.';
  }catch{message.textContent='No se pudo confirmar el cambio. Revisa la conexión.';}finally{button.disabled=false;}
+}
+async function loadSandboxRefunds() {
+  if (IS_FLETYA_PRODUCTION_HOST || logoutPending) return;
+  const revision = sessionRevision;
+  const box = document.getElementById('sandboxRefundCases');
+  box.textContent = 'Consultando…';
+  const {data: cases, error} = await supabaseClient.rpc('review_sandbox_refund', {});
+  if (revision !== sessionRevision || logoutPending) return;
+  if (error || !Array.isArray(cases)) {
+    box.textContent = 'No se pudieron consultar los reembolsos.';
+    return;
+  }
+  box.replaceChildren();
+  if (!cases.length) {
+    box.textContent = 'No hay reembolsos para revisar.';
+    return;
+  }
+  const money = new Intl.NumberFormat('es-MX', {style: 'currency', currency: 'MXN'});
+  for (const entry of cases) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const heading = document.createElement('h3');
+    heading.textContent = money.format(Number(entry.amount)) + ' MXN · ' + (entry.service_type || 'Flete');
+    const status = document.createElement('p');
+    const labels = {review:'En revisión', requested:'Reembolso solicitado', confirmed:'Reembolso confirmado', denied:'Reembolso rechazado'};
+    status.textContent = [entry.client_name, labels[entry.refund_state], entry.id].filter(Boolean).join(' · ');
+    card.append(heading, status);
+    if (entry.decided_at) {
+      const note = document.createElement('p');
+      note.textContent = entry.note;
+      card.append(note);
+    } else if (entry.refund_state === 'review') {
+      for (const [approved, label] of [[true, 'Aprobar reembolso total'], [false, 'Rechazar reembolso']]) {
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'btn light';
+        action.textContent = label;
+        action.onclick = async () => {
+          if (revision !== sessionRevision || logoutPending) return;
+          const note = window.prompt(label + ' de ' + money.format(Number(entry.amount)) + ' MXN. Escribe el motivo que verá el cliente.');
+          if (note === null) return;
+          const reason = note.trim();
+          if (reason.length < 10 || reason.length > 500) {
+            toast('Escribe un motivo de 10 a 500 caracteres.');
+            return;
+          }
+          for (const control of card.querySelectorAll('button')) control.disabled = true;
+          const {data, error} = await supabaseClient.rpc('review_sandbox_refund', {
+            p_id: entry.id, p_approved: approved, p_note: reason
+          });
+          if (revision !== sessionRevision || logoutPending) return;
+          if (error || data?.id !== entry.id) {
+            toast('No se registró otra decisión. Consulta el estado del caso.');
+          } else {
+            toast(approved ? 'Reembolso aprobado. Pendiente de confirmación de Stripe.' : 'Reembolso rechazado. El cliente ya tiene un aviso.');
+          }
+          await loadSandboxRefunds();
+        };
+        card.append(action);
+      }
+    }
+    box.append(card);
+  }
 }
 async function loadDriverApplications(){
  const revision=sessionRevision,box=document.getElementById('driverApplications');box.textContent='Consultando…';

@@ -43,6 +43,22 @@ public class ClientApiTest {
     @Test public void quoteUsesRealRouteAndExistingTariff()throws Exception{
         var fake=new Fake();var api=login(fake,new Memory());fake.profile();fake.reply(200,"{\"distance_km\":38.41,\"polyline\":\"encoded\",\"duration_text\":\"52 min\"}");var q=api.quote("21,-86","20,-87","pickup",0,"Mudanza");assertEquals(1464.35,q.price(),0.001);assertEquals("POST /functions/v1/fletya-routes",fake.paths.get(3));assertEquals("21,-86",fake.bodies.get(3).getString("origin"));
     }
+    @Test public void testPriceShownToClientIsSentUnchangedForConfirmation() throws Exception {
+        var fake = new Fake();
+        var api = login(fake, new Memory());
+        fake.profile();
+        fake.reply(200, new JSONObject().put("local_quote", true).put("quote_id", ID)
+            .put("distance_km", 3.08).put("route_polyline", "encoded").toString());
+        fake.reply(200, "402.80");
+        var quote = api.quoteForTest("21,-86", "20,-87", "pickup", 0, "Mudanza");
+        assertEquals(402.80, quote.quote().price(), 0.001);
+        fake.reply(200, new JSONObject(job("requested", null))
+            .put("price", 402.80).put("route_quote_id", ID).toString());
+        api.createForTest(quote, ID);
+        assertEquals("POST /rest/v1/rpc/confirm_test_route_quote", fake.paths.get(5));
+        assertEquals(402.80, fake.bodies.get(5).getDouble("p_expected_price"), 0.001);
+    }
+
     @Test public void missingDistanceCannotProduceQuoteOrRequest()throws Exception{
         var fake=new Fake();var api=login(fake,new Memory());fake.profile();fake.reply(200,"{\"polyline\":\"encoded\"}");try{api.quote("21,-86","20,-87","pickup",0,"Mudanza");fail();}catch(IllegalArgumentException expected){}assertEquals(4,fake.paths.size());
     }
