@@ -123,7 +123,7 @@ public final class DriverApi {
     }
     public synchronized JSONArray activeJobs() throws Exception {
         token();
-        return get("jobs?select=*&driver_id=eq." + eq(userId()) + "&status=in.(en_route,picked_up)&order=created_at.desc,id.desc&limit=2");
+        return get("jobs?select=*&driver_id=eq." + eq(userId()) + "&status=in.(" + ("PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? "accepted,en_route,picked_up" : "en_route,picked_up") + ")&order=created_at.desc,id.desc&limit=2");
     }
     public synchronized JSONArray offers() throws Exception {
         return get("jobs?select=*&status=eq.requested&driver_id=is.null&order=created_at.desc,id.desc&limit=20");
@@ -136,6 +136,18 @@ public final class DriverApi {
         JSONArray rows = get("jobs?select=*&id=eq." + eq(id));
         return rows.length() == 1 ? rows.getJSONObject(0) : null;
     }
+    public synchronized JSONObject acceptOffer(String id) throws Exception {
+        if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+            JSONObject offer = job(id);
+            if (offer != null && "held".equals(offer.optString("sandbox_card_state"))) {
+                JSONObject body = new JSONObject().put("action","accept_card").put("id",id);
+                return new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body())
+                    .getJSONObject("job");
+            }
+        }
+        return transition(id, "requested", "en_route", null);
+    }
+
     public synchronized JSONObject transition(String id, String from, String to, String reason) throws Exception {
         token();
         String user = userId();
@@ -205,6 +217,12 @@ public final class DriverApi {
         JSONObject assigned = job(jobId);
         if (assigned == null || !DriverRules.ownsActive(assigned.optString("status"), assigned.optString("driver_id"), userId()))
             throw new Failure(403, "El servicio ya no está asignado a tu cuenta.");
+        if (!assigned.isNull("route_quote_id")) {
+            JSONObject route = new JSONObject(call("POST", "/rest/v1/rpc/get_job_delivery_route",
+                new JSONObject().put("p_job", jobId), null).body());
+            if (!route.optBoolean("available")) throw new Failure(409, "La ruta ya no está disponible.");
+            return route;
+        }
         return new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
             .put("origin", assigned.optString("origin")).put("destination", assigned.optString("destination")), null).body());
     }

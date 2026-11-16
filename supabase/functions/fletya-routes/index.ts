@@ -1,3 +1,14 @@
+import { decodePolyline, insideRing } from "./route-geometry.ts";
+import { pilotEndpointAreas } from "./pilot-endpoints.ts";
+
+type ProviderRoute = { distanceMeters?: number; duration?: string; polyline?: { encodedPolyline?: string } };
+type QuoteRoute = { distanceMeters: number; duration: string; polyline: { encodedPolyline: string } };
+function inPilotArea(point: number[]): boolean {
+  return pilotEndpointAreas.some(([outer, ...holes]) =>
+    insideRing(point, outer) && !holes.some((hole) => insideRing(point, hole))
+  );
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
@@ -57,7 +68,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "invalid_input", message: "Envía origen y destino como texto." }, 400);
   }
 
-  const { origin, destination } = payload as Record<string, unknown>;
+  const { origin, destination, purpose, include_route } = payload as Record<string, unknown>;
+  const bookable = purpose === "bookable_quote";
+  const quote = purpose === "quote" || bookable;
   if (
     typeof origin !== "string" || typeof destination !== "string" ||
     origin.trim().length === 0 || destination.trim().length === 0 ||
@@ -82,7 +95,24 @@ Deno.serve(async (req: Request) => {
   const timeout = setTimeout(() => controller.abort(), 12_000);
 
   try {
-    const googleResponse = await fetch(
+    const supabaseUrl = bookable ? Deno.env.get("SUPABASE_URL") : undefined;
+    const anonKey = bookable ? Deno.env.get("SUPABASE_ANON_KEY") : undefined;
+    const serviceKey = bookable ? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") : undefined;
+    let userId: string | undefined;
+    if (bookable) {
+      if (!supabaseUrl || !anonKey || !serviceKey) return jsonResponse({ error: "server_configuration_error" }, 500);
+      const authorization = req.headers.get("Authorization");
+      if (!authorization) return jsonResponse({ error: "authentication_required", message: "Inicia sesión para cotizar." }, 401);
+      const auth = await fetch(supabaseUrl + "/auth/v1/user", {
+        headers: { apikey: anonKey, Authorization: authorization },
+        signal: controller.signal,
+      });
+      if (!auth.ok) return jsonResponse({ error: "authentication_required", message: "Inicia sesión para cotizar." }, auth.status >= 500 ? 502 : 401);
+      const user = await auth.json() as { id?: string };
+      if (!user.id) return jsonResponse({ error: "authentication_required", message: "Inicia sesión para cotizar." }, 401);
+      userId = user.id;
+    }
+    const getRoutes = () => fetch(
       "https://routes.googleapis.com/directions/v2:computeRoutes",
       {
         method: "POST",
@@ -95,18 +125,45 @@ Deno.serve(async (req: Request) => {
           origin: originWaypoint,
           destination: destinationWaypoint,
           travelMode: "DRIVE",
+          ...(quote ? {
+            computeAlternativeRoutes: true,
+            polylineQuality: "HIGH_QUALITY",
+          } : {}),
         }),
         signal: controller.signal,
       },
     );
 
+    const googleResponse = await getRoutes();
     if (!googleResponse.ok) {
       console.error("Google Routes API request failed", { status: googleResponse.status });
       return jsonResponse({ error: "routes_provider_error" }, 502);
     }
 
-    const data = await googleResponse.json();
-    const route = data?.routes?.[0];
+    const data = await googleResponse.json() as { routes?: ProviderRoute[] };
+    const routes: ProviderRoute[] = Array.isArray(data?.routes) ? data.routes : [];
+    const coordinate = (waypoint: Record<string, unknown>): number[] | undefined => {
+      const point = (waypoint.location as {latLng?: {longitude: number; latitude: number}} | undefined)?.latLng;
+      return point && [point.longitude, point.latitude];
+    };
+    const pickup = coordinate(originWaypoint);
+    const dropoff = coordinate(destinationWaypoint);
+    const validQuoteRoute = (candidate: ProviderRoute): candidate is QuoteRoute =>
+      typeof candidate?.distanceMeters === "number" && Number.isFinite(candidate.distanceMeters) &&
+      candidate.distanceMeters > 0 && typeof candidate.duration === "string" &&
+      /^\d+(?:\.\d+)?s$/.test(candidate.duration) && typeof candidate.polyline?.encodedPolyline === "string";
+    const route = quote ? routes.find((candidate) => {
+      if (!validQuoteRoute(candidate)) return false;
+      const points = decodePolyline(candidate.polyline.encodedPolyline);
+      return points.length >= 2 && inPilotArea(pickup ?? points[0]) &&
+        inPilotArea(dropoff ?? points[points.length - 1]);
+    }) : routes[0];
+    if (quote && routes.length && !route) {
+      return jsonResponse({
+        local_quote: false,
+        message: "La recogida y la entrega deben estar dentro de la zona de servicio de FLETYA.",
+      });
+    }
     if (!route || typeof route.distanceMeters !== "number" || typeof route.duration !== "string") {
       return jsonResponse({ error: "route_not_found", message: "No se encontró una ruta para ese origen y destino." }, 404);
     }
@@ -117,22 +174,44 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "invalid_provider_response" }, 502);
     }
 
-   const durationSeconds = Number(durationMatch[1]);
-
-   return jsonResponse({
-     distance_km: Math.round((route.distanceMeters / 1000) * 100) / 100,
-       duration_seconds: durationSeconds,
-         duration_text: formatDuration(durationSeconds),
-           polyline: route.polyline?.encodedPolyline || null,
-           });
-           } catch (error) {
-             if (error instanceof DOMException && error.name === "AbortError") {
-                 return jsonResponse({ error: "routes_provider_timeout" }, 504);
-                   }
-
-                     console.error("Unexpected error while calculating route");
-                       return jsonResponse({ error: "internal_error" }, 500);
-                       } finally {
-                         clearTimeout(timeout);
-                         }
-                         });
+    const durationSeconds = Number(durationMatch[1]);
+    const distanceKm = Math.round((route.distanceMeters / 1000) * 100) / 100;
+    let quoteId: string | undefined;
+    if (bookable && userId && serviceKey && supabaseUrl) {
+      const points = decodePolyline(route.polyline?.encodedPolyline ?? "");
+      if (points.length < 2 || distanceKm <= 0) return jsonResponse({ local_quote: false, message: "No se pudo verificar la ruta." });
+      quoteId = crypto.randomUUID();
+      const saved = await fetch(supabaseUrl + "/rest/v1/fletya_route_quotes", {
+        method: "POST",
+        headers: {
+          apikey: serviceKey, Authorization: "Bearer " + serviceKey,
+          "Content-Type": "application/json", Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ id: quoteId, client_id: userId, origin, destination, distance_km: distanceKm, points, via: [] }),
+        signal: controller.signal,
+      });
+      if (!saved.ok) {
+        console.error("Route quote storage failed", { status: saved.status });
+        return jsonResponse({ error: "quote_storage_error", message: "No se pudo reservar la cotización. Inténtalo de nuevo." }, 502);
+      }
+    }
+    return jsonResponse({
+      ...(quote ? { local_quote: true } : {}),
+      distance_km: distanceKm,
+      duration_seconds: durationSeconds,
+      duration_text: formatDuration(durationSeconds),
+      ...(quoteId ? {
+        quote_id: quoteId,
+        ...(include_route === true ? { route_polyline: route.polyline?.encodedPolyline } : {}),
+      } : { polyline: route.polyline?.encodedPolyline || null }),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return jsonResponse({ error: "routes_provider_timeout" }, 504);
+    }
+    console.error("Unexpected error while calculating route");
+    return jsonResponse({ error: "internal_error" }, 500);
+  } finally {
+    clearTimeout(timeout);
+  }
+});
