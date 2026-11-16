@@ -241,6 +241,14 @@ public final class DriverApi {
         return new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
             .put("origin", assigned.optString("origin")).put("destination", assigned.optString("destination")), null).body());
     }
+    public synchronized JSONObject offerRoute(String jobId) throws Exception {
+        JSONObject offer = job(jobId);
+        if (offer == null || !"requested".equals(offer.optString("status")) || !offer.isNull("driver_id")) {
+            throw new Failure(409, "La solicitud ya no está disponible. Actualiza el panel.");
+        }
+        return new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
+            .put("origin", offer.getString("origin")).put("destination", offer.getString("destination")), null).body());
+    }
     public synchronized void registerPush(String installation, String token, String nonce) throws Exception {
         token();
         JSONArray rows = new JSONArray(call("POST", "/rest/v1/driver_push_devices?on_conflict=user_id,installation_id&select=user_id",

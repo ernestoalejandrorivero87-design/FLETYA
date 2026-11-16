@@ -35,6 +35,8 @@ public final class MainActivity extends Activity {
     private int historyPage;
     private String permissionAcceptId;
     private RouteMapView routeMap;
+    private AlertDialog offerRouteDialog;
+    private String previewedOfferId = "";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -48,7 +50,7 @@ public final class MainActivity extends Activity {
         main.postDelayed(poll, 10_000);
     }
     @Override public void onPause() { visible = false; main.removeCallbacks(poll); super.onPause(); }
-    @Override public void onDestroy() { revision++; main.removeCallbacksAndMessages(null); if (routeMap != null) routeMap.dispose(); worker.shutdownNow(); super.onDestroy(); }
+    @Override public void onDestroy() { revision++; main.removeCallbacksAndMessages(null); closeOfferRoute(); clearRoute(); worker.shutdownNow(); super.onDestroy(); }
     private final Runnable poll = new Runnable() {
         @Override public void run() {
             if (!visible) return;
@@ -166,7 +168,7 @@ public final class MainActivity extends Activity {
         button(root,"Volver a iniciar sesión",this::loginScreen);
     }
     private void loginScreen() {
-        clearRoute(); screen = "login"; shell();
+        closeOfferRoute(); clearRoute(); screen = "login"; shell();
         LinearLayout box = card("Entra como fletero");
         text(box, "Usa tu cuenta de fletero de FLETYA.", 15, false);
         EditText email = field(box, "Correo electrónico", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
@@ -195,6 +197,7 @@ public final class MainActivity extends Activity {
             return new Panel(profile, jobs, jobs.length() == 0 && "approved".equals(profile.optString("driver_status","approved")) ? api.offers() : new JSONArray());
         }, panel -> {
             if (!visible) return;
+            if (offerRouteDialog != null && !containsOffer(panel.offers(), previewedOfferId)) closeOfferRoute();
             screen = "home"; shell();
             if ("approved".equals(panel.profile().optString("driver_status","approved"))) PushManager.activate(this, api);
             text(root, "Hola, " + panel.profile().optString("full_name", "fletero"), 16, true);
@@ -258,6 +261,7 @@ public final class MainActivity extends Activity {
                 for (int i = 0; i < panel.offers().length(); i++) {
                     JSONObject job = panel.offers().getJSONObject(i);
                     LinearLayout offer = card("Nueva solicitud"); jobDetails(offer, job);
+                    button(offer, "Ver ruta de recogida a entrega", () -> previewOfferRoute(job.optString("id")));
                     button(offer, "Aceptar servicio", () -> requestTracking(job.optString("id"), true));
                 }
                 if (panel.offers().length() == 20) text(box, "Se muestran las 20 solicitudes más recientes.", 13, false);
@@ -268,6 +272,35 @@ public final class MainActivity extends Activity {
     }
     private void clearRoute() {
         if (routeMap != null) { routeMap.dispose(); routeMap = null; }
+    }
+    private boolean containsOffer(JSONArray offers, String id) {
+        for (int i = 0; i < offers.length(); i++) {
+            JSONObject offer = offers.optJSONObject(i);
+            if (offer != null && id.equals(offer.optString("id"))) return true;
+        }
+        return false;
+    }
+    private void previewOfferRoute(String id) {
+        task(() -> api.offerRoute(id), route -> {
+            if (!visible || !"home".equals(screen) || active != null) return;
+            RouteMapView map = new RouteMapView(this, api);
+            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Ruta estimada del servicio")
+                .setView(map).setPositiveButton("Cerrar", null).create();
+            offerRouteDialog = dialog;
+            previewedOfferId = id;
+            dialog.setOnDismissListener(ignored -> {
+                map.dispose();
+                if (offerRouteDialog == dialog) {
+                    offerRouteDialog = null;
+                    previewedOfferId = "";
+                }
+            });
+            dialog.show();
+            map.showCalculatedRoute(route, false);
+        });
+    }
+    private void closeOfferRoute() {
+        if (offerRouteDialog != null) offerRouteDialog.dismiss();
     }
     private void showMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
@@ -434,7 +467,7 @@ public final class MainActivity extends Activity {
                 .setView(map).setPositiveButton("Cerrar", null).create();
             dialog.setOnDismissListener(ignored -> map.dispose());
             dialog.show();
-            map.showNavigation(route);
+            map.showCalculatedRoute(route, true);
         });
     }
     private void open(String uri) { open(uri, Intent.ACTION_VIEW); }

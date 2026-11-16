@@ -57,7 +57,8 @@ final class RouteMapView extends LinearLayout {
             }
         });
     }
-    void showNavigation(JSONObject route) {
+    void showCalculatedRoute(JSONObject route, boolean navigation) {
+        status.setText("Cargando mapa…");
         worker.execute(() -> {
             try {
                 String coordinates = RouteMapData.decode(route.getString("polyline")).toString();
@@ -65,9 +66,10 @@ final class RouteMapView extends LinearLayout {
                 post(() -> {
                     if (disposed) return;
                     try {
-                        render(css, js, coordinates, true);
-                        status.setText(route.optString("distance_km") + " km · " + route.optString("duration_text")
-                            + "\nSigue la línea marcada. Ruta para carga sin cruzar el Puente Nichupté.");
+                        render(css, js, coordinates, navigation);
+                        String detail = route.optString("distance_km") + " km · " + route.optString("duration_text");
+                        status.setText(navigation ? detail + "\nSigue la línea marcada. Ruta para carga sin cruzar el Puente Nichupté."
+                            : detail + "\nDe recogida a entrega");
                     } catch (RuntimeException failure) {
                         clearMap();
                         status.setText("No se pudo abrir la ruta. Cierra y vuelve a calcularla.");
