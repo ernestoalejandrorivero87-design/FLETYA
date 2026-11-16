@@ -1,5 +1,6 @@
 import { crossesNichupteVehicularBridge, decodePolyline, insideRing } from "./route-geometry.ts";
 import { pilotEndpointAreas } from "./pilot-endpoints.ts";
+import { requestGuidedRoute } from "./guided-route.ts";
 
 type ProviderRoute = { distanceMeters?: number; duration?: string; polyline?: { encodedPolyline?: string } };
 type QuoteRoute = { distanceMeters: number; duration: string; polyline: { encodedPolyline: string } };
@@ -51,12 +52,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "method_not_allowed", message: "Usa POST." }, 405);
   }
 
-  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
-  if (!apiKey) {
-    console.error("Missing GOOGLE_MAPS_API_KEY secret");
-    return jsonResponse({ error: "server_configuration_error" }, 500);
-  }
-
   let payload: unknown;
   try {
     payload = await req.json();
@@ -68,8 +63,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "invalid_input", message: "Envía origen y destino como texto." }, 400);
   }
 
-  const { origin, destination, purpose, include_route } = payload as Record<string, unknown>;
+  const { origin, destination, purpose, include_route, include_steps } = payload as Record<string, unknown>;
   const navigation = purpose === "navigation";
+  const guided = navigation && include_steps === true;
   const bookable = purpose === "bookable_quote";
   const quote = purpose === "quote" || bookable;
   if (
@@ -96,6 +92,31 @@ Deno.serve(async (req: Request) => {
   const timeout = setTimeout(() => controller.abort(), 12_000);
 
   try {
+    if (guided) {
+      const endpoint = Deno.env.get("FLETYA_PRUEBAS_VALHALLA_ROUTE_URL");
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+      if (!endpoint?.startsWith("https://") || !supabaseUrl || !anonKey) {
+        return jsonResponse({ error: "guidance_unavailable", message: "La guía aún no está disponible en Pruebas." }, 503);
+      }
+      const authorization = req.headers.get("Authorization");
+      if (!authorization) return jsonResponse({ error: "authentication_required" }, 401);
+      const auth = await fetch(supabaseUrl + "/auth/v1/user", {
+        headers: { apikey: anonKey, Authorization: authorization }, signal: controller.signal,
+      });
+      if (!auth.ok || !(await auth.json()).id) return jsonResponse({ error: "authentication_required" }, 401);
+      const from = (originWaypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
+      const to = (destinationWaypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
+      if (!from || !to) return jsonResponse({ error: "guidance_requires_pins", message: "La guía requiere coordenadas en ambos puntos." }, 422);
+      const route = await requestGuidedRoute(endpoint, from, to, controller.signal);
+      return route ? jsonResponse(route) : jsonResponse({ error: "restricted_route", message: "No se pudo verificar una ruta con indicaciones." }, 422);
+    }
+
+    const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+    if (!apiKey) {
+      console.error("Missing GOOGLE_MAPS_API_KEY secret");
+      return jsonResponse({ error: "server_configuration_error" }, 500);
+    }
     const supabaseUrl = bookable ? Deno.env.get("SUPABASE_URL") : undefined;
     const anonKey = bookable ? Deno.env.get("SUPABASE_ANON_KEY") : undefined;
     const serviceKey = bookable ? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") : undefined;
