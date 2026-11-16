@@ -35,17 +35,26 @@ function encodeRoute(points, scale = 1e5) {
 function route(points, distanceMeters = 8300) {
   return { distanceMeters, duration: '1320s', polyline: { encodedPolyline: encodeRoute(points) } };
 }
-function runtime(googleRoutes = () => [route([[-86.8515, 21.1619], [-86.88, 21.16]])], valhalla) {
+function runtime(googleRoutes = () => [route([[-86.8515, 21.1619], [-86.88, 21.16]])], valhalla, options = {}) {
   let handler;
   const calls = [];
   vm.runInNewContext(source, {
-    Deno: { env: { get: key => key.endsWith('_URL') ? 'https://example.test/route' : 'synthetic-test-key' }, serve: callback => { handler = callback; } },
-    Request, Response, AbortController, DOMException, setTimeout, clearTimeout,
+    Deno: { env: { get: key => ({
+      SUPABASE_URL: 'https://ccdtpwvalqznasstnqxj.supabase.co',
+      FLETYA_PRUEBAS_VALHALLA_ROUTE_URL: options.noProvider ? undefined : 'https://example.test/route',
+      FLETYA_PRUEBAS_STADIA_API_KEY: options.stadiaKey,
+    })[key] ?? (key.endsWith('_KEY') && key !== 'FLETYA_PRUEBAS_STADIA_API_KEY' ? 'synthetic-test-key' : undefined) }, serve: callback => { handler = callback; } },
+    Request, Response, URL, URLSearchParams, AbortController, DOMException, setTimeout, clearTimeout,
     console: { error() {} },
-    fetch: async (url, options) => {
+    fetch: async (url, requestOptions) => {
       if (url.endsWith('/auth/v1/user')) return new Response(JSON.stringify({ id: 'simulated-driver' }));
-      calls.push({ url, body: JSON.parse(options.body) });
-      if (url === 'https://example.test/route') return new Response(JSON.stringify(valhalla));
+      if (url.includes('/rest/v1/jobs?')) return new Response(JSON.stringify(options.jobs ?? [
+        { origin: '21.1619,-86.8515', destination: '21.11, -86.768', status: 'picked_up' },
+      ]));
+      calls.push({ url, body: JSON.parse(requestOptions.body), headers: requestOptions.headers });
+      if (url === 'https://example.test/route' || url === 'https://api.stadiamaps.com/route/v1') {
+        return new Response(JSON.stringify(valhalla ?? {}));
+      }
       return new Response(JSON.stringify({ routes: googleRoutes(calls.at(-1).body) }));
     }
   });
@@ -82,6 +91,22 @@ test('guided navigation requests an exclusion and refuses routes crossing the br
     { begin: 0, end: 1, instruction: 'Continúa' },
     { begin: 1, end: 3, instruction: 'Gira a la derecha' },
   ]);
+});
+
+test('guided routes are limited to an active assignment and Stadia uses server credentials', async () => {
+  const body = { origin: '21.1619,-86.8515', destination: '21.11,-86.768', purpose: 'navigation', include_steps: true };
+  const inactive = runtime(undefined, undefined, { jobs: [] });
+  assert.equal((await inactive.request(body, true)).status, 403);
+  assert.equal(inactive.calls.length, 0);
+  const missingProvider = runtime(undefined, undefined, { noProvider: true });
+  assert.equal((await missingProvider.request(body, true)).status, 503);
+  assert.equal(missingProvider.calls.length, 0);
+  const stadia = runtime(undefined, {}, { stadiaKey: 'test-key' });
+  assert.equal((await stadia.request({ ...body, destination: '21.14,-86.8515' }, true)).status, 422);
+  assert.equal(stadia.calls.length, 0);
+  await stadia.request(body, true);
+  assert.equal(stadia.calls[0].url, 'https://api.stadiamaps.com/route/v1');
+  assert.equal(stadia.calls[0].headers.Authorization, 'Stadia-Auth test-key');
 });
 
 test('route backend sends coordinate endpoints as Google latLng locations', async () => {
