@@ -69,6 +69,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const { origin, destination, purpose, include_route } = payload as Record<string, unknown>;
+  const navigation = purpose === "navigation";
   const bookable = purpose === "bookable_quote";
   const quote = purpose === "quote" || bookable;
   if (
@@ -217,7 +218,14 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: "quote_storage_error", message: "No se pudo reservar la cotización. Inténtalo de nuevo." }, 502);
       }
     }
+    // Google Maps URLs can recalculate a route. Keep navigation in FLETYA
+    // when a candidate uses the restricted bridge or the route enters its
+    // area of influence, even if Google did not offer the bridge this time.
+    const requiresFletyaMap = navigation && (bridgeBlocked ||
+      decodePolyline(route.polyline.encodedPolyline).some(([lng, lat]) =>
+        lng >= -86.82 && lng <= -86.73 && lat >= 21.025 && lat <= 21.175));
     return jsonResponse({
+      ...(navigation ? { navigation_mode: requiresFletyaMap ? "fletya" : "external" } : {}),
       ...(quote ? { local_quote: true } : {}),
       distance_km: distanceKm,
       duration_seconds: durationSeconds,

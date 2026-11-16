@@ -475,10 +475,29 @@ public final class MainActivity extends Activity {
         })); dialog.show();
     }
     private void navigate(JSONObject job) {
-        String point = DriverRules.navigationPoint(job.optString("status"), job.optString("origin"), job.optString("destination"));
-        if (point.trim().isEmpty()) { message.setText("No hay una ubicación válida para navegar."); return; }
-        if (!point.matches("\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*") && !point.toLowerCase(Locale.ROOT).contains("méxico")) point += ", Quintana Roo, México";
-        open("https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination=" + Uri.encode(point));
+        String id = job.optString("id");
+        String status = job.optString("status");
+        var fix = TrackingService.recentNavigationFix(id);
+        if (fix == null) {
+            message.setText("Espera una ubicación GPS reciente y vuelve a tocar Navegar.");
+            requestTracking(null, false);
+            return;
+        }
+        String origin = fix.getLatitude() + "," + fix.getLongitude();
+        task(() -> api.navigationRoute(id, status, origin), route -> {
+            if (active == null || !id.equals(active.optString("id")) || !status.equals(active.optString("status"))) return;
+            if ("external".equals(route.optString("navigation_mode"))) {
+                open("https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination="
+                    + Uri.encode(route.getString("navigation_destination")));
+                return;
+            }
+            RouteMapView map = new RouteMapView(this, api);
+            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Ruta para carga")
+                .setView(map).setPositiveButton("Cerrar", null).create();
+            dialog.setOnDismissListener(ignored -> map.dispose());
+            dialog.show();
+            map.showNavigation(route);
+        });
     }
     private void open(String uri) { open(uri, Intent.ACTION_VIEW); }
     private void open(String uri, String action) {

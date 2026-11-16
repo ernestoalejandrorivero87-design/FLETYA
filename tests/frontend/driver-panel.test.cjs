@@ -1099,14 +1099,29 @@ test('late route result cannot restore navigation after releasing or signing out
  finish({data:{polyline:'_p~iF~ps|U_ulLnnqC_mqNvxq`@'}});await pending;
  assert.equal(r.document.getElementById('driverNavigation').hidden,true);assert.equal(r.run('driverRouteReady'),false);
 });
-test('route API failure keeps the navigation link usable and supports explicit retry',async()=>{
+test('route API failure keeps safe navigation available and supports explicit retry',async()=>{
  const r=runtime();let requests=0;r.api.functions={invoke:async()=>{requests++;return {error:{message:'offline'}}}};
  r.run("activeSessionRole='driver';state.active={id:'nav',driver_id:'driver-1',status:'en_route',origin:'A',destination:'B'}");
  await r.run('updateDriverNavigation(state.active)');assert.match(r.document.getElementById('driverRouteInfo').textContent,/No se pudo/);
- assert.match(r.document.getElementById('driverNavigateLink').attributes.href,/google.com/);
+ assert.equal(r.document.getElementById('driverNavigateLink').attributes.href,undefined);
+ assert.equal(typeof r.document.getElementById('driverNavigateLink').onclick,'function');
  await r.run('updateDriverNavigation(state.active,true)');assert.equal(requests,2);
 });
 
+test('driver navigation checks the live stage and keeps protected routes in FLETYA',async()=>{
+ const r=runtime();const calls=[];
+ r.context.navigator.geolocation.getCurrentPosition=send=>send({coords:{latitude:21.133,longitude:-86.85}});
+ r.context.window.location.assign=()=>assert.fail('A protected route opened Google Maps');
+ r.api.functions={invoke:async(_name,{body})=>{
+   calls.push(body);return {data:{polyline:'_p~iF~ps|U_ulLnnqC_mqNvxq`@',navigation_mode:'fletya',distance_km:19.5}};}};
+ r.run("activeSessionRole='driver';state.active={id:'nav',driver_id:'driver-1',status:'picked_up',origin:'A',destination:'21.10, -86.77'}");
+ await r.run('updateDriverNavigation(state.active)');
+ await r.run("document.getElementById('driverNavigateLink').onclick()");
+ assert.equal(calls[1].purpose,'navigation');
+ assert.equal(calls[1].origin,'21.133,-86.85');
+ assert.equal(calls[1].destination,'21.10, -86.77');
+ assert.match(r.document.getElementById('driverRouteInfo').textContent,/sin cruzar el Puente Nichupté/);
+});
 test('server-referenced GPS age ignores client clocks one hour ahead or behind',async()=>{
  for(const skew of [-3600000,3600000]){
   const r=runtime();const server='2026-11-09T15:45:51Z',received='2026-11-09T15:45:07Z';

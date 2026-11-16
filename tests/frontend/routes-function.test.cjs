@@ -126,3 +126,11 @@ test('a blocked bridge route tries both detours and fails closed if they still c
   assert.equal(blocked.status, 422);
   assert.equal((await blocked.json()).error, 'restricted_route');
 });
+
+test('navigation stays in FLETYA near Nichupté even with a safe Google route', async () => {
+  const r = runtime(() => [route([[-86.85, 21.13], [-86.804, 21.152], [-86.768, 21.11]])]);
+  const response = await r.request({ origin: '21.13,-86.85', destination: '21.11,-86.768', purpose: 'navigation' });
+  assert.equal((await response.json()).navigation_mode, 'fletya');
+  const outside = await runtime().request({ origin: '21.1619,-86.8515', destination: '21.16,-86.88', purpose: 'navigation' });
+  assert.equal((await outside.json()).navigation_mode, 'external');
+});

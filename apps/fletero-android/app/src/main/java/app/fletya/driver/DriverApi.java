@@ -231,6 +231,21 @@ public final class DriverApi {
         check(response);
         return true;
     }
+    public synchronized JSONObject navigationRoute(String jobId, String status, String origin) throws Exception {
+        JSONObject assigned = job(jobId);
+        if (assigned == null || !status.equals(assigned.optString("status")) ||
+            !DriverRules.ownsActive(status, assigned.optString("driver_id"), userId()))
+            throw new Failure(409, "Cambió el servicio. Actualiza el panel antes de navegar.");
+        String destination = DriverRules.navigationPoint(status, assigned.optString("origin"), assigned.optString("destination"));
+        if (destination.trim().isEmpty()) throw new Failure(400, "No hay ubicación de destino.");
+        if (!destination.matches("\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*")
+            && !destination.toLowerCase(java.util.Locale.ROOT).contains("méxico")) {
+            destination += ", Quintana Roo, México";
+        }
+        JSONObject route = new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
+            .put("origin", origin).put("destination", destination).put("purpose", "navigation"), null).body());
+        return route.put("navigation_destination", destination);
+    }
     public synchronized JSONObject route(String jobId) throws Exception {
         JSONObject assigned = job(jobId);
         if (assigned == null || !DriverRules.ownsActive(assigned.optString("status"), assigned.optString("driver_id"), userId()))
