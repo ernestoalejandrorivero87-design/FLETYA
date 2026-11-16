@@ -408,7 +408,7 @@ public final class MainActivity extends Activity {
                 if (cut.optBoolean("closed") && cut.optInt("pending_count") > 0) {
                     JSONObject account = cut.optJSONObject("spei_account");
                     String reference = cut.optString("spei_reference", "");
-                    if (account == null || reference.isBlank()) {
+                    if (account == null || reference.isEmpty()) {
                         text(box, "Los datos para transferir aún no están disponibles.", 15, false);
                     } else {
                         String clabe = account.getString("clabe");
