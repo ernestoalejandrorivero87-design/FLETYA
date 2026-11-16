@@ -181,6 +181,59 @@ public final class ClientApi {
             throw new Failure(409,"No se pudo confirmar la solicitud. Actualiza el seguimiento antes de volver a solicitar.");
         return rows.getJSONObject(0);
     }
+    public record TestQuote(Quote quote, String routeId) {}
+
+    public synchronized TestQuote quoteForTest(String origin, String destination, String vehicle,
+                                               int helpers, String service) throws Exception {
+        profile();
+        String from = ClientRules.address(origin), to = ClientRules.address(destination);
+        ClientRules.price(1, vehicle, helpers);
+        JSONObject route = new JSONObject(call("POST", "/functions/v1/fletya-routes",
+            new JSONObject().put("origin", from).put("destination", to)
+                .put("purpose", "bookable_quote").put("include_route", true), null).body());
+        if (!route.optBoolean("local_quote")) {
+            throw new Failure(400, route.optString("message", "No se pudo cotizar la ruta."));
+        }
+        String routeId = route.getString("quote_id");
+        java.util.UUID.fromString(routeId);
+        String response = call("POST", "/rest/v1/rpc/preview_test_route_price",
+            new JSONObject().put("p_quote", routeId).put("p_vehicle", vehicle).put("p_helpers", helpers), null).body();
+        if ("null".equals(response.trim())) throw new Failure(409, "Calcula de nuevo el precio.");
+        double total = new java.math.BigDecimal(response.trim()).doubleValue();
+        return new TestQuote(new Quote(from, to, vehicle, helpers, service, route.getDouble("distance_km"),
+            total, route.getString("route_polyline"), route.optString("duration_text"), System.nanoTime()), routeId);
+    }
+
+    public synchronized JSONObject createForTest(TestQuote selected, String requestId) throws Exception {
+        return confirmRouteQuote(selected, requestId, "confirm_test_route_quote");
+    }
+
+    public synchronized JSONObject createCashRequest(TestQuote selected, String requestId) throws Exception {
+        return confirmRouteQuote(selected, requestId, "confirm_cash_route_quote");
+    }
+
+    private JSONObject confirmRouteQuote(TestQuote selected, String requestId, String function) throws Exception {
+        Quote quote = selected.quote();
+        JSONObject body = new JSONObject().put("p_quote", selected.routeId()).put("p_request", requestId)
+            .put("p_vehicle", quote.vehicle()).put("p_helpers", quote.helpers()).put("p_service", quote.service())
+            .put("p_expected_price", quote.price());
+        JSONObject job = new JSONObject(call("POST", "/rest/v1/rpc/" + function, body, null).body());
+        if (!ClientRules.owns(job, userId()) || !requestId.equals(job.optString("id"))
+            || !selected.routeId().equals(job.optString("route_quote_id"))
+            || quote.price() != job.optDouble("price")
+            || ("confirm_cash_route_quote".equals(function) && !"cash".equals(job.optString("payment_method")))) {
+            throw new Failure(409, "No se pudo verificar el pedido. Actualiza el seguimiento.");
+        }
+        return job;
+    }
+
+    public synchronized JSONArray savedRoute(String jobId) throws Exception {
+        JSONObject route = new JSONObject(call("POST", "/rest/v1/rpc/get_job_delivery_route",
+            new JSONObject().put("p_job", jobId), null).body());
+        if (!route.optBoolean("available")) throw new Failure(409, "La ruta ya no está disponible.");
+        return route.getJSONArray("points");
+    }
+
     public synchronized JSONObject cancel(String id) throws Exception {
         profile();
         JSONObject job = job(id);
