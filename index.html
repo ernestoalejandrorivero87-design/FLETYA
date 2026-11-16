@@ -338,6 +338,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 
   <div id="adminUsersTable"></div><div id="adminUsersPager"></div>
   <div id="driverAccountsTable" style="margin-top:18px"></div><div id="adminAccountsPager"></div>
+  <div id="adminCashCuts" class="card hidden"></div>
  </div>
 </section>
 </main>
@@ -2128,7 +2129,7 @@ async function releaseDriverJob() {
   // Consultar el servicio directamente para no depender de un estado local desactualizado.
   const { data: activeJob, error: activeError } = await supabaseClient
     .from('jobs')
-    .select('id, status')
+    .select('id, status, payment_method')
     .eq('driver_id', user.id)
     .eq('status', 'picked_up')
     .order('created_at', { ascending: false })
@@ -2149,8 +2150,11 @@ async function releaseDriverJob() {
     return;
   }
 
-  const { data: completedJob, error } = await supabaseClient
-    .from('jobs')
+  const cash = !IS_FLETYA_PRODUCTION_HOST && activeJob.payment_method === 'cash';
+  if (cash && !window.confirm('¿Ya entregaste la carga y recibiste el efectivo completo?')) return;
+  const { data: completedJob, error } = cash
+    ? await supabaseClient.rpc('complete_cash_delivery', {p_job: activeJob.id})
+    : await supabaseClient.from('jobs')
     .update({ status: 'completed' })
     .eq('id', activeJob.id)
     .eq('driver_id', user.id)
@@ -2463,6 +2467,11 @@ const nameById = Object.fromEntries(
     profile.full_name || 'Sin nombre'
   ])
 );
+  const cashCutsPanel = document.getElementById('adminCashCuts');
+  cashCutsPanel.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
+  if (!IS_FLETYA_PRODUCTION_HOST) {
+    void renderCashCuts(cashCutsPanel, nameById, revision, renderVersion);
+  }
   const search = (document.getElementById('adminSearch')?.value || '').toLowerCase().trim();
 const userSearch =
   (document.getElementById('adminUsersSearch')?.value || '')
@@ -2580,11 +2589,13 @@ const filteredServices = services.filter(job => {
               <td>$${money2(driver.net)}</td>
               <td>$${money2(driver.pendingTotal)}</td><td>$${money2(driver.cashPending)}</td>
               <td>
-  ${driver.cashUncollected > 0
-  ? `<span>Cobros en efectivo por confirmar: ${driver.cashUncollected}</span>`
-  : driver.pendingTotal > 0 || driver.cashPending > 0
-    ? `<span>Abre «Ver» en cada servicio para registrar el pago.</span>`
-    : `<span>Sin pagos pendientes</span>`
+  ${!IS_FLETYA_PRODUCTION_HOST && driver.cashPending > 0
+    ? '<span>Revisa los cortes de efectivo.</span>'
+    : IS_FLETYA_PRODUCTION_HOST && driver.cashUncollected > 0
+      ? `<span>Cobros en efectivo por confirmar: ${driver.cashUncollected}</span>`
+      : driver.pendingTotal > 0 || driver.cashPending > 0
+        ? '<span>Abre «Ver» en cada servicio para registrar el pago.</span>'
+        : '<span>Sin pagos pendientes</span>'
   }
 </td>
             </tr>
@@ -2788,15 +2799,96 @@ document.getElementById('monthlyCommission').textContent = money(monthlyCommissi
       `
       : '<p class="muted">Todavía no hay servicios.</p>';
                     }
+const cashCutsInFlight = new Set();
+
+async function recordCashCut(cut) {
+  const key = cut.driver_id + ':' + cut.week_start;
+  if (activeSessionRole !== 'admin' || logoutPending || cashCutsInFlight.has(key)) return;
+  const amount = money2(cut.pending_cents / 100);
+  if (!window.confirm('¿Confirmas la recepción simulada de $' + amount + ' MXN de este corte?')) return;
+  const revision = sessionRevision;
+  cashCutsInFlight.add(key);
+  try {
+    const { data, error } = await supabaseClient.rpc('settle_cash_commission_cut', {
+      p_driver: cut.driver_id, p_week: cut.week_start,
+      p_expected_cents: cut.pending_cents, p_expected_count: cut.pending_count
+    });
+    if (revision !== sessionRevision || logoutPending) return;
+    toast(!error && data === cut.pending_count
+      ? 'Comisión del corte registrada.'
+      : 'No se registró el corte. Comprueba el saldo actualizado.');
+    await renderAdmin();
+  } catch (error) {
+    if (revision === sessionRevision && !logoutPending) toast('Revisa la conexión y vuelve a consultar el corte.');
+  } finally {
+    cashCutsInFlight.delete(key);
+  }
+}
+
+async function renderCashCuts(panel, names, revision, renderVersion) {
+  const current = () => revision === sessionRevision && renderVersion === adminRenderVersion && !logoutPending;
+  panel.textContent = 'Cargando cortes de efectivo…';
+  try {
+    const [cuts, issues] = await Promise.all([
+      supabaseClient.rpc('cash_commission_cuts'),
+      supabaseClient.rpc('cash_collection_issues_for_admin')
+    ]);
+    if (!current()) return;
+    if (cuts.error || issues.error) throw new Error('No se pudieron cargar los cortes');
+    panel.textContent = '';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Cortes de comisiones en efectivo · Pruebas';
+    panel.appendChild(heading);
+    for (const issue of issues.data ?? []) {
+      const action = document.createElement('button');
+      action.className = 'btn';
+      action.type = 'button';
+      action.textContent = 'Revisar falta de pago · ' + issue.id;
+      action.onclick = () => viewJob(issue.id);
+      panel.appendChild(action);
+    }
+    if (!cuts.data?.length) {
+      const empty = document.createElement('p');
+      empty.textContent = 'Aún no hay comisiones por servicios en efectivo.';
+      panel.appendChild(empty);
+    }
+    for (const cut of cuts.data ?? []) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      const state = cut.pending_count === 0 ? 'Pagado' : cut.closed ? 'Cerrado' : 'En curso';
+      summary.textContent = (names[cut.driver_id] || 'Fletero') + ' · Semana del ' + cut.week_start + ' · ' + state;
+      details.appendChild(summary);
+      const due = document.createElement('p');
+      due.textContent = 'Pendiente: $' + money2(cut.pending_cents / 100) + ' MXN · Fecha límite: ' + cut.due_on;
+      details.appendChild(due);
+      for (const job of cut.jobs) {
+        const row = document.createElement('p');
+        row.textContent = job.date + ' · $' + money2(job.commission_cents / 100) + ' · ' +
+          (job.settled ? 'Pagado' : 'Pendiente') + ' · ' + job.id;
+        details.appendChild(row);
+      }
+      if (cut.closed && cut.pending_count > 0) {
+        const action = document.createElement('button');
+        action.className = 'btn';
+        action.type = 'button';
+        action.textContent = 'Registrar comisión del corte';
+        action.onclick = () => recordCashCut(cut);
+        details.appendChild(action);
+      }
+      panel.appendChild(details);
+    }
+  } catch (error) {
+    if (current()) panel.textContent = 'No se pudieron cargar los cortes de efectivo. Actualiza el panel.';
+  }
+}
+
 async function recordCashPayment(jobId, event) {
   if (activeSessionRole !== 'admin' || logoutPending || paymentJobsInFlight.has(jobId)) return;
+  if (!IS_FLETYA_PRODUCTION_HOST) return;
   const collecting = event === 'collected';
   const prompt = collecting ? '¿Confirmas que el cliente ya pagó en efectivo al fletero?'
     : '¿Confirmas que FLETYA ya recibió la comisión de este flete?';
-  const message = IS_FLETYA_PRODUCTION_HOST ? prompt : collecting
-    ? '¿Registrar el cobro simulado en efectivo?'
-    : '¿Registrar la comisión simulada del flete?';
-  if (!window.confirm(message)) return;
+  if (!window.confirm(prompt)) return;
 
   paymentJobsInFlight.add(jobId);
   const revision = sessionRevision;
@@ -2827,7 +2919,7 @@ function renderCashPayment(box, job, payment) {
     row.textContent = label;
     box.appendChild(row);
   }
-  if (job.status !== 'completed' || !job.driver_id || job.cash_commission_settled_at) return;
+  if (!IS_FLETYA_PRODUCTION_HOST || job.status !== 'completed' || !job.driver_id || job.cash_commission_settled_at) return;
 
   const collected = Boolean(job.cash_collected_at);
   const button = document.createElement('button');

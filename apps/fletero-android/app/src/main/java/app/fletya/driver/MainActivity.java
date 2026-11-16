@@ -275,7 +275,8 @@ public final class MainActivity extends Activity {
         menu.getMenu().add(0, 2, 1, "Mi perfil");
         menu.getMenu().add(0, 3, 2, "Mis servicios completados");
         if (BuildConfig.PUSH_ENABLED) menu.getMenu().add(0, 4, 3, "Avisos de solicitudes");
-        menu.getMenu().add(0, 5, 4, "Cerrar sesión");
+        if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) menu.getMenu().add(0, 6, 4, "Comisión en efectivo");
+        menu.getMenu().add(0, 5, 5, "Cerrar sesión");
         menu.setOnMenuItemClickListener(item -> {
             if (busy) return true;
             switch (item.getItemId()) {
@@ -293,6 +294,7 @@ public final class MainActivity extends Activity {
                         else { PushManager.tokenChanged(this, api); message.setText(PushManager.report()); }
                     }).show();
                 case 5 -> confirmLogout();
+                case 6 -> showCashCommissionCuts();
                 default -> { return false; }
             }
             return true;
@@ -389,15 +391,54 @@ public final class MainActivity extends Activity {
             catch (RuntimeException error) { message.setText("No se pudo iniciar el seguimiento. Revisa los permisos y vuelve a intentar."); }
         }
     }
+    private void showCashCommissionCuts() {
+        task(api::cashCommissionCuts, cuts -> {
+            screen = "cash-cuts";
+            shell();
+            LinearLayout header = card("Comisión en efectivo");
+            text(header, "El corte cierra el domingo y se paga hasta el martes siguiente.", 15, false);
+            if (cuts.length() == 0) text(header, "Aún no tienes comisiones en efectivo.", 15, false);
+            NumberFormat money = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX"));
+            for (int i = 0; i < cuts.length(); i++) {
+                JSONObject cut = cuts.getJSONObject(i);
+                String state = cut.optInt("pending_count") == 0 ? "Pagado" : cut.optBoolean("closed") ? "Cerrado" : "En curso";
+                LinearLayout box = card("Semana del " + cut.optString("week_start") + " · " + state);
+                text(box, "Pendiente: " + money.format(cut.optLong("pending_cents") / 100.0) + " MXN", 16, true);
+                text(box, "Fecha límite: " + cut.optString("due_on"), 15, false);
+                JSONArray jobs = cut.getJSONArray("jobs");
+                for (int j = 0; j < jobs.length(); j++) {
+                    JSONObject job = jobs.getJSONObject(j);
+                    text(box, job.optString("date") + " · " + money.format(job.optLong("commission_cents") / 100.0)
+                        + " · " + (job.optBoolean("settled") ? "Pagado" : "Pendiente")
+                        + "\n" + job.optString("id"), 14, false);
+                }
+            }
+            button(root, "Actualizar cortes", this::showCashCommissionCuts);
+            button(root, "Volver al panel", () -> { screen = "home"; refresh(); });
+            message.setText("");
+        });
+    }
+
     private void confirmTransition(JSONObject job, String next) {
         boolean complete = "completed".equals(next);
-        new AlertDialog.Builder(this).setTitle(complete ? "¿Completaste la entrega?" : "¿Ya recogiste la carga?")
-            .setMessage(complete ? "El servicio quedará completado y dejarás de compartir ubicación." : "Después de confirmar la recogida ya no podrás liberar el servicio.")
-            .setPositiveButton("Confirmar", (d, w) -> task(() -> api.transition(job.optString("id"), job.optString("status"), next, null), updated -> {
-                if (complete) { stopService(new Intent(this, TrackingService.class)); active = null; }
-                else active = updated;
-                refresh();
-            })).setNegativeButton("Cancelar", null).show();
+        boolean cash = complete && "PRUEBAS".equals(BuildConfig.ENVIRONMENT) && "cash".equals(job.optString("payment_method"));
+        String id = job.optString("id");
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this)
+            .setTitle(cash ? "¿Recibiste el efectivo?" : complete ? "¿Completaste la entrega?" : "¿Ya recogiste la carga?")
+            .setMessage(cash ? "Confirma cuando hayas entregado la carga y recibido el efectivo completo."
+                : complete ? "El servicio quedará completado y dejarás de compartir ubicación."
+                : "Después de confirmar la recogida ya no podrás liberar el servicio.")
+            .setPositiveButton(cash ? "Sí, recibí el efectivo" : "Confirmar", (d, w) -> task(
+                () -> cash ? api.completeCashDelivery(id) : api.transition(id, job.optString("status"), next, null), updated -> {
+                    if (complete) { stopService(new Intent(this, TrackingService.class)); active = null; }
+                    else active = updated;
+                    refresh();
+                }))
+            .setNegativeButton("Cancelar", null);
+        if (cash) dialog.setNeutralButton("Reportar falta de pago", (d, w) ->
+            task(() -> { api.reportCashCollectionIssue(id); return true; },
+                ignored -> message.setText("Avisaste a Administración. El servicio sigue abierto.")));
+        dialog.show();
     }
     private void release(JSONObject job) {
         EditText reason = new EditText(this); reason.setHint("Motivo de 10 a 300 caracteres"); reason.setMinLines(2);

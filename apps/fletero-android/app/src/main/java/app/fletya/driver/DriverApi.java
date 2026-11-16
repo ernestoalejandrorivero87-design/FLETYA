@@ -177,6 +177,24 @@ public final class DriverApi {
             throw new Failure(409, "No se pudo confirmar el cambio de estado.");
         return job;
     }
+    public synchronized JSONObject completeCashDelivery(String id) throws Exception {
+        var job = new JSONObject(call("POST", "/rest/v1/rpc/complete_cash_delivery",
+            new JSONObject().put("p_job", id), null).body());
+        if (!id.equals(job.optString("id")) || !userId().equals(job.optString("driver_id"))
+            || !"completed".equals(job.optString("status")) || job.isNull("cash_collected_at")) {
+            throw new Failure(409, "No se pudo confirmar la entrega en efectivo.");
+        }
+        return job;
+    }
+
+    public synchronized JSONArray cashCommissionCuts() throws Exception {
+        return new JSONArray(call("POST", "/rest/v1/rpc/cash_commission_cuts", new JSONObject(), null).body());
+    }
+
+    public synchronized void reportCashCollectionIssue(String id) throws Exception {
+        call("POST", "/rest/v1/rpc/report_cash_collection_issue", new JSONObject().put("p_job", id), null);
+    }
+
     public synchronized void arrive(String jobId,String stop) throws Exception {
         JSONObject current=job(jobId);
         String expected="pickup".equals(stop)?"en_route":"delivery".equals(stop)?"picked_up":"";
