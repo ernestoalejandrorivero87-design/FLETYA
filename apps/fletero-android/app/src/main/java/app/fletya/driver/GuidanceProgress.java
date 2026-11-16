@@ -13,6 +13,7 @@ final class GuidanceProgress {
 
     private final List<Step> steps;
     private int current;
+    private double lastRemaining = Double.POSITIVE_INFINITY;
 
     GuidanceProgress(List<Step> steps) { this.steps = new ArrayList<>(steps); }
 
@@ -20,7 +21,7 @@ final class GuidanceProgress {
         if (steps.isEmpty() || !Double.isFinite(accuracy) || accuracy <= 0 || accuracy > 25) return null;
         double tolerance = Math.max(18, accuracy + 8);
         Match match = match(position, steps.get(current).points());
-        if (current + 1 < steps.size() && match.remaining() < 45) {
+        if (current + 1 < steps.size() && Math.min(lastRemaining, match.remaining()) < 45) {
             Match next = match(position, steps.get(current + 1).points());
             if (next.offset() <= tolerance && next.offset() + 4 < match.offset()) {
                 current++;
@@ -28,6 +29,7 @@ final class GuidanceProgress {
             }
         }
         if (match.offset() > tolerance) return null;
+        lastRemaining = match.remaining();
         double remaining = match.remaining();
         for (int i = current + 1; i < steps.size(); i++) {
             Step next = steps.get(i);
