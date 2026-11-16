@@ -1,4 +1,3 @@
-new
 package app.fletya.driver;
 
 import org.junit.Test;
