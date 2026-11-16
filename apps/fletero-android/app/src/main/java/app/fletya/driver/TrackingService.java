@@ -27,9 +27,16 @@ public final class TrackingService extends Service implements LocationListener {
     private long lastSentNanos;
     private long lastFixNanos;
     private Location latest;
+    private static volatile Location navigationFix;
 
     static String report() { return report; }
     static boolean runningFor(String id) { return !id.trim().isEmpty() && id.equals(currentJob); }
+    static Location recentNavigationFix(String id) {
+        Location fix = navigationFix;
+        if (!runningFor(id) || fix == null || !DriverRules.freshFix(SystemClock.elapsedRealtimeNanos(),
+            fix.getElapsedRealtimeNanos(), fix.getLatitude(), fix.getLongitude(), fix.getAccuracy())) return null;
+        return new Location(fix);
+    }
     @Override public void onCreate() {
         super.onCreate();
         api = ((DriverApplication) getApplication()).api();
@@ -125,7 +132,10 @@ public final class TrackingService extends Service implements LocationListener {
         }
     };
     @Override public void onLocationChanged(Location value) {
-        if (!stopped && (latest == null || value.getElapsedRealtimeNanos() > latest.getElapsedRealtimeNanos())) latest = value;
+        if (!stopped && (latest == null || value.getElapsedRealtimeNanos() > latest.getElapsedRealtimeNanos())) {
+            latest = value;
+            navigationFix = new Location(value);
+        }
     }
     @Override public void onProviderDisabled(String provider) { status("Buscando señal GPS. Revisa la ubicación del teléfono."); }
     @Override public void onProviderEnabled(String provider) { status("Buscando ubicación…"); }
@@ -133,6 +143,7 @@ public final class TrackingService extends Service implements LocationListener {
     @Override public void onDestroy() {
         stopped = true;
         currentJob = "";
+        navigationFix = null;
         main.removeCallbacksAndMessages(null);
         if (locations != null) locations.removeUpdates(this);
         latest = null;
