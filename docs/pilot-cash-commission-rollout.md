@@ -10,7 +10,7 @@
 
 1. Verifica que el proyecto Piloto ya tenga los campos y funciones de efectivo del script `activate-cash-payments.sql`.
 2. En la ventana coordinada de actualización aplica `activate-weekly-cash-commission.sql` y luego `activate-cash-commission-spei.sql` en Piloto. El nuevo cierre de efectivo requiere Fletero 0.5.7 o el panel web de Fletero actualizado.
-3. Configura el beneficiario, el banco y la CLABE verificados en la fila única de `private.cash_commission_spei_account`. La vista sin configuración muestra que los datos de transferencia están pendientes.
+3. Verifica que la fila única de `private.cash_commission_spei_account` contenga los datos bancarios aprobados. La cuenta se puede preparar antes de activar los cortes.
 4. Despliega Admin y actualiza Fletero en los dispositivos del piloto.
 
 La referencia SPEI se asigna por fletero y semana. Verifica el abono bancario por referencia e importe antes de registrar el corte. El corte usa horario de Cancún. Cierra el domingo y vence el martes siguiente.

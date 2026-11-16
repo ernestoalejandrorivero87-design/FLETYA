@@ -1,5 +1,5 @@
 -- Apply after the weekly cash commission functions.
-create table private.cash_commission_spei_account (
+create table if not exists private.cash_commission_spei_account (
   singleton boolean primary key default true check (singleton),
   bank text not null check (length(trim(bank)) between 1 and 80),
   beneficiary text not null check (length(trim(beneficiary)) between 1 and 120),
