@@ -226,7 +226,10 @@ public final class MainActivity extends Activity {
                 }
                 boolean picked = "picked_up".equals(job.optString("status"));
                 text(box, picked ? "Carga recogida · Lleva la carga al destino" : "En camino a recoger", 17, true);
-                button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job));
+                button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job, false));
+                if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+                    button(box, "Probar navegación guiada", () -> navigate(job, true));
+                }
                 button(box,picked?"Llegué al punto de entrega":"Llegué al punto de recogida",()->new AlertDialog.Builder(this).setTitle("¿Confirmar llegada?").setMessage("El cliente recibirá el aviso de tu llegada a este punto.").setNegativeButton("Volver",null).setPositiveButton("Confirmar llegada",(d,w)->task(()->{api.arrive(job.optString("id"),picked?"delivery":"pickup");return true;},ok->{message.setText("Llegada registrada. El cliente puede consultar el aviso.");})).show());
                 button(box, picked ? "Completar servicio" : "Carga recogida", () -> confirmTransition(job, picked ? "completed" : "picked_up"));
                 if (!picked) button(box, "Liberar antes de recoger", () -> release(job));
@@ -474,7 +477,7 @@ public final class MainActivity extends Activity {
             });
         })); dialog.show();
     }
-    private void navigate(JSONObject job) {
+    private void navigate(JSONObject job, boolean guided) {
         String id = job.optString("id");
         String status = job.optString("status");
         var fix = TrackingService.recentNavigationFix(id);
@@ -484,8 +487,17 @@ public final class MainActivity extends Activity {
             return;
         }
         String origin = fix.getLatitude() + "," + fix.getLongitude();
-        task(() -> api.navigationRoute(id, status, origin), route -> {
-            if (active == null || !id.equals(active.optString("id")) || !status.equals(active.optString("status"))) return;
+        task(() -> api.navigationRoute(id, status, origin, guided), route -> {
+            if (!visible || active == null || !id.equals(active.optString("id")) || !status.equals(active.optString("status"))) return;
+            if (guided) {
+                var steps = route.optJSONArray("navigation_steps");
+                if (steps == null || steps.length() == 0) {
+                    message.setText("La guía de giros no está disponible para esta ruta.");
+                    return;
+                }
+                GuidedNavigationActivity.show(this, id, api.userId(), route);
+                return;
+            }
             if ("external".equals(route.optString("navigation_mode"))) {
                 open("https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination="
                     + Uri.encode(route.getString("navigation_destination")));
