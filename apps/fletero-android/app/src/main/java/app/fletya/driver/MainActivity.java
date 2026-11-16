@@ -167,6 +167,7 @@ public final class MainActivity extends Activity {
     }
     private void loginScreen() {
         clearRoute(); screen = "login"; shell();
+        showNavigationDemoButton();
         LinearLayout box = card("Entra como fletero");
         text(box, "Usa tu cuenta de fletero de FLETYA.", 15, false);
         EditText email = field(box, "Correo electrónico", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
@@ -196,6 +197,7 @@ public final class MainActivity extends Activity {
         }, panel -> {
             if (!visible) return;
             screen = "home"; shell();
+            showNavigationDemoButton();
             if ("approved".equals(panel.profile().optString("driver_status","approved"))) PushManager.activate(this, api);
             text(root, "Hola, " + panel.profile().optString("full_name", "fletero"), 16, true);
             if (!"approved".equals(panel.profile().optString("driver_status","approved"))) {
@@ -271,6 +273,11 @@ public final class MainActivity extends Activity {
     }
     private void clearRoute() {
         if (routeMap != null) { routeMap.dispose(); routeMap = null; }
+    }
+    private void showNavigationDemoButton() {
+        if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+            button(root, "Simular navegación", () -> GuidedNavigationActivity.showDemo(this));
+        }
     }
     private void showMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
