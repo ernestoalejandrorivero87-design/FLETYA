@@ -3,6 +3,7 @@ package app.fletya.driver;
 import android.app.Activity;
 import android.content.Intent;
 import android.location.Location;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -82,8 +83,10 @@ public final class GuidedNavigationActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         org.json.JSONArray coordinates;
+        boolean stadia;
         try {
             var route = new JSONObject(demo ? readDemoRoute() : getIntent().getStringExtra("route"));
+            stadia = "stadia".equals(route.optString("provider"));
             coordinates = RouteMapData.fromLongitudeFirst(route.getJSONArray("points"));
             List<GuidanceProgress.Point> points = new ArrayList<>(coordinates.length());
             for (int i = 0; i < coordinates.length(); i++) {
@@ -106,6 +109,16 @@ public final class GuidedNavigationActivity extends Activity {
         }
         map = new RouteMapView(this, ((DriverApplication) getApplication()).api());
         layout.addView(map, new LinearLayout.LayoutParams(-1, 0, 1));
+        if (stadia) {
+            var credit = new TextView(this);
+            credit.setPadding(24, 12, 24, 12);
+            credit.setText("Rutas de Stadia Maps · Atribución");
+            credit.setOnClickListener(view -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://stadiamaps.com/attribution/"))); }
+                catch (android.content.ActivityNotFoundException ignored) { }
+            });
+            layout.addView(credit);
+        }
         map.showGuidedRoute(coordinates);
         instruction.setText(demo ? "Iniciando simulación…" : "Esperando ubicación GPS precisa…");
     }
