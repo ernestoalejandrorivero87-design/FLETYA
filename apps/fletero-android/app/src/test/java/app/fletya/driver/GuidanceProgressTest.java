@@ -31,4 +31,16 @@ public class GuidanceProgressTest {
         assertNull(progress.update(new Point(21.1305, -86.861), 5));
         assertNull(progress.update(new Point(21.1305, -86.860), Double.NaN));
     }
+
+    @Test public void remembersApproachWhenNextFixIsAcrossATurn() {
+        var start = new Point(21.130, -86.860);
+        var corner = new Point(21.130, -86.859);
+        var progress = new GuidanceProgress(List.of(
+            new Step(List.of(start, corner), "Continúa"),
+            new Step(List.of(corner, new Point(21.13035, -86.859),
+                new Point(21.13035, -86.860)), "Gira a la izquierda")
+        ));
+        assertEquals("Gira a la izquierda", progress.update(corner, 5).instruction());
+        assertEquals("Destino de esta etapa", progress.update(new Point(21.13035, -86.85965), 5).instruction());
+    }
 }
