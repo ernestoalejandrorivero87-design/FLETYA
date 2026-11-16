@@ -4,12 +4,15 @@ type Location = { latitude: number; longitude: number };
 type Maneuver = { begin_shape_index: number; end_shape_index: number; instruction: string };
 type Leg = { shape: string; maneuvers: Maneuver[] };
 
-export async function requestGuidedRoute(endpoint: string, from: Location, to: Location, signal: AbortSignal) {
+export async function requestGuidedRoute(endpoint: string, from: Location, to: Location, signal: AbortSignal, stadiaKey?: string) {
   const { longitude, south, north } = nichupteCut;
   const west = longitude - 0.0005, east = longitude + 0.0005;
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(stadiaKey ? { Authorization: "Stadia-Auth " + stadiaKey } : {}),
+    },
     redirect: "error",
     signal,
     body: JSON.stringify({
@@ -20,7 +23,11 @@ export async function requestGuidedRoute(endpoint: string, from: Location, to: L
       exclude_polygons: [[[west, south], [east, south], [east, north], [west, north], [west, south]]],
     }),
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    if (response.status === 400 || response.status === 422) return null;
+    console.error("Guided route provider failed", { status: response.status });
+    throw new Error("guidance_provider_error");
+  }
   const { trip } = await response.json() as { trip?: { legs?: Leg[] } };
   if (trip?.legs?.length !== 1) return null;
   const leg = trip.legs[0];
