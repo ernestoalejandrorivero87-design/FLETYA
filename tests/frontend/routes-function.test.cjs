@@ -6,12 +6,12 @@ const vm = require('node:vm');
 const { stripTypeScriptTypes } = require('node:module');
 
 const routeDirectory = path.join(__dirname, '../../supabase/functions/fletya-routes');
-const source = ['route-geometry.ts', 'pilot-endpoints.ts', 'index.ts']
+const source = ['route-geometry.ts', 'pilot-endpoints.ts', 'guided-route.ts', 'index.ts']
   .map(file => fs.readFileSync(path.join(routeDirectory, file), 'utf8')
     .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, ''))
   .map(code => stripTypeScriptTypes(code))
   .join('\n');
-function encodeRoute(points) {
+function encodeRoute(points, scale = 1e5) {
   let latitude = 0;
   let longitude = 0;
   function delta(value) {
@@ -24,8 +24,8 @@ function encodeRoute(points) {
     return result + String.fromCharCode(unsigned + 63);
   }
   return points.map(([lng, lat]) => {
-    const nextLat = Math.round(lat * 1e5);
-    const nextLng = Math.round(lng * 1e5);
+    const nextLat = Math.round(lat * scale);
+    const nextLng = Math.round(lng * scale);
     const value = delta(nextLat - latitude) + delta(nextLng - longitude);
     latitude = nextLat;
     longitude = nextLng;
@@ -35,22 +35,54 @@ function encodeRoute(points) {
 function route(points, distanceMeters = 8300) {
   return { distanceMeters, duration: '1320s', polyline: { encodedPolyline: encodeRoute(points) } };
 }
-function runtime(googleRoutes = () => [route([[-86.8515, 21.1619], [-86.88, 21.16]])]) {
+function runtime(googleRoutes = () => [route([[-86.8515, 21.1619], [-86.88, 21.16]])], valhalla) {
   let handler;
   const calls = [];
   vm.runInNewContext(source, {
-    Deno: { env: { get: () => 'synthetic-test-key' }, serve: callback => { handler = callback; } },
+    Deno: { env: { get: key => key.endsWith('_URL') ? 'https://example.test/route' : 'synthetic-test-key' }, serve: callback => { handler = callback; } },
     Request, Response, AbortController, DOMException, setTimeout, clearTimeout,
     console: { error() {} },
     fetch: async (url, options) => {
+      if (url.endsWith('/auth/v1/user')) return new Response(JSON.stringify({ id: 'simulated-driver' }));
       calls.push({ url, body: JSON.parse(options.body) });
+      if (url === 'https://example.test/route') return new Response(JSON.stringify(valhalla));
       return new Response(JSON.stringify({ routes: googleRoutes(calls.at(-1).body) }));
     }
   });
-  return { calls, request: body => handler(new Request('https://example.test/routes', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  return { calls, request: (body, authenticated = false) => handler(new Request('https://example.test/routes', {
+    method: 'POST', headers: { 'Content-Type': 'application/json',
+      ...(authenticated ? { Authorization: 'Bearer synthetic-session' } : {}) }, body: JSON.stringify(body)
   })) };
 }
+
+test('guided navigation requests an exclusion and refuses routes crossing the bridge', async () => {
+  const start = [-86.8515, 21.1619], destination = [-86.768, 21.11];
+  const bridgePoints = [start, [-86.82, 21.14], [-86.79, 21.127], destination];
+  const alternate = [start, [-86.82, 21.154], [-86.79, 21.146], destination];
+  const withInstructions = points => ({
+    trip: { legs: [{ shape: encodeRoute(points, 1e6), maneuvers: [
+      { begin_shape_index: 0, end_shape_index: 1, instruction: 'Continúa' },
+      { begin_shape_index: 1, end_shape_index: 3, instruction: 'Gira a la derecha' },
+      { begin_shape_index: 3, end_shape_index: 3, instruction: 'Llegaste' },
+    ] }] },
+  });
+  const body = { origin: '21.1619,-86.8515', destination: '21.11,-86.768', purpose: 'navigation', include_steps: true };
+  const blocked = runtime(undefined, withInstructions(bridgePoints));
+  assert.equal((await blocked.request(body)).status, 401);
+  assert.equal(blocked.calls.length, 0);
+  assert.equal((await blocked.request(body, true)).status, 422);
+  assert.equal(blocked.calls[0].body.language, 'es-ES');
+  assert.equal(blocked.calls[0].body.exclude_polygons.length, 1);
+  const safe = runtime(undefined, withInstructions(alternate));
+  const response = await safe.request(body, true);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result.points, alternate);
+  assert.deepEqual(result.navigation_steps, [
+    { begin: 0, end: 1, instruction: 'Continúa' },
+    { begin: 1, end: 3, instruction: 'Gira a la derecha' },
+  ]);
+});
 
 test('route backend sends coordinate endpoints as Google latLng locations', async () => {
   const r = runtime();
