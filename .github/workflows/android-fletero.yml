@@ -28,13 +28,19 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
       - name: Test, lint and build both environments
         working-directory: apps/fletero-android
-        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug assemblePilotoDebug
+        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
       - uses: actions/upload-artifact@v4
         with:
           name: FLETYA-Fletero-Android-${{ github.sha }}
           path: |
             apps/fletero-android/app/build/outputs/apk/pruebas/debug/*.apk
             apps/fletero-android/app/build/outputs/apk/piloto/debug/*.apk
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FLETYA-Fletero-Piloto-unsigned-${{ github.sha }}
+          path: apps/fletero-android/app/build/outputs/apk/piloto/release/*-unsigned.apk
+          if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()

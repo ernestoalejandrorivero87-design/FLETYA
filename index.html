@@ -183,8 +183,8 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <div class="card"><h2>Trabajo actual y solicitudes</h2><div id="jobCard"><span class="pill">Cargando servicios…</span></div></div>
 <section id="driverNavigation" class="card" style="margin-top:18px" hidden>
 <h2 id="driverNavigationTitle">Ruta del servicio</h2><p id="driverNavigationAddress"></p>
-<a id="driverNavigateLink" class="btn" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none">Abrir Google Maps</a>
-<p class="muted">Google Maps abre las indicaciones desde tu ubicación actual. Al abrir otra app, el navegador puede pausar el GPS de FLETYA.</p>
+<button id="driverNavigateLink" class="btn" type="button">Navegar</button>
+<p class="muted">Navegar calcula la ruta desde tu ubicación. En la Zona Hotelera, sigue el recorrido para carga en el mapa de FLETYA.</p>
 <h3>Ruta de entrega: origen → destino</h3><div id="driverRouteMap" style="height:280px;border-radius:12px;overflow:hidden"></div>
 <p id="driverRouteInfo" class="muted" role="status"></p>
 <button class="btn light" type="button" onclick="updateDriverNavigation(state.active,true)">Volver a cargar la ruta</button>
@@ -1753,7 +1753,7 @@ function driverDirectionsUrl(job){
 function clearDriverNavigation(){
  driverRouteRequest++;driverRouteKey='';driverRoutePending=null;driverRouteReady=false;
  const box=document.getElementById('driverNavigation');box.hidden=true;
- document.getElementById('driverNavigateLink').removeAttribute('href');
+ document.getElementById('driverNavigateLink').onclick=null;
  document.getElementById('driverNavigationAddress').textContent='';
  document.getElementById('driverRouteInfo').textContent='';
  if(driverRouteMap)driverRouteMap.remove?.();
@@ -1761,13 +1761,13 @@ function clearDriverNavigation(){
 }
 async function updateDriverNavigation(job,force=false){
  if(!job||!isDriverActiveStatus(job.status)||activeSessionRole!=='driver'||logoutPending){clearDriverNavigation();return;}
- const url=driverDirectionsUrl(job),box=document.getElementById('driverNavigation'),link=document.getElementById('driverNavigateLink');
+ const box=document.getElementById('driverNavigation'),link=document.getElementById('driverNavigateLink');
  box.hidden=false;
  const pickup=job.status==='en_route';
  document.getElementById('driverNavigationTitle').textContent=pickup?'Ve a recoger la carga':'Lleva la carga al destino';
  document.getElementById('driverNavigationAddress').textContent=(pickup?'Recogida: ':'Entrega: ')+(pickup?job.origin:job.destination);
  link.textContent=pickup?'Navegar al origen':'Navegar al destino';
- if(url)link.setAttribute('href',url);else link.removeAttribute('href');
+ link.onclick=()=>navigateDriverFromCurrentPosition(job);
  const key=JSON.stringify([sessionRevision,job.id,job.driver_id,job.origin,job.destination]);
  if(key===driverRouteKey&&!force){if(driverRoutePending)return driverRoutePending;if(driverRouteReady)return;return;}
  const revision=sessionRevision,request=++driverRouteRequest;
@@ -1792,10 +1792,45 @@ async function updateDriverNavigation(job,force=false){
   driverRouteLayers=[line,L.marker(originPoint?[originPoint.lat,originPoint.lng]:points[0]).addTo(driverRouteMap).bindPopup('Recogida'),L.marker(destPoint?[destPoint.lat,destPoint.lng]:points[points.length-1]).addTo(driverRouteMap).bindPopup('Entrega')];
   driverRouteMap.fitBounds(line.getBounds(),{padding:[25,25]});driverRouteReady=true;
   info.textContent=(data.distance_km??job.distance_km??'—')+' km · '+(data.duration_text||'Tiempo estimado')+' · Vista de referencia de la entrega';
- }catch(error){if(revision===sessionRevision&&request===driverRouteRequest&&!logoutPending)info.textContent='No se pudo cargar el mapa de la ruta. Puedes usar el botón de Google Maps o volver a intentarlo.';}
+ }catch(error){if(revision===sessionRevision&&request===driverRouteRequest&&!logoutPending)info.textContent='No se pudo cargar el mapa de la entrega. Vuelve a intentarlo.';}
  finally{if(request===driverRouteRequest)driverRoutePending=null;}
  })();
  driverRoutePending=work;return work;
+}
+
+async function navigateDriverFromCurrentPosition(job) {
+ const link=document.getElementById('driverNavigateLink'), info=document.getElementById('driverRouteInfo');
+ const url=driverDirectionsUrl(job);
+ if(!url||link.disabled)return;
+ if(!navigator.geolocation?.getCurrentPosition){info.textContent='Activa tu ubicación para calcular la ruta.';return;}
+ const revision=sessionRevision, status=job.status;
+ const current=()=>revision===sessionRevision&&!logoutPending&&activeSessionRole==='driver'&&
+   state.active?.id===job.id&&state.active?.driver_id===job.driver_id&&state.active?.status===status;
+ link.disabled=true;
+ info.textContent='Calculando ruta para carga desde tu ubicación…';
+ try{
+  const position=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,
+    {enableHighAccuracy:true,maximumAge:10000,timeout:12000}));
+  if(!current())return;
+  const origin=position.coords.latitude+','+position.coords.longitude;
+  const destination=prepareRouteAddress(String((status==='en_route'?job.origin:job.destination)||''));
+  const {data,error}=await supabaseClient.functions.invoke('fletya-routes',{body:{origin,destination,purpose:'navigation'}});
+  if(!current())return;
+  const points=data?.polyline?decodePolyline(data.polyline):[];
+  if(error||points.length<2)throw new Error('Route unavailable');
+  if(data.navigation_mode==='external'){window.location.assign(url);return;}
+  const map=driverRouteMap;
+  if(!map)throw new Error('Map unavailable');
+  for(const layer of driverRouteLayers)map.removeLayer(layer);
+  const line=L.polyline(points,{weight:5}).addTo(map);
+  driverRouteLayers=[line,L.marker(points[0]).addTo(map).bindPopup('Tu ubicación'),
+    L.marker(points.at(-1)).addTo(map).bindPopup('Destino de esta etapa')];
+  map.invalidateSize({pan:false});
+  map.fitBounds(line.getBounds(),{padding:[25,25]});
+  info.textContent=(data.distance_km??'—')+' km · '+(data.duration_text||'Tiempo estimado')+
+    ' · Sigue la ruta para carga sin cruzar el Puente Nichupté.';
+ }catch(error){if(current())info.textContent='No se pudo verificar una ruta desde tu ubicación. Revisa el GPS y vuelve a intentarlo.';}
+ finally{link.disabled=false;}
 }
 
 // GPS del fletero: seguimiento exclusivo del servicio activo y de la sesión actual.
