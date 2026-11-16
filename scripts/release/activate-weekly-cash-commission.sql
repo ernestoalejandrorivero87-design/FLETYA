@@ -1,4 +1,4 @@
--- Apply only in Pruebas, after cash payments and Stripe coexistence are enabled.
+-- Apply after cash payments are enabled, when fleteros can update to the compatible app.
 create table private.cash_collection_issues (
   job_id uuid primary key references public.jobs(id) on delete cascade,
   reported_by uuid not null references public.profiles(id),

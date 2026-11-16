@@ -275,7 +275,7 @@ public final class MainActivity extends Activity {
         menu.getMenu().add(0, 2, 1, "Mi perfil");
         menu.getMenu().add(0, 3, 2, "Mis servicios completados");
         if (BuildConfig.PUSH_ENABLED) menu.getMenu().add(0, 4, 3, "Avisos de solicitudes");
-        if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) menu.getMenu().add(0, 6, 4, "Comisión en efectivo");
+        menu.getMenu().add(0, 6, 4, "Comisión en efectivo");
         menu.getMenu().add(0, 5, 5, "Cerrar sesión");
         menu.setOnMenuItemClickListener(item -> {
             if (busy) return true;
@@ -405,6 +405,21 @@ public final class MainActivity extends Activity {
                 LinearLayout box = card("Semana del " + cut.optString("week_start") + " · " + state);
                 text(box, "Pendiente: " + money.format(cut.optLong("pending_cents") / 100.0) + " MXN", 16, true);
                 text(box, "Fecha límite: " + cut.optString("due_on"), 15, false);
+                if (cut.optBoolean("closed") && cut.optInt("pending_count") > 0) {
+                    JSONObject account = cut.optJSONObject("spei_account");
+                    String reference = cut.optString("spei_reference", "");
+                    if (account == null || reference.isBlank()) {
+                        text(box, "Los datos para transferir aún no están disponibles.", 15, false);
+                    } else {
+                        String clabe = account.getString("clabe");
+                        text(box, "Transferencia SPEI · " + account.getString("bank"), 16, true);
+                        text(box, "Beneficiario: " + account.getString("beneficiary"), 15, false);
+                        text(box, "CLABE: " + clabe, 15, false);
+                        text(box, "Referencia SPEI: " + reference, 15, false);
+                        button(box, "Copiar CLABE", () -> copyPaymentField("CLABE", clabe));
+                        button(box, "Copiar referencia", () -> copyPaymentField("Referencia SPEI", reference));
+                    }
+                }
                 JSONArray jobs = cut.getJSONArray("jobs");
                 for (int j = 0; j < jobs.length(); j++) {
                     JSONObject job = jobs.getJSONObject(j);
@@ -419,9 +434,15 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void copyPaymentField(String label, String value) {
+        ClipboardManager clipboard = getSystemService(ClipboardManager.class);
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, value));
+        message.setText(label + " copiada.");
+    }
+
     private void confirmTransition(JSONObject job, String next) {
         boolean complete = "completed".equals(next);
-        boolean cash = complete && "PRUEBAS".equals(BuildConfig.ENVIRONMENT) && "cash".equals(job.optString("payment_method"));
+        boolean cash = complete && "cash".equals(job.optString("payment_method"));
         String id = job.optString("id");
         AlertDialog.Builder dialog = new AlertDialog.Builder(this)
             .setTitle(cash ? "¿Recibiste el efectivo?" : complete ? "¿Completaste la entrega?" : "¿Ya recogiste la carga?")
