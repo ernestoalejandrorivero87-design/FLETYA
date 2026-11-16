@@ -371,15 +371,17 @@ test('payment confirmation shows exact cents and updates only the selected unpai
   assert.ok(r.messages.includes('Pago registrado para este servicio.'));
 });
 
-test('Pilot cash collection stays separate from driver payment registration', async () => {
-  const r = paymentRuntime([{ data: { role: 'admin' } }, { data: { ...paymentJob, payment_method: 'cash' } }]);
-  r.context.IS_FLETYA_PRODUCTION_HOST = true;
-  await r.run("markJobPaid('payment-job')");
-  const fields = r.queries[1].calls.find(([method]) => method === 'select')[1];
-  assert.match(fields, /payment_method/);
-  assert.doesNotMatch(fields, /sandbox_/);
-  assert.equal(r.queries.length, 2);
-  assert.equal(r.confirmations.length, 0);
+test('cash collection stays separate from driver payment registration in both environments', async () => {
+  for (const production of [true, false]) {
+    const r = paymentRuntime([{ data: { role: 'admin' } }, { data: { ...paymentJob, payment_method: 'cash' } }]);
+    r.context.IS_FLETYA_PRODUCTION_HOST = production;
+    await r.run("markJobPaid('payment-job')");
+    const fields = r.queries[1].calls.find(([method]) => method === 'select')[1];
+    assert.match(fields, /payment_method/);
+    assert.equal(fields.includes('sandbox_refund_state'), !production);
+    assert.equal(r.queries.length, 2);
+    assert.equal(r.confirmations.length, 0);
+  }
 });
 
 test('cancelling payment confirmation sends no update', async () => {

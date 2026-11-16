@@ -213,10 +213,11 @@ public final class MainActivity extends Activity {
                 catch (Exception error) { message.setText("No se pudo abrir la ruta."); }
             });
         }
-        if (offersCashPayment()) text(quoteArea, "Pago en efectivo al entregar", 15, true);
+        if (offersCashPayment() && !sandboxPayments()) text(quoteArea, cashPaymentLabel(), 15, true);
         if (sandboxPayments()) {
             button(quoteArea, "Autorizar tarjeta de prueba", () -> beginPayment("card"));
             button(quoteArea, "Pagar por SPEI de prueba", () -> beginPayment("spei"));
+            if (offersCashPayment()) button(quoteArea, "Simular pago en efectivo", this::confirmRequest);
         } else {
             button(quoteArea,"Solicitar FLETYA",this::confirmRequest);
         }
@@ -272,13 +273,16 @@ public final class MainActivity extends Activity {
     }
 
     private boolean offersCashPayment() {
-        return BuildConfig.TEST_ROUTE_PRICING && !"PRUEBAS".equals(BuildConfig.ENVIRONMENT);
+        return BuildConfig.TEST_ROUTE_PRICING;
+    }
+    private String cashPaymentLabel() {
+        return sandboxPayments() ? "Pago en efectivo simulado" : "Pago en efectivo al entregar";
     }
     private void confirmRequest(){
         if(quote==null)return;var selected=quote;String id=requestId;long draft=draftRevision;
         picking=true;
         boolean cash = offersCashPayment();
-        dialog().setTitle("¿Confirmar el flete?").setMessage(selected.origin()+"\n→ "+selected.destination()+"\n\n"+money(selected.price())+(cash ? "\nPago en efectivo al entregar." : "")+"\nSujeto a disponibilidad de fleteros.")
+        dialog().setTitle("¿Confirmar el flete?").setMessage(selected.origin()+"\n→ "+selected.destination()+"\n\n"+money(selected.price())+(cash ? "\n" + cashPaymentLabel() + "." : "")+"\nSujeto a disponibilidad de fleteros.")
             .setNegativeButton("Volver",null).setPositiveButton("Confirmar solicitud",(d,w)->{
                 if(quote!=selected||draft!=draftRevision)return;
                 ClientApi.TestQuote selectedTest = testQuote;
@@ -303,7 +307,7 @@ public final class MainActivity extends Activity {
             };
             if (!refund.isEmpty()) text(box, refund, 15, true);
         }
-        if ("cash".equals(job.optString("payment_method"))) text(box, "Pago en efectivo al entregar", 15, true);
+        if ("cash".equals(job.optString("payment_method"))) text(box, cashPaymentLabel(), 15, true);
         text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
         text(box,job.optString("service_type")+" · "+ClientRules.vehicle(job.optString("vehicle_type")),15,false);
         text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(TEAL);
