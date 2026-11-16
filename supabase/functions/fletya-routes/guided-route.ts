@@ -1,4 +1,3 @@
-new
 import { crossesNichupteVehicularBridge, decodePolyline, nichupteCut } from "./route-geometry.ts";
 
 type Location = { latitude: number; longitude: number };
