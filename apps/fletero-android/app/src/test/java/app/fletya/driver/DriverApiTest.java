@@ -49,6 +49,27 @@ public class DriverApiTest {
         assertEquals("POST /functions/v1/fletya-routes", fake.paths.get(4));
         assertEquals("21,-86", fake.bodies.get(4).getString("origin"));
     }
+    @Test public void offerRouteUsesServerEndpointsWithoutAcceptingTheJob() throws Exception {
+        Fake fake = new Fake(); DriverApi api = logged(fake, new Memory());
+        fake.reply(200, "[{\"id\":\"job-1\",\"status\":\"requested\",\"driver_id\":null,\"origin\":\"21,-86\",\"destination\":\"20,-87\"}]");
+        fake.reply(200, "{\"polyline\":\"encoded\"}");
+        assertEquals("encoded", api.offerRoute("job-1").getString("polyline"));
+        assertTrue(fake.paths.get(2).startsWith("GET /rest/v1/jobs?"));
+        assertEquals("POST /functions/v1/fletya-routes", fake.paths.get(3));
+        assertEquals("21,-86", fake.bodies.get(3).getString("origin"));
+        assertEquals("20,-87", fake.bodies.get(3).getString("destination"));
+        assertEquals(4, fake.paths.size());
+    }
+    @Test public void offerRouteRejectsDisappearedOrAssignedJobsBeforeRequestingDirections() throws Exception {
+        for (String response : List.of("[]", "[{\"status\":\"en_route\",\"driver_id\":\"driver-b\"}]",
+            "[{\"status\":\"requested\",\"driver_id\":\"driver-b\"}]")) {
+            Fake fake = new Fake(); DriverApi api = logged(fake, new Memory());
+            fake.reply(200, response);
+            try { api.offerRoute("job-1"); fail(); }
+            catch (DriverApi.Failure error) { assertEquals(409, error.status); }
+            assertEquals(3, fake.paths.size());
+        }
+    }
     @Test public void clientAccountIsRejectedAndSessionCleared() throws Exception {
         Fake fake = new Fake(); Memory store = new Memory(); DriverApi api = new DriverApi(store, fake);
         fake.reply(200, session()); fake.reply(200, "[{\"id\":\"driver-a\",\"role\":\"client\"}]");
