@@ -1,4 +1,4 @@
-import { decodePolyline, insideRing } from "./route-geometry.ts";
+import { crossesNichupteVehicularBridge, decodePolyline, insideRing } from "./route-geometry.ts";
 import { pilotEndpointAreas } from "./pilot-endpoints.ts";
 
 type ProviderRoute = { distanceMeters?: number; duration?: string; polyline?: { encodedPolyline?: string } };
@@ -112,7 +112,7 @@ Deno.serve(async (req: Request) => {
       if (!user.id) return jsonResponse({ error: "authentication_required", message: "Inicia sesión para cotizar." }, 401);
       userId = user.id;
     }
-    const getRoutes = () => fetch(
+    const getRoutes = (via?: string) => fetch(
       "https://routes.googleapis.com/directions/v2:computeRoutes",
       {
         method: "POST",
@@ -125,10 +125,8 @@ Deno.serve(async (req: Request) => {
           origin: originWaypoint,
           destination: destinationWaypoint,
           travelMode: "DRIVE",
-          ...(quote ? {
-            computeAlternativeRoutes: true,
-            polylineQuality: "HIGH_QUALITY",
-          } : {}),
+          polylineQuality: "HIGH_QUALITY",
+          ...(via ? { intermediates: [{ address: via, via: true }] } : { computeAlternativeRoutes: true }),
         }),
         signal: controller.signal,
       },
@@ -152,19 +150,43 @@ Deno.serve(async (req: Request) => {
       typeof candidate?.distanceMeters === "number" && Number.isFinite(candidate.distanceMeters) &&
       candidate.distanceMeters > 0 && typeof candidate.duration === "string" &&
       /^\d+(?:\.\d+)?s$/.test(candidate.duration) && typeof candidate.polyline?.encodedPolyline === "string";
-    const route = quote ? routes.find((candidate) => {
+    let bridgeBlocked = false;
+    const permittedRoute = (candidate: ProviderRoute): candidate is QuoteRoute => {
       if (!validQuoteRoute(candidate)) return false;
       const points = decodePolyline(candidate.polyline.encodedPolyline);
-      return points.length >= 2 && inPilotArea(pickup ?? points[0]) &&
-        inPilotArea(dropoff ?? points[points.length - 1]);
-    }) : routes[0];
+      if (points.length < 2 || (quote &&
+          (!inPilotArea(pickup ?? points[0]) || !inPilotArea(dropoff ?? points[points.length - 1])))) return false;
+      if (crossesNichupteVehicularBridge(points)) {
+        bridgeBlocked = true;
+        return false;
+      }
+      return true;
+    };
+    let route = routes.find(permittedRoute);
+    if (!route && bridgeBlocked) {
+      const alternatives = await Promise.allSettled([
+        "Torre Escénica de Cancún, Boulevard Kukulcán, Cancún, Quintana Roo",
+        "Playa Delfines, Boulevard Kukulcán, Cancún, Quintana Roo",
+      ].map(async (via) => {
+        const response = await getRoutes(via);
+        if (!response.ok) return undefined;
+        const detour = await response.json() as { routes?: ProviderRoute[] };
+        return Array.isArray(detour.routes) ? detour.routes.find(permittedRoute) : undefined;
+      }));
+      route = alternatives.flatMap(result => result.status === "fulfilled" && result.value ? [result.value] : [])
+        .sort((a, b) => a.distanceMeters - b.distanceMeters)[0];
+    }
+    if (!route && bridgeBlocked) {
+      const message = "No se encontró una ruta para carga que evite el Puente Nichupté.";
+      return quote ? jsonResponse({ local_quote: false, message }) : jsonResponse({ error: "restricted_route", message }, 422);
+    }
     if (quote && routes.length && !route) {
       return jsonResponse({
         local_quote: false,
         message: "La recogida y la entrega deben estar dentro de la zona de servicio de FLETYA.",
       });
     }
-    if (!route || typeof route.distanceMeters !== "number" || typeof route.duration !== "string") {
+    if (!route) {
       return jsonResponse({ error: "route_not_found", message: "No se encontró una ruta para ese origen y destino." }, 404);
     }
 
