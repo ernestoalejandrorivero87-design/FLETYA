@@ -134,3 +134,27 @@ test('navigation stays in FLETYA near Nichupté even with a safe Google route', 
   const outside = await runtime().request({ origin: '21.1619,-86.8515', destination: '21.16,-86.88', purpose: 'navigation' });
   assert.equal((await outside.json()).navigation_mode, 'external');
 });
+
+
+test('quotes include access and interior roads for both residential developments', async () => {
+  const urban = [-86.8515, 21.1619];
+  for (const residential of [
+    [-86.84989, 21.0596], [-86.85964, 21.05974], [-86.84837, 21.05455],
+    [-86.87372, 21.00427], [-86.879113, 21.002171], [-86.87566, 20.99735],
+  ]) {
+    for (const [origin, destination] of [[urban, residential], [residential, urban]]) {
+      const r = runtime(() => [route([origin, destination])]);
+      const coordinate = ([lng, lat]) => lat + ',' + lng;
+      const response = await r.request({ origin: coordinate(origin), destination: coordinate(destination), purpose: 'quote' });
+      assert.equal((await response.json()).local_quote, true, coordinate(residential));
+    }
+  }
+});
+
+test('the residential coverage does not extend to a nearby destination outside both areas', async () => {
+  const start = [-86.8515, 21.1619];
+  const outside = [-86.86199, 20.98512];
+  const r = runtime(() => [route([start, outside])]);
+  const response = await r.request({ origin: '21.1619,-86.8515', destination: '20.98512,-86.86199', purpose: 'quote' });
+  assert.equal((await response.json()).local_quote, false);
+});
