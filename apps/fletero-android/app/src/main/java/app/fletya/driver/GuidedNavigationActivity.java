@@ -22,7 +22,16 @@ import java.util.List;
 public final class GuidedNavigationActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private RouteMapView map;
-    private TextView instruction;
+    private TextView instruction, tripSummary;
+    private double assumedKmh = 30;
+    private void updateSummary(boolean valid) {
+        double meters = valid ? progress.remainingMeters() : Double.NaN;
+        if (!Double.isFinite(meters)) { tripSummary.setText("Distancia y llegada · calculando…"); return; }
+        long minutes = (long)Math.ceil(meters / (assumedKmh * 1000 / 60));
+        String distance = meters < 1000 ? Math.round(meters) + " m" : String.format(java.util.Locale.ROOT,"%.1f km",meters/1000);
+        String arrival = new java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(new java.util.Date(System.currentTimeMillis()+minutes*60_000));
+        tripSummary.setText(distance + " restantes · ~" + minutes + " min · " + arrival + "\nEstimación sin tráfico en vivo");
+    }
     private GuidanceProgress progress;
     private String jobId;
     private String owner;
@@ -84,6 +93,11 @@ public final class GuidedNavigationActivity extends Activity {
         instruction.setTextSize(22);
         instruction.setText("Cargando mapa de Pruebas…");
         layout.addView(instruction);
+        tripSummary = new TextView(this);
+        tripSummary.setPadding(24, 8, 24, 12);
+        tripSummary.setTextSize(16);
+        tripSummary.setText("Distancia y llegada · calculando…");
+        layout.addView(tripSummary);
         setContentView(layout);
         layout.requestApplyInsets();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -158,6 +172,7 @@ public final class GuidedNavigationActivity extends Activity {
         @Override public void run() {
             if (demoIndex == demoPoints.size()) {
                 instruction.setText("Simulación completada");
+                tripSummary.setText("0 m restantes · Simulación completada");
                 return;
             }
             var point = demoPoints.get(demoIndex++);
@@ -173,6 +188,7 @@ public final class GuidedNavigationActivity extends Activity {
     private void updatePosition(Location fix) {
         if (fix == null || fix.getAccuracy() > 25) {
             instruction.setText("Esperando ubicación GPS precisa…");
+            updateSummary(false);
             if (lastFix != 0) map.updateVehicle(null);
             lastFix = 0;
             offRoute = 0;
@@ -186,6 +202,7 @@ public final class GuidedNavigationActivity extends Activity {
     private void showPosition(Location fix) {
         map.updateVehicle(fix);
         var hint = progress.update(new GuidanceProgress.Point(fix.getLatitude(), fix.getLongitude()), fix.getAccuracy());
+        updateSummary(hint != null);
         if (hint == null) {
             if (demo) { instruction.setText("Siguiendo ruta de ejemplo…"); return; }
             offRoute++;
@@ -214,6 +231,7 @@ public final class GuidedNavigationActivity extends Activity {
                         map.replaceGuidedRoute(coordinates);
                         offRoute = 0;
                         instruction.setText("Nueva ruta verificada");
+                        updateSummary(false);
                     } catch (Exception error) { instruction.setText("Ruta alternativa no verificada. Sigue las señales de tránsito."); }
                 });
             } catch (Exception error) {
