@@ -96,6 +96,9 @@ final class RouteMapView extends LinearLayout {
             }
         });
     }
+    void replaceGuidedRoute(org.json.JSONArray points) {
+        if (map != null && !disposed) map.evaluateJavascript("if(window.replaceRoute) window.replaceRoute(" + points + ")", null);
+    }
     void updateVehicle(Location fix) {
         guidedFix = fix;
         if (map == null || disposed) return;
@@ -146,7 +149,7 @@ final class RouteMapView extends LinearLayout {
                 + "if(vehicle){const a=vehicle.getLatLng(),t=performance.now();const move=now=>{const k=Math.min(1,(now-t)/450);vehicle.setLatLng([a.lat+(p[0]-a.lat)*k,a.lng+(p[1]-a.lng)*k]);if(k<1)frame=requestAnimationFrame(move);};frame=requestAnimationFrame(move);map.panTo(p,{animate:true,duration:0.45});}"
                 + "else{vehicle=L.circleMarker(p,{radius:9,color:'#1264ce',fillOpacity:1}).addTo(map);map.setView(p,16);}};"
                 : "L.circleMarker(points[0],{radius:8,color:'#087f88',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Tu ubicación" : "Recogida") + "');")
-            + "L.circleMarker(points[points.length-1],{radius:8,color:'#c85229',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Destino de esta etapa" : "Entrega") + "');</script></html>";
+            + "const destination=L.circleMarker(points[points.length-1],{radius:8,color:'#c85229',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Destino de esta etapa" : "Entrega") + "');" + (guided ? "window.replaceRoute=p=>{line.setLatLngs(p);destination.setLatLng(p[p.length-1]);};" : "") + "</script></html>";
         map.loadDataWithBaseURL("https://fletya.vercel.app/", html, "text/html", "UTF-8", null);
     }
     private void clearMap() {
