@@ -514,7 +514,7 @@ public final class MainActivity extends Activity {
                     message.setText("La guía de giros no está disponible para esta ruta.");
                     return;
                 }
-                GuidedNavigationActivity.show(this, id, api.userId(), route);
+                GuidedNavigationActivity.show(this, id, api.userId(), status, route);
                 return;
             }
             if ("external".equals(route.optString("navigation_mode"))) {
