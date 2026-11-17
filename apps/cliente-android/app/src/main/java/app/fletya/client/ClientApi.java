@@ -123,7 +123,7 @@ public final class ClientApi {
     }
     public synchronized JSONArray activeJobs() throws Exception {
         token();
-        return get("jobs?select=*&client_id=eq." + eq(userId()) + "&status=in.(requested,en_route,picked_up)&order=created_at.desc,id.desc&limit=2");
+        return get("jobs?select=*&client_id=eq." + eq(userId()) + "&status=in.(" + ("PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? "requested,accepted,en_route,picked_up" : "requested,en_route,picked_up") + ")&order=created_at.desc,id.desc&limit=2");
     }
     public synchronized JSONArray notifications(int offset) throws Exception {
         return get("notifications?select=id,title,message,type,read,created_at,job_id&user_id=eq."+eq(userId())+"&type=like.client_*&order=created_at.desc,id.desc&limit=13&offset="+Math.max(0,offset));
@@ -181,9 +181,101 @@ public final class ClientApi {
             throw new Failure(409,"No se pudo confirmar la solicitud. Actualiza el seguimiento antes de volver a solicitar.");
         return rows.getJSONObject(0);
     }
+    public record TestQuote(Quote quote, String routeId) {}
+
+    public synchronized TestQuote quoteForTest(String origin, String destination, String vehicle,
+                                               int helpers, String service) throws Exception {
+        profile();
+        String from = ClientRules.address(origin), to = ClientRules.address(destination);
+        ClientRules.price(1, vehicle, helpers);
+        JSONObject route = new JSONObject(call("POST", "/functions/v1/fletya-routes",
+            new JSONObject().put("origin", from).put("destination", to)
+                .put("purpose", "bookable_quote").put("include_route", true), null).body());
+        if (!route.optBoolean("local_quote")) {
+            throw new Failure(400, route.optString("message", "No se pudo cotizar la ruta."));
+        }
+        String routeId = route.getString("quote_id");
+        java.util.UUID.fromString(routeId);
+        String response = call("POST", "/rest/v1/rpc/preview_test_route_price",
+            new JSONObject().put("p_quote", routeId).put("p_vehicle", vehicle).put("p_helpers", helpers), null).body();
+        if ("null".equals(response.trim())) throw new Failure(409, "Calcula de nuevo el precio.");
+        double total = new java.math.BigDecimal(response.trim()).doubleValue();
+        return new TestQuote(new Quote(from, to, vehicle, helpers, service, route.getDouble("distance_km"),
+            total, route.getString("route_polyline"), route.optString("duration_text"), System.nanoTime()), routeId);
+    }
+
+    public synchronized JSONObject sandboxPayment(TestQuote selected, String id, String method) throws Exception {
+        return sandboxPayment(selected == null ? "status" : "start", selected, id, method);
+    }
+
+    public synchronized JSONObject cancelSandboxPayment() throws Exception {
+        return sandboxPayment("cancel", null, null, null);
+    }
+
+    private JSONObject sandboxPayment(String action, TestQuote selected, String id, String method) throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+            throw new Failure(403, "Los pagos de prueba solo están disponibles en FLETYA Pruebas.");
+        }
+        JSONObject body = new JSONObject().put("action", action);
+        if (selected != null) {
+            Quote quote = selected.quote();
+            body.put("id", id).put("quote", selected.routeId()).put("method", method)
+                .put("flow", "authorize_then_capture")
+                .put("amount", quote.price()).put("vehicle", quote.vehicle()).put("helpers", quote.helpers())
+                .put("service", quote.service());
+        }
+        return new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body());
+    }
+
+    public synchronized JSONObject createForTest(TestQuote selected, String requestId) throws Exception {
+        return confirmRouteQuote(selected, requestId, "confirm_test_route_quote");
+    }
+
+    public synchronized JSONObject createCashRequest(TestQuote selected, String requestId) throws Exception {
+        return confirmRouteQuote(selected, requestId, "confirm_cash_route_quote");
+    }
+
+    private JSONObject confirmRouteQuote(TestQuote selected, String requestId, String function) throws Exception {
+        Quote quote = selected.quote();
+        JSONObject body = new JSONObject().put("p_quote", selected.routeId()).put("p_request", requestId)
+            .put("p_vehicle", quote.vehicle()).put("p_helpers", quote.helpers()).put("p_service", quote.service())
+            .put("p_expected_price", quote.price());
+        JSONObject job = new JSONObject(call("POST", "/rest/v1/rpc/" + function, body, null).body());
+        if (!ClientRules.owns(job, userId()) || !requestId.equals(job.optString("id"))
+            || !selected.routeId().equals(job.optString("route_quote_id"))
+            || quote.price() != job.optDouble("price")
+            || ("confirm_cash_route_quote".equals(function) && !"cash".equals(job.optString("payment_method")))) {
+            throw new Failure(409, "No se pudo verificar el pedido. Actualiza el seguimiento.");
+        }
+        return job;
+    }
+
+    public synchronized JSONArray savedRoute(String jobId) throws Exception {
+        JSONObject route = new JSONObject(call("POST", "/rest/v1/rpc/get_job_delivery_route",
+            new JSONObject().put("p_job", jobId), null).body());
+        if (!route.optBoolean("available")) throw new Failure(409, "La ruta ya no está disponible.");
+        return route.getJSONArray("points");
+    }
+
+    public synchronized JSONObject requestSandboxCardRefund(String id) throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) throw new Failure(403, "Reembolso de prueba no disponible.");
+        java.util.UUID.fromString(id);
+        JSONObject body = new JSONObject().put("action", "refund_card").put("id", id);
+        JSONObject result = new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body())
+            .getJSONObject("job");
+        if (!ClientRules.owns(result, userId()) || !id.equals(result.optString("id"))) {
+            throw new Failure(409, "No se pudo confirmar la devolución. Revisa el historial.");
+        }
+        return result;
+    }
+
     public synchronized JSONObject cancel(String id) throws Exception {
         profile();
         JSONObject job = job(id);
+        if (job != null && "held".equals(job.optString("sandbox_card_state"))) {
+            JSONObject body = new JSONObject().put("action","cancel_card").put("id",id);
+            return new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body()).getJSONObject("job");
+        }
         if (job == null || !"requested".equals(job.optString("status")) || !job.isNull("driver_id") || job.optBoolean("driver_paid"))
             throw new Failure(409,"El servicio cambió o ya fue aceptado. Actualiza el seguimiento.");
         JSONArray rows = new JSONArray(call("PATCH","/rest/v1/jobs?id=eq." + eq(id) + "&client_id=eq." + eq(userId())

@@ -23,7 +23,7 @@ final class RouteMapView extends LinearLayout {
     private boolean disposed;
     RouteMapView(Context context, DriverApi api) {
         super(context); this.api = api; setOrientation(VERTICAL);
-        status = new TextView(context); status.setTextColor(Color.DKGRAY); addView(status);
+        status = new TextView(context); addView(status);
         retry = new Button(context); retry.setText("Reintentar mapa"); retry.setAllCaps(false);
         retry.setOnClickListener(v -> load()); addView(retry); retry.setVisibility(GONE);
     }
@@ -115,7 +115,7 @@ final class RouteMapView extends LinearLayout {
             + "<div id='map' aria-label='Ruta del servicio'></div><div id='notice' hidden>Mapa base sin conexión. Reintenta al recuperar la señal.</div><script>" + js
             + "\nconst points=" + points + ";const map=L.map('map',{scrollWheelZoom:false});"
             + "L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors'}).on('tileerror',()=>document.getElementById('notice').hidden=false).addTo(map);"
-            + "const line=L.polyline(points,{color:'#087f88',weight:5}).addTo(map);map.fitBounds(line.getBounds(),{padding:[25,25]});"
+            + "const line=L.polyline(points,{color:'#881A42',weight:5}).addTo(map);map.fitBounds(line.getBounds(),{padding:[25,25]});"
             + "L.circleMarker(points[0],{radius:8,color:'#087f88',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Tu ubicación" : "Recogida") + "');"
             + "L.circleMarker(points[points.length-1],{radius:8,color:'#c85229',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Destino de esta etapa" : "Entrega") + "');</script></html>";
         map.loadDataWithBaseURL("https://fletya.vercel.app/", html, "text/html", "UTF-8", null);

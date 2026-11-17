@@ -1,13 +1,12 @@
 package app.fletya.driver;
 
 import app.fletya.maps.RouteMapActivity;
+import app.fletya.ui.Appearance;
 import android.Manifest;
 import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.*;
 import android.text.InputType;
@@ -20,7 +19,7 @@ import java.util.concurrent.*;
 
 /** Native driver-only UI. Requests are serialized; late results cannot restore a logged-out screen. */
 public final class MainActivity extends Activity {
-    private static final int TEAL = Color.rgb(8, 127, 136);
+    private Appearance appearance;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private DriverApi api;
@@ -39,7 +38,10 @@ public final class MainActivity extends Activity {
     private String previewedOfferId = "";
 
     @Override public void onCreate(Bundle state) {
+        appearance = new Appearance(this, R.style.AppTheme, R.style.AppThemeDark);
+        setTheme(appearance.theme());
         super.onCreate(state);
+        appearance.applyWindow();
         api = ((DriverApplication) getApplication()).api();
         if (api.signedIn()) { screen = "home"; shell(); }
         else loginScreen();
@@ -59,17 +61,14 @@ public final class MainActivity extends Activity {
         }
     };
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private GradientDrawable background(int color, int radius) {
-        GradientDrawable value = new GradientDrawable(); value.setColor(color); value.setCornerRadius(dp(radius)); return value;
-    }
     private void shell() {
         int scrollY = currentScroll != null && screen.equals(renderedScreen) ? currentScroll.getScrollY() : 0;
         renderedScreen = screen;
-        ScrollView scroll = new ScrollView(this); currentScroll = scroll;
+        ScrollView scroll = new ScrollView(appearance.context()); currentScroll = scroll;
         scroll.post(() -> scroll.scrollTo(0, scrollY));
         scroll.setFillViewport(true);
-        root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(20), dp(16), dp(20), dp(28));
-        root.setBackgroundColor(Color.rgb(244, 247, 248));
+        root = new LinearLayout(appearance.context()); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(20), dp(16), dp(20), dp(28));
+        root.setBackgroundColor(appearance.canvas());
         scroll.addView(root);
         scroll.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -80,36 +79,40 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
         scroll.requestApplyInsets();
-        LinearLayout heading = new LinearLayout(this);
+        LinearLayout heading = new LinearLayout(appearance.context());
         heading.setGravity(Gravity.CENTER_VERTICAL);
         root.addView(heading);
-        TextView brand = text(heading, "FLETYA", 26, true); brand.setTextColor(TEAL);
-        brand.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
-        if (api.signedIn()) button(heading, "Menú", () -> showMenu(heading)).setLayoutParams(new LinearLayout.LayoutParams(dp(96), dp(48)));
-        text(root, "Fleteros · " + BuildConfig.ENVIRONMENT, 12, false);
-        message = text(root, "", 14, false); message.setTextColor(TEAL);
+        appearance.addBrand(heading);
+        if (api.signedIn()) button(heading, "Menú", () -> showMenu(heading), false).setLayoutParams(new LinearLayout.LayoutParams(dp(96), dp(48)));
+        text(root, "Fletero · " + BuildConfig.ENVIRONMENT, 12, false);
+        appearance.addAccent(root);
+        message = text(root, "", 14, false); message.setTextColor(appearance.accent());
     }
     private LinearLayout card(String title) {
-        LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(18), dp(18), dp(18), dp(18)); box.setBackground(background(Color.WHITE, 16));
+        LinearLayout box = new LinearLayout(appearance.context()); box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(18), dp(18), dp(18)); box.setBackground(appearance.card());
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(14); root.addView(box, layout);
         text(box, title, 20, true); return box;
     }
     private TextView text(LinearLayout parent, String value, int size, boolean bold) {
-        TextView view = new TextView(this); view.setText(value); view.setTextSize(size); view.setTextColor(Color.rgb(32, 45, 49));
+        TextView view = new TextView(appearance.context()); view.setText(value); view.setTextSize(size); view.setTextColor(appearance.text());
         if (bold) view.setTypeface(null, Typeface.BOLD);
         view.setPadding(0, dp(4), 0, dp(8)); parent.addView(view); return view;
     }
     private Button button(LinearLayout parent, String label, Runnable action) {
-        Button button = new Button(this); button.setText(label); button.setAllCaps(false); button.setTextColor(Color.WHITE);
-        button.setTextSize(15); button.setMinHeight(dp(48)); button.setBackground(background(TEAL, 10));
+        return button(parent, label, action, true);
+    }
+    private Button button(LinearLayout parent, String label, Runnable action, boolean primary) {
+        Button button = new Button(appearance.context());
+        button.setText(label);
+        appearance.styleButton(button, primary);
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(8); parent.addView(button, layout);
         button.setOnClickListener(view -> { if (!busy) action.run(); }); return button;
     }
     private EditText field(LinearLayout box, String label, String initial, int type) {
         text(box, label, 14, true);
-        EditText value = new EditText(this); value.setSingleLine(true); value.setText(initial); value.setTextSize(16); value.setInputType(type);
-        value.setMinHeight(dp(48)); box.addView(value, new LinearLayout.LayoutParams(-1, -2)); return value;
+        EditText value = new EditText(appearance.context()); value.setSingleLine(true); value.setText(initial); value.setTextSize(16); value.setInputType(type);
+        value.setMinHeight(dp(48)); appearance.styleField(value); box.addView(value, new LinearLayout.LayoutParams(-1, -2)); return value;
     }
     private interface Work<T> { T run() throws Exception; }
     private interface Done<T> { void run(T result) throws Exception; }
@@ -147,8 +150,8 @@ public final class MainActivity extends Activity {
         EditText password=field(box,"Contraseña (mínimo 8 caracteres)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setSaveEnabled(false);
         EditText repeat=field(box,"Repite la contraseña","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);repeat.setSaveEnabled(false);
         EditText phone=true?field(box,"Teléfono con lada (10 a 15 dígitos)","",InputType.TYPE_CLASS_PHONE):null;
-        Spinner vehicle=new Spinner(this);
-        vehicle.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta","Camión"}));
+        Spinner vehicle=new Spinner(appearance.context());
+        vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta","Camión"}));
         if(true){text(box,"Vehículo",14,true);box.addView(vehicle,new LinearLayout.LayoutParams(-1,dp(52)));}
         EditText plates=true?field(box,"Placas","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS):null;
         if(true)text(box,"Después de confirmar tu correo, tu cuenta quedará pendiente de revisión por administración. Podrás completar tus datos desde Mi perfil.",14,false);
@@ -190,7 +193,7 @@ public final class MainActivity extends Activity {
     private void refresh() {
         if (busy || !visible || requestingNotices || !api.signedIn()) return;
         if ("history".equals(screen)) { history(); return; }
-        if ("profile".equals(screen)) return;
+        if ("profile".equals(screen) || "appearance".equals(screen)) return;
         task(() -> {
             JSONObject profile = api.profile();
             JSONArray jobs = "approved".equals(profile.optString("driver_status","approved")) ? api.activeJobs() : new JSONArray();
@@ -230,7 +233,7 @@ public final class MainActivity extends Activity {
                 boolean picked = "picked_up".equals(job.optString("status"));
                 text(box, picked ? "Carga recogida · Lleva la carga al destino" : "En camino a recoger", 17, true);
                 button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job));
-                button(box,picked?"Llegué al punto de entrega":"Llegué al punto de recogida",()->new AlertDialog.Builder(this).setTitle("¿Confirmar llegada?").setMessage("El cliente recibirá el aviso de tu llegada a este punto.").setNegativeButton("Volver",null).setPositiveButton("Confirmar llegada",(d,w)->task(()->{api.arrive(job.optString("id"),picked?"delivery":"pickup");return true;},ok->{message.setText("Llegada registrada. El cliente puede consultar el aviso.");})).show());
+                button(box,picked?"Llegué al punto de entrega":"Llegué al punto de recogida",()->new AlertDialog.Builder(appearance.context()).setTitle("¿Confirmar llegada?").setMessage("El cliente recibirá el aviso de tu llegada a este punto.").setNegativeButton("Volver",null).setPositiveButton("Confirmar llegada",(d,w)->task(()->{api.arrive(job.optString("id"),picked?"delivery":"pickup");return true;},ok->{message.setText("Llegada registrada. El cliente puede consultar el aviso.");})).show());
                 button(box, picked ? "Completar servicio" : "Carga recogida", () -> confirmTransition(job, picked ? "completed" : "picked_up"));
                 if (!picked) button(box, "Liberar antes de recoger", () -> release(job));
                 text(box, TrackingService.report(), 14, false);
@@ -242,7 +245,7 @@ public final class MainActivity extends Activity {
                 requestTracking(null, false);
                 LinearLayout mapBox = card("Ruta de recogida a entrega");
                 text(mapBox, "Referencia del servicio. Usa Navegar para recibir indicaciones desde tu ubicación.", 13, false);
-                if (routeMap == null) routeMap = new RouteMapView(this, api);
+                if (routeMap == null) routeMap = new RouteMapView(appearance.context(), api);
                 if (routeMap.getParent() instanceof ViewGroup parent) parent.removeView(routeMap);
                 mapBox.addView(routeMap);
                 routeMap.show(job, api.userId());
@@ -284,7 +287,7 @@ public final class MainActivity extends Activity {
         task(() -> api.offerRoute(id), route -> {
             if (!visible || !"home".equals(screen) || active != null) return;
             RouteMapView map = new RouteMapView(this, api);
-            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Ruta estimada del servicio")
+            AlertDialog dialog = new AlertDialog.Builder(appearance.context()).setTitle("Ruta estimada del servicio")
                 .setView(map).setPositiveButton("Cerrar", null).create();
             offerRouteDialog = dialog;
             previewedOfferId = id;
@@ -302,20 +305,33 @@ public final class MainActivity extends Activity {
     private void closeOfferRoute() {
         if (offerRouteDialog != null) offerRouteDialog.dismiss();
     }
+    private void showAppearance() {
+        clearRoute();
+        screen = "appearance";
+        shell();
+        var box = card("Apariencia");
+        appearance.addChoices(box, this::showAppearance);
+        button(root, "Volver al panel", () -> {
+            screen = "home";
+            shell();
+            refresh();
+        }, false);
+    }
     private void showMenu(View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
+        PopupMenu menu = new PopupMenu(appearance.context(), anchor);
         menu.getMenu().add(0, 1, 0, "Mi servicio / Solicitudes");
         menu.getMenu().add(0, 2, 1, "Mi perfil");
         menu.getMenu().add(0, 3, 2, "Mis servicios completados");
         if (BuildConfig.PUSH_ENABLED) menu.getMenu().add(0, 4, 3, "Avisos de solicitudes");
-        menu.getMenu().add(0, 5, 4, "Cerrar sesión");
+        menu.getMenu().add(0, 7, 4, "Apariencia");
+        menu.getMenu().add(0, 5, 5, "Cerrar sesión");
         menu.setOnMenuItemClickListener(item -> {
             if (busy) return true;
             switch (item.getItemId()) {
                 case 1 -> { screen = "home"; refresh(); }
                 case 2 -> profile();
                 case 3 -> { screen = "history"; historyPage = 0; history(); }
-                case 4 -> new AlertDialog.Builder(this).setTitle("Avisos de solicitudes")
+                case 4 -> new AlertDialog.Builder(appearance.context()).setTitle("Avisos de solicitudes")
                     .setMessage(PushManager.report()).setNegativeButton("Volver", null)
                     .setPositiveButton("Activar avisos", (d, w) -> {
                         if (PushManager.shouldRequestOnFirstUse(this)
@@ -325,6 +341,7 @@ public final class MainActivity extends Activity {
                         else if (!PushManager.permitted(this)) open("package:" + getPackageName(), android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                         else { PushManager.tokenChanged(this, api); message.setText(PushManager.report()); }
                     }).show();
+                case 7 -> showAppearance();
                 case 5 -> confirmLogout();
                 default -> { return false; }
             }
@@ -338,7 +355,7 @@ public final class MainActivity extends Activity {
         text(box, job.optString("service_type", "Flete") + " · " + vehicleLabel(job.optString("vehicle_type")), 15, false);
         text(box, job.optString("distance_km", "—") + " km · Ayudantes: " + job.optInt("helpers"), 15, false);
         NumberFormat money = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX"));
-        text(box, money.format(job.optDouble("price", 0)) + " MXN", 24, true).setTextColor(TEAL);
+        text(box, money.format(job.optDouble("price", 0)) + " MXN", 24, true).setTextColor(appearance.accent());
         if ("cash".equals(job.optString("payment_method"))) {
             text(box, "Cobras en efectivo al entregar", 16, true);
         }
@@ -370,7 +387,7 @@ public final class MainActivity extends Activity {
         if (acceptingId == null && TrackingService.runningFor(active.optString("id"))) return;
         if (trackingPermissionsGranted()) { afterPermissions(acceptingId); return; }
         if (!explicit) return;
-        new AlertDialog.Builder(this).setTitle("Ubicación durante tu servicio")
+        new AlertDialog.Builder(appearance.context()).setTitle("Ubicación durante tu servicio")
             .setMessage("FLETYA compartirá tu ubicación con el cliente del servicio activo, incluso mientras usas Google Maps o apagas la pantalla. Verás un aviso de seguimiento. Se detendrá al completar, liberar el servicio o cerrar sesión. Se te pedirán los permisos pendientes.")
             .setPositiveButton("Continuar", (dialog, which) -> {
                 permissionAcceptId = acceptingId;
@@ -400,14 +417,14 @@ public final class MainActivity extends Activity {
         if (trackingPermissionsGranted()) afterPermissions(acceptingId);
         else {
             message.setText("Se necesita ubicación precisa y notificaciones para activar el seguimiento.");
-            new AlertDialog.Builder(this).setMessage("Puedes habilitar los permisos desde los ajustes de esta app.")
+            new AlertDialog.Builder(appearance.context()).setMessage("Puedes habilitar los permisos desde los ajustes de esta app.")
                 .setPositiveButton("Abrir ajustes", (d, w) -> open("package:" + getPackageName(), android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS))
                 .setNegativeButton("Cerrar", null).show();
         }
     }
     private void afterPermissions(String acceptingId) {
         if (acceptingId != null) {
-            new AlertDialog.Builder(this).setTitle("¿Aceptar este servicio?")
+            new AlertDialog.Builder(appearance.context()).setTitle("¿Aceptar este servicio?")
                 .setMessage("Al aceptar comenzarás a compartir ubicación para recoger y entregar la carga.")
                 .setPositiveButton("Aceptar", (d, w) -> task(() -> api.acceptOffer(acceptingId), job -> {
                     active = job; startTracker(); refresh();
@@ -424,7 +441,7 @@ public final class MainActivity extends Activity {
     }
     private void confirmTransition(JSONObject job, String next) {
         boolean complete = "completed".equals(next);
-        new AlertDialog.Builder(this).setTitle(complete ? "¿Completaste la entrega?" : "¿Ya recogiste la carga?")
+        new AlertDialog.Builder(appearance.context()).setTitle(complete ? "¿Completaste la entrega?" : "¿Ya recogiste la carga?")
             .setMessage(complete ? "El servicio quedará completado y dejarás de compartir ubicación." : "Después de confirmar la recogida ya no podrás liberar el servicio.")
             .setPositiveButton("Confirmar", (d, w) -> task(() -> api.transition(job.optString("id"), job.optString("status"), next, null), updated -> {
                 if (complete) { stopService(new Intent(this, TrackingService.class)); active = null; }
@@ -433,8 +450,8 @@ public final class MainActivity extends Activity {
             })).setNegativeButton("Cancelar", null).show();
     }
     private void release(JSONObject job) {
-        EditText reason = new EditText(this); reason.setHint("Motivo de 10 a 300 caracteres"); reason.setMinLines(2);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Liberar antes de recoger").setView(reason)
+        EditText reason = new EditText(appearance.context()); appearance.styleField(reason); reason.setHint("Motivo de 10 a 300 caracteres"); reason.setMinLines(2);
+        AlertDialog dialog = new AlertDialog.Builder(appearance.context()).setTitle("Liberar antes de recoger").setView(reason)
             .setPositiveButton("Liberar servicio", null).setNegativeButton("Cancelar", null).create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             String value = reason.getText().toString().trim();
@@ -462,8 +479,8 @@ public final class MainActivity extends Activity {
                     + Uri.encode(route.getString("navigation_destination")));
                 return;
             }
-            RouteMapView map = new RouteMapView(this, api);
-            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Ruta para carga")
+            RouteMapView map = new RouteMapView(appearance.context(), api);
+            AlertDialog dialog = new AlertDialog.Builder(appearance.context()).setTitle("Ruta para carga")
                 .setView(map).setPositiveButton("Cerrar", null).create();
             dialog.setOnDismissListener(ignored -> map.dispose());
             dialog.show();
@@ -481,8 +498,8 @@ public final class MainActivity extends Activity {
             LinearLayout box = card("Mi perfil de fletero");
             EditText name = field(box, "Nombre completo", profile.optString("full_name"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
             text(box, "Vehículo", 14, true);
-            Spinner vehicles = new Spinner(this);
-            vehicles.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"Elige tu vehículo", "Pickup / Estaquita", "Camioneta", "Camión"}));
+            Spinner vehicles = new Spinner(appearance.context());
+            vehicles.setAdapter(new ArrayAdapter<>(appearance.context(), android.R.layout.simple_spinner_dropdown_item, new String[]{"Elige tu vehículo", "Pickup / Estaquita", "Camioneta", "Camión"}));
             String[] codes = {"", "pickup", "camioneta", "camion"};
             for (int i = 0; i < codes.length; i++) if (codes[i].equals(profile.optString("vehicle_type"))) vehicles.setSelection(i);
             box.addView(vehicles, new LinearLayout.LayoutParams(-1, dp(52)));
@@ -514,7 +531,7 @@ public final class MainActivity extends Activity {
         });
     }
     private void confirmLogout() {
-        new AlertDialog.Builder(this).setTitle("¿Cerrar sesión?").setMessage(active == null ? "Tendrás que iniciar sesión de nuevo para usar la app." : "Dejarás de compartir ubicación. El servicio seguirá asignado a tu cuenta.")
+        new AlertDialog.Builder(appearance.context()).setTitle("¿Cerrar sesión?").setMessage(active == null ? "Tendrás que iniciar sesión de nuevo para usar la app." : "Dejarás de compartir ubicación. El servicio seguirá asignado a tu cuenta.")
             .setPositiveButton("Cerrar sesión", (d, w) -> {
                 stopService(new Intent(this, TrackingService.class));
                 String[] registration = PushManager.disableLocally(this);
