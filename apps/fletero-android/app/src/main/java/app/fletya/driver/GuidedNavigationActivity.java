@@ -1,6 +1,7 @@
 package app.fletya.driver;
 
 import android.app.Activity;
+import app.fletya.ui.Appearance;
 import android.content.Intent;
 import android.location.Location;
 import android.net.Uri;
@@ -46,7 +47,10 @@ public final class GuidedNavigationActivity extends Activity {
     }
 
     @Override protected void onCreate(Bundle state) {
+        var appearance = new Appearance(this, R.style.AppTheme, R.style.AppThemeDark);
+        setTheme(appearance.theme());
         super.onCreate(state);
+        appearance.applyWindow();
         if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
             finish();
             return;
@@ -58,6 +62,7 @@ public final class GuidedNavigationActivity extends Activity {
 
         var layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setBackgroundColor(appearance.canvas());
         layout.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
@@ -65,17 +70,19 @@ public final class GuidedNavigationActivity extends Activity {
         });
         var close = new Button(this);
         close.setText(demo ? "Volver a Fletero" : "Volver al servicio");
+        appearance.styleButton(close, false);
         close.setOnClickListener(view -> finish());
         layout.addView(close);
         if (demo) {
-            var label = new TextView(this);
+            var label = new TextView(appearance.context());
             label.setPadding(24, 12, 24, 0);
             label.setText("Simulación · Ruta de ejemplo a Zona Hotelera");
             layout.addView(label);
         }
-        instruction = new TextView(this);
+        instruction = new TextView(appearance.context());
         instruction.setPadding(24, 20, 24, 20);
         instruction.setTextSize(22);
+        instruction.setTextColor(appearance.text());
         instruction.setText("Cargando mapa de Pruebas…");
         layout.addView(instruction);
         setContentView(layout);
@@ -107,10 +114,10 @@ public final class GuidedNavigationActivity extends Activity {
             instruction.setText("No se pudo abrir la ruta de Pruebas. Vuelve al servicio.");
             return;
         }
-        map = new RouteMapView(this, ((DriverApplication) getApplication()).api());
+        map = new RouteMapView(appearance.context(), ((DriverApplication) getApplication()).api());
         layout.addView(map, new LinearLayout.LayoutParams(-1, 0, 1));
         if (stadia) {
-            var credit = new TextView(this);
+            var credit = new TextView(appearance.context());
             credit.setPadding(24, 12, 24, 12);
             credit.setText("Rutas de Stadia Maps · Atribución");
             credit.setOnClickListener(view -> {
