@@ -66,6 +66,9 @@ public final class Appearance {
     @SuppressWarnings("deprecation")
     public void applyWindow() {
         var window = activity.getWindow();
+        // PhoneWindow.getInsetsController() requires its decor to exist.
+        // This method also runs before the first setContentView during startup.
+        var decor = window.getDecorView();
         window.setBackgroundDrawable(new ColorDrawable(canvas()));
         window.setStatusBarColor(canvas());
         window.setNavigationBarColor(canvas());
@@ -78,7 +81,6 @@ public final class Appearance {
             }
         } else {
             int lightBars = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-            var decor = window.getDecorView();
             int flags = decor.getSystemUiVisibility();
             decor.setSystemUiVisibility(dark ? flags & ~lightBars : flags | lightBars);
         }
