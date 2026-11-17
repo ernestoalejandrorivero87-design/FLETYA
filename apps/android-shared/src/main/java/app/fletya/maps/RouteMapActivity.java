@@ -2,7 +2,7 @@ package app.fletya.maps;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Color;
+import app.fletya.ui.Appearance;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -30,12 +30,17 @@ public final class RouteMapActivity extends Activity {
     }
 
     @Override protected void onCreate(Bundle state) {
+        var appearance = new Appearance(this, android.R.style.Theme_Material_Light_NoActionBar,
+            android.R.style.Theme_Material_NoActionBar);
+        setTheme(appearance.theme());
         super.onCreate(state);
+        appearance.applyWindow();
         var layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setBackgroundColor(appearance.canvas());
         var back = new Button(this);
         back.setText("Volver a FLETYA");
-        back.setAllCaps(false);
+        appearance.styleButton(back, false);
         back.setOnClickListener(view -> finish());
         layout.addView(back);
         layout.setOnApplyWindowInsetsListener((view, insets) -> {
@@ -57,6 +62,7 @@ public final class RouteMapActivity extends Activity {
         } catch (Exception error) {
             var status = new TextView(this);
             status.setText("No se pudo abrir la ruta.");
+            status.setTextColor(appearance.text());
             layout.addView(status);
             return;
         }
@@ -68,7 +74,7 @@ public final class RouteMapActivity extends Activity {
             if (isDestroyed() || isFinishing()) return;
             googleMap.getUiSettings().setMapToolbarEnabled(false);
             googleMap.getUiSettings().setZoomControlsEnabled(true);
-            googleMap.addPolyline(new PolylineOptions().addAll(points).color(Color.rgb(8, 127, 136)).width(13));
+            googleMap.addPolyline(new PolylineOptions().addAll(points).color(0xFF881A42).width(13));
             googleMap.addMarker(new MarkerOptions().position(points.get(0)).title("Recogida"));
             googleMap.addMarker(new MarkerOptions().position(points.get(points.size() - 1)).title("Entrega"));
             var bounds = new LatLngBounds.Builder();

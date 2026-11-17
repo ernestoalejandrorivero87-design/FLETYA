@@ -2,7 +2,6 @@ package app.fletya.driver;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.graphics.Color;
 import android.location.Location;
 import android.webkit.*;
 import android.view.MotionEvent;
@@ -25,7 +24,7 @@ final class RouteMapView extends LinearLayout {
     private boolean disposed;
     RouteMapView(Context context, DriverApi api) {
         super(context); this.api = api; setOrientation(VERTICAL);
-        status = new TextView(context); status.setTextColor(Color.DKGRAY); addView(status);
+        status = new TextView(context); addView(status);
         retry = new Button(context); retry.setText("Reintentar mapa"); retry.setAllCaps(false);
         retry.setOnClickListener(v -> load()); addView(retry); retry.setVisibility(GONE);
     }
@@ -141,7 +140,7 @@ final class RouteMapView extends LinearLayout {
             + "<div id='map' aria-label='Ruta del servicio'></div><div id='notice' hidden>Mapa base sin conexión. Reintenta al recuperar la señal.</div><script>" + js
             + "\nconst points=" + points + ";const map=L.map('map',{scrollWheelZoom:false});"
             + "L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors'}).on('tileerror',()=>document.getElementById('notice').hidden=false).addTo(map);"
-            + "const line=L.polyline(points,{color:'#087f88',weight:5}).addTo(map);map.fitBounds(line.getBounds(),{padding:[25,25]});"
+            + "const line=L.polyline(points,{color:'#881A42',weight:5}).addTo(map);map.fitBounds(line.getBounds(),{padding:[25,25]});"
             + (guided ? "let vehicle;window.updateVehicle=p=>{if(!p){if(vehicle){vehicle.remove();vehicle=null;}return;}"
                 + "if(vehicle){vehicle.setLatLng(p);map.panTo(p,{animate:false});}"
                 + "else{vehicle=L.circleMarker(p,{radius:9,color:'#1264ce',fillOpacity:1}).addTo(map);map.setView(p,16);}};"
