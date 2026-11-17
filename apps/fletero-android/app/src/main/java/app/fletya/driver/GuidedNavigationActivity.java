@@ -26,6 +26,11 @@ public final class GuidedNavigationActivity extends Activity {
     private GuidanceProgress progress;
     private String jobId;
     private String owner;
+    private String stage;
+    private int offRoute;
+    private long lastReroute;
+    private boolean rerouting, resumed;
+    private final java.util.concurrent.ExecutorService routeWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
     private long lastFix;
     private boolean demo;
     private List<GuidanceProgress.Point> demoPoints;
@@ -35,14 +40,14 @@ public final class GuidedNavigationActivity extends Activity {
         activity.startActivity(new Intent(activity, GuidedNavigationActivity.class).putExtra("demo", true));
     }
 
-    static void show(Activity activity, String jobId, String owner, JSONObject route) {
+    static void show(Activity activity, String jobId, String owner, String stage, JSONObject route) {
         String payload = route.toString();
         if (payload.length() > 240_000) {
             Toast.makeText(activity, "La ruta es demasiado larga para abrir la guía.", Toast.LENGTH_LONG).show();
             return;
         }
         activity.startActivity(new Intent(activity, GuidedNavigationActivity.class)
-            .putExtra("job", jobId).putExtra("owner", owner).putExtra("route", payload));
+            .putExtra("job", jobId).putExtra("owner", owner).putExtra("stage", stage).putExtra("route", payload));
     }
 
     @Override protected void onCreate(Bundle state) {
@@ -53,8 +58,9 @@ public final class GuidedNavigationActivity extends Activity {
         }
         jobId = getIntent().getStringExtra("job");
         owner = getIntent().getStringExtra("owner");
+        stage = getIntent().getStringExtra("stage");
         demo = getIntent().getBooleanExtra("demo", false);
-        if (!demo && (owner == null || jobId == null || !isCurrentSession())) { finish(); return; }
+        if (!demo && (owner == null || jobId == null || stage == null || !isCurrentSession())) { finish(); return; }
 
         var layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -87,22 +93,7 @@ public final class GuidedNavigationActivity extends Activity {
         try {
             var route = new JSONObject(demo ? readDemoRoute() : getIntent().getStringExtra("route"));
             stadia = "stadia".equals(route.optString("provider"));
-            coordinates = RouteMapData.fromLongitudeFirst(route.getJSONArray("points"));
-            List<GuidanceProgress.Point> points = new ArrayList<>(coordinates.length());
-            for (int i = 0; i < coordinates.length(); i++) {
-                var pair = coordinates.getJSONArray(i);
-                points.add(new GuidanceProgress.Point(pair.getDouble(0), pair.getDouble(1)));
-            }
-            var values = route.getJSONArray("navigation_steps");
-            List<GuidanceProgress.Step> steps = new ArrayList<>();
-            for (int i = 0; i < values.length(); i++) {
-                var step = values.getJSONObject(i);
-                int begin = step.getInt("begin"), end = step.getInt("end");
-                if (begin < 0 || end <= begin || end >= points.size()) throw new IllegalArgumentException();
-                steps.add(new GuidanceProgress.Step(points.subList(begin, end + 1), step.getString("instruction")));
-            }
-            progress = new GuidanceProgress(steps);
-            if (demo) demoPoints = points;
+            coordinates = loadRoute(route);
         } catch (Exception invalidRoute) {
             instruction.setText("No se pudo abrir la ruta de Pruebas. Vuelve al servicio.");
             return;
@@ -121,6 +112,27 @@ public final class GuidedNavigationActivity extends Activity {
         }
         map.showGuidedRoute(coordinates);
         instruction.setText(demo ? "Iniciando simulación…" : "Esperando ubicación GPS precisa…");
+    }
+
+    private org.json.JSONArray loadRoute(JSONObject route) throws Exception {
+        org.json.JSONArray coordinates;
+            coordinates = RouteMapData.fromLongitudeFirst(route.getJSONArray("points"));
+            List<GuidanceProgress.Point> points = new ArrayList<>(coordinates.length());
+            for (int i = 0; i < coordinates.length(); i++) {
+                var pair = coordinates.getJSONArray(i);
+                points.add(new GuidanceProgress.Point(pair.getDouble(0), pair.getDouble(1)));
+            }
+            var values = route.getJSONArray("navigation_steps");
+            List<GuidanceProgress.Step> steps = new ArrayList<>();
+            for (int i = 0; i < values.length(); i++) {
+                var step = values.getJSONObject(i);
+                int begin = step.getInt("begin"), end = step.getInt("end");
+                if (begin < 0 || end <= begin || end >= points.size()) throw new IllegalArgumentException();
+                steps.add(new GuidanceProgress.Step(points.subList(begin, end + 1), step.getString("instruction")));
+            }
+            progress = new GuidanceProgress(steps);
+            if (demo) demoPoints = points;
+        return coordinates;
     }
 
     private String readDemoRoute() throws Exception {
@@ -163,6 +175,7 @@ public final class GuidedNavigationActivity extends Activity {
             instruction.setText("Esperando ubicación GPS precisa…");
             if (lastFix != 0) map.updateVehicle(null);
             lastFix = 0;
+            offRoute = 0;
             return;
         }
         if (fix.getElapsedRealtimeNanos() == lastFix) return;
@@ -174,22 +187,52 @@ public final class GuidedNavigationActivity extends Activity {
         map.updateVehicle(fix);
         var hint = progress.update(new GuidanceProgress.Point(fix.getLatitude(), fix.getLongitude()), fix.getAccuracy());
         if (hint == null) {
-            instruction.setText(demo ? "Siguiendo ruta de ejemplo…"
-                : "Ubicación fuera del tramo verificado. Detente en un lugar permitido para volver a calcular.");
+            if (demo) { instruction.setText("Siguiendo ruta de ejemplo…"); return; }
+            offRoute++;
+            instruction.setText(rerouting ? "Calculando nueva ruta…" : "Fuera de ruta · verificando ubicación…");
+            if (offRoute >= 3 && !rerouting && android.os.SystemClock.elapsedRealtime() - lastReroute >= 15_000) reroute(fix);
         } else {
+            offRoute = 0;
             instruction.setText(hint.meters() <= 10 ? hint.instruction() : hint.meters() + " m · " + hint.instruction());
         }
     }
 
+    private void reroute(Location fix) {
+        rerouting = true;
+        lastReroute = android.os.SystemClock.elapsedRealtime();
+        instruction.setText("Calculando nueva ruta…");
+        String origin = fix.getLatitude() + "," + fix.getLongitude();
+        routeWorker.execute(() -> {
+            try {
+                JSONObject route = ((DriverApplication) getApplication()).api().navigationRoute(jobId, stage, origin, true);
+                main.post(() -> {
+                    rerouting = false;
+                    if (isDestroyed() || !resumed || !isCurrentSession() || offRoute == 0) return;
+                    try {
+                        if (!"stadia".equals(route.optString("provider"))) throw new IllegalArgumentException();
+                        var coordinates = loadRoute(route);
+                        map.replaceGuidedRoute(coordinates);
+                        offRoute = 0;
+                        instruction.setText("Nueva ruta verificada");
+                    } catch (Exception error) { instruction.setText("Ruta alternativa no verificada. Sigue las señales de tránsito."); }
+                });
+            } catch (Exception error) {
+                main.post(() -> { rerouting = false; if (resumed && !isDestroyed() && offRoute > 0) instruction.setText("No se pudo verificar otra ruta. Reintentando…"); });
+            }
+        });
+    }
+
     @Override protected void onResume() {
         super.onResume();
+        resumed = true;
         if (map != null) {
             if (demo) main.postDelayed(replay, demoIndex == 0 ? 1_500 : 80);
             else main.post(follow);
         }
     }
-    @Override protected void onPause() { main.removeCallbacks(follow); main.removeCallbacks(replay); super.onPause(); }
+    @Override protected void onPause() { resumed = false; main.removeCallbacks(follow); main.removeCallbacks(replay); super.onPause(); }
     @Override protected void onDestroy() {
+        routeWorker.shutdownNow();
         main.removeCallbacksAndMessages(null);
         if (map != null) map.dispose();
         super.onDestroy();
