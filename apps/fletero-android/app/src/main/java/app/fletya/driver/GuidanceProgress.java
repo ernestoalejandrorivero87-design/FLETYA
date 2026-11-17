@@ -13,9 +13,13 @@ final class GuidanceProgress {
 
     private final List<Step> steps;
     private int current;
+    private double totalRemaining = Double.NaN;
+    private final double[] suffix;
+    double remainingMeters() { return totalRemaining; }
     private double lastRemaining = Double.POSITIVE_INFINITY;
 
-    GuidanceProgress(List<Step> steps) { this.steps = new ArrayList<>(steps); }
+    GuidanceProgress(List<Step> steps) { this.steps = new ArrayList<>(steps); suffix = new double[steps.size()+1];
+        for (int i=steps.size()-1;i>=0;i--) { var pts=steps.get(i).points(); suffix[i]=suffix[i+1]+match(pts.get(0),pts).remaining(); } }
 
     Hint update(Point position, double accuracy) {
         if (steps.isEmpty() || !Double.isFinite(accuracy) || accuracy <= 0 || accuracy > 25) return null;
@@ -28,7 +32,8 @@ final class GuidanceProgress {
                 match = next;
             }
         }
-        if (match.offset() > tolerance) return null;
+        if (match.offset() > tolerance) { totalRemaining = Double.NaN; return null; }
+        totalRemaining = match.remaining() + suffix[current+1];
         lastRemaining = match.remaining();
         double remaining = match.remaining();
         for (int i = current + 1; i < steps.size(); i++) {
