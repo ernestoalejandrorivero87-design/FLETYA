@@ -1,10 +1,10 @@
 name: Android fletero
 on:
   pull_request:
-    paths: ['apps/fletero-android/**', '.github/workflows/android-fletero.yml']
+    paths: ['apps/fletero-android/**', 'apps/android-shared/**', '.github/workflows/android-fletero.yml']
   push:
     branches: [main]
-    paths: ['apps/fletero-android/**', '.github/workflows/android-fletero.yml']
+    paths: ['apps/fletero-android/**', 'apps/android-shared/**', '.github/workflows/android-fletero.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
       - name: Test, lint and build both environments
         working-directory: apps/fletero-android
-        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
+        run: gradle --no-daemon testPruebasDebugUnitTest testPilotoDebugUnitTest lintPruebasDebug lintPilotoRelease assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
       - uses: actions/upload-artifact@v4
         with:
           name: FLETYA-Fletero-Android-${{ github.sha }}

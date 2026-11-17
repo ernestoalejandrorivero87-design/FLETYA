@@ -1,10 +1,10 @@
 name: Android cliente
 on:
   pull_request:
-    paths: ['apps/cliente-android/**', '.github/workflows/android-cliente.yml']
+    paths: ['apps/cliente-android/**', 'apps/android-shared/**', '.github/workflows/android-cliente.yml']
   push:
     branches: [main]
-    paths: ['apps/cliente-android/**', '.github/workflows/android-cliente.yml']
+    paths: ['apps/cliente-android/**', 'apps/android-shared/**', '.github/workflows/android-cliente.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,13 +28,19 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
       - name: Test, lint and build both environments
         working-directory: apps/cliente-android
-        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug assemblePilotoDebug
+        run: gradle --no-daemon testPruebasDebugUnitTest testPilotoDebugUnitTest lintPruebasDebug lintPilotoRelease assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
       - uses: actions/upload-artifact@v4
         with:
           name: FLETYA-Cliente-Android-${{ github.sha }}
           path: |
             apps/cliente-android/app/build/outputs/apk/pruebas/debug/*.apk
             apps/cliente-android/app/build/outputs/apk/piloto/debug/*.apk
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FLETYA-Cliente-Piloto-unsigned-${{ github.sha }}
+          path: apps/cliente-android/app/build/outputs/apk/piloto/release/*-unsigned.apk
+          if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
