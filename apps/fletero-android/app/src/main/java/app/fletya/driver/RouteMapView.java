@@ -143,7 +143,7 @@ final class RouteMapView extends LinearLayout {
             + "L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors'}).on('tileerror',()=>document.getElementById('notice').hidden=false).addTo(map);"
             + "const line=L.polyline(points,{color:'#087f88',weight:5}).addTo(map);map.fitBounds(line.getBounds(),{padding:[25,25]});"
             + (guided ? "let vehicle;window.updateVehicle=p=>{if(!p){if(vehicle){vehicle.remove();vehicle=null;}return;}"
-                + "if(vehicle){vehicle.setLatLng(p);map.panTo(p,{animate:false});}"
+                + "if(vehicle){vehicle.setLatLng(p);map.panTo(p,{animate:true,duration:0.45});}"
                 + "else{vehicle=L.circleMarker(p,{radius:9,color:'#1264ce',fillOpacity:1}).addTo(map);map.setView(p,16);}};"
                 : "L.circleMarker(points[0],{radius:8,color:'#087f88',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Tu ubicación" : "Recogida") + "');")
             + "L.circleMarker(points[points.length-1],{radius:8,color:'#c85229',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Destino de esta etapa" : "Entrega") + "');</script></html>";
