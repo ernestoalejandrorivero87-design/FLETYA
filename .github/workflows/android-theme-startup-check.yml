@@ -42,7 +42,14 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
-          avdmanager create avd --force --name fletya-smoke --package 'system-images;android-36;google_apis;x86_64' <<< no
+          export ANDROID_USER_HOME="$RUNNER_TEMP/fletya-android"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          avdmanager create avd --force --name fletya-smoke --device pixel_2 --path "$ANDROID_AVD_HOME/fletya-smoke.avd" --package 'system-images;android-36;google_apis;x86_64'
+          test -f "$ANDROID_AVD_HOME/fletya-smoke.avd/config.ini"
+          printf 'avd.ini.encoding=UTF-8\npath=%s\ntarget=android-36\n' "$ANDROID_AVD_HOME/fletya-smoke.avd" > "$ANDROID_AVD_HOME/fletya-smoke.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
           "$ANDROID_HOME/emulator/emulator" -avd fletya-smoke -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader > /tmp/fletya-emulator.log 2>&1 &
           trap 'timeout 10 adb logcat -d -b crash || true; tail -60 /tmp/fletya-emulator.log' EXIT
           timeout 220 adb wait-for-device
@@ -53,14 +60,23 @@ jobs:
           activity="app.fletya.$FLETYA_ROLE.MainActivity"
           adb install "$apk"
           adb logcat -c
-          adb shell am start -W -n "$package/$activity"
-          sleep 7
-          adb shell pidof "$package"
-          adb shell dumpsys activity activities | grep -E "topResumedActivity.*$package"
-          adb shell uiautomator dump /sdcard/fletya-screen.xml
-          adb shell cat /sdcard/fletya-screen.xml | grep -o 'text="Iniciar sesión"'
+          mkdir -p /tmp/fletya-results
+          for dark in false true; do
+            adb shell am force-stop "$package"
+            adb shell run-as "$package" mkdir -p shared_prefs
+            printf '<?xml version="1.0" encoding="utf-8"?><map><boolean name="dark" value="%s" /></map>\n' "$dark" | adb shell run-as "$package" tee shared_prefs/fletya_appearance.xml >/dev/null
+            adb shell am start -W -n "$package/$activity"
+            sleep 7
+            adb shell pidof "$package"
+            adb shell dumpsys activity activities | grep -E "topResumedActivity.*$package"
+            adb shell uiautomator dump /sdcard/fletya-screen.xml
+            adb shell cat /sdcard/fletya-screen.xml | grep -o 'text="Iniciar sesión"'
+            adb exec-out screencap -p > "/tmp/fletya-results/$FLETYA_APP-dark-$dark.png"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: startup-${{ matrix.app }}
-          path: /tmp/fletya-emulator.log
+          path: |
+            /tmp/fletya-emulator.log
+            /tmp/fletya-results/
