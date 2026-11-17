@@ -22,6 +22,44 @@ import java.util.List;
 public final class GuidedNavigationActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private RouteMapView map;
+    private android.speech.tts.TextToSpeech voice;
+    private Button voiceButton;
+    private boolean voiceReady, voiceEnabled = true, voiceClosed;
+    private String spokenInstruction = "";
+    private int spokenBand = -1;
+    private void initVoice() {
+        voice = new android.speech.tts.TextToSpeech(this, result -> main.post(() -> {
+            if (voiceClosed || voice == null) return;
+            if (result == android.speech.tts.TextToSpeech.SUCCESS) {
+                int lang = voice.setLanguage(java.util.Locale.forLanguageTag("es-MX"));
+                if (lang < 0) lang = voice.setLanguage(new java.util.Locale("es"));
+                voiceReady = lang >= 0;
+                if (voiceReady) voice.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build());
+            }
+            voiceButton.setText(voiceReady ? (voiceEnabled ? "Voz activada" : "Voz silenciada") : "Voz no disponible");
+            voiceButton.setEnabled(voiceReady);
+        }));
+    }
+    private void say(String phrase) {
+        if (voiceReady && voiceEnabled && resumed && !voiceClosed)
+            voice.speak(phrase, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "navigation");
+    }
+    private void resetVoice() { spokenInstruction = ""; spokenBand = -1; }
+    private void announce(GuidanceProgress.Hint hint) {
+        if (!voiceReady || !voiceEnabled || !resumed) return;
+        String phrase = hint.instruction().trim();
+        if (phrase.isEmpty()) return;
+        int meters = hint.meters();
+        int band = meters <= 30 ? 2 : meters <= 250 ? 1 : 0;
+        if (!phrase.equals(spokenInstruction)) { spokenInstruction = phrase; spokenBand = -1; }
+        if (band <= spokenBand) return;
+        spokenBand = band;
+        String distance = meters >= 1000 ? "En " + String.format(java.util.Locale.forLanguageTag("es-MX"),"%.1f",meters/1000.0) + " kilómetros, "
+            : meters > 30 ? "En " + Math.round(meters/10.0)*10 + " metros, " : "";
+        say(distance + phrase);
+    }
     private TextView instruction, tripSummary;
     private double assumedKmh = 30;
     private void updateSummary(boolean valid) {
@@ -82,6 +120,18 @@ public final class GuidedNavigationActivity extends Activity {
         close.setText(demo ? "Volver a Fletero" : "Volver al servicio");
         close.setOnClickListener(view -> finish());
         layout.addView(close);
+        voiceButton = new Button(this);
+        voiceButton.setText("Preparando voz…");
+        voiceButton.setEnabled(false);
+        voiceButton.setOnClickListener(view -> {
+            voiceEnabled = !voiceEnabled;
+            voiceButton.setText(voiceEnabled ? "Voz activada" : "Voz silenciada");
+            if (!voiceEnabled && voice != null) voice.stop();
+            resetVoice();
+            lastFix = 0;
+        });
+        layout.addView(voiceButton);
+        initVoice();
         if (demo) {
             var label = new TextView(this);
             label.setPadding(24, 12, 24, 0);
@@ -145,6 +195,7 @@ public final class GuidedNavigationActivity extends Activity {
                 steps.add(new GuidanceProgress.Step(points.subList(begin, end + 1), step.getString("instruction")));
             }
             progress = new GuidanceProgress(steps);
+            resetVoice();
             if (demo) demoPoints = points;
         return coordinates;
     }
@@ -173,6 +224,7 @@ public final class GuidedNavigationActivity extends Activity {
             if (demoIndex == demoPoints.size()) {
                 instruction.setText("Simulación completada");
                 tripSummary.setText("0 m restantes · Simulación completada");
+                say("Simulación completada");
                 return;
             }
             var point = demoPoints.get(demoIndex++);
@@ -181,7 +233,7 @@ public final class GuidedNavigationActivity extends Activity {
             fix.setLongitude(point.lng());
             fix.setAccuracy(5);
             showPosition(fix);
-            main.postDelayed(this, 80);
+            main.postDelayed(this, 1200);
         }
     };
 
@@ -189,6 +241,8 @@ public final class GuidedNavigationActivity extends Activity {
         if (fix == null || fix.getAccuracy() > 25) {
             instruction.setText("Esperando ubicación GPS precisa…");
             updateSummary(false);
+            if (voice != null) voice.stop();
+            resetVoice();
             if (lastFix != 0) map.updateVehicle(null);
             lastFix = 0;
             offRoute = 0;
@@ -206,10 +260,12 @@ public final class GuidedNavigationActivity extends Activity {
         if (hint == null) {
             if (demo) { instruction.setText("Siguiendo ruta de ejemplo…"); return; }
             offRoute++;
+            if (offRoute == 1 && voice != null) { voice.stop(); resetVoice(); }
             instruction.setText(rerouting ? "Calculando nueva ruta…" : "Fuera de ruta · verificando ubicación…");
             if (offRoute >= 3 && !rerouting && android.os.SystemClock.elapsedRealtime() - lastReroute >= 15_000) reroute(fix);
         } else {
             offRoute = 0;
+            announce(hint);
             instruction.setText(hint.meters() <= 10 ? hint.instruction() : hint.meters() + " m · " + hint.instruction());
         }
     }
@@ -218,6 +274,7 @@ public final class GuidedNavigationActivity extends Activity {
         rerouting = true;
         lastReroute = android.os.SystemClock.elapsedRealtime();
         instruction.setText("Calculando nueva ruta…");
+        say("Recalculando ruta");
         String origin = fix.getLatitude() + "," + fix.getLongitude();
         routeWorker.execute(() -> {
             try {
@@ -244,12 +301,14 @@ public final class GuidedNavigationActivity extends Activity {
         super.onResume();
         resumed = true;
         if (map != null) {
-            if (demo) main.postDelayed(replay, demoIndex == 0 ? 1_500 : 80);
+            if (demo) main.postDelayed(replay, demoIndex == 0 ? 1_500 : 1200);
             else main.post(follow);
         }
     }
-    @Override protected void onPause() { resumed = false; main.removeCallbacks(follow); main.removeCallbacks(replay); super.onPause(); }
+    @Override protected void onPause() { resumed = false; if (voice != null) voice.stop(); resetVoice(); lastFix = 0; main.removeCallbacks(follow); main.removeCallbacks(replay); super.onPause(); }
     @Override protected void onDestroy() {
+        voiceClosed = true;
+        if (voice != null) { voice.stop(); voice.shutdown(); voice = null; }
         routeWorker.shutdownNow();
         main.removeCallbacksAndMessages(null);
         if (map != null) map.dispose();
