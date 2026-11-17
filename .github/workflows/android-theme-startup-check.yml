@@ -1,12 +1,12 @@
 name: Android theme startup check
 on:
   pull_request:
-    paths: ['.github/workflows/android-theme-startup-check.yml']
+    paths: ['.github/workflows/android-theme-startup-check.yml', 'apps/**']
 permissions:
   contents: read
 jobs:
   startup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -43,8 +43,8 @@ jobs:
           set -euo pipefail
           sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
           avdmanager create avd --force --name fletya-smoke --package 'system-images;android-36;google_apis;x86_64' <<< no
-          emulator -avd fletya-smoke -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect > /tmp/fletya-emulator.log 2>&1 &
-          trap 'adb logcat -d -b crash; tail -30 /tmp/fletya-emulator.log' EXIT
+          "$ANDROID_HOME/emulator/emulator" -avd fletya-smoke -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader > /tmp/fletya-emulator.log 2>&1 &
+          trap 'timeout 10 adb logcat -d -b crash || true; tail -60 /tmp/fletya-emulator.log' EXIT
           timeout 220 adb wait-for-device
           timeout 180 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
           adb shell input keyevent 82
@@ -59,3 +59,8 @@ jobs:
           adb shell dumpsys activity activities | grep -E "topResumedActivity.*$package"
           adb shell uiautomator dump /sdcard/fletya-screen.xml
           adb shell cat /sdcard/fletya-screen.xml | grep -o 'text="Iniciar sesión"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: startup-${{ matrix.app }}
+          path: /tmp/fletya-emulator.log
