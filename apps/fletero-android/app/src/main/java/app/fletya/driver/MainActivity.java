@@ -494,9 +494,21 @@ public final class MainActivity extends Activity {
             return;
         }
         String origin = fix.getLatitude() + "," + fix.getLongitude();
-        task(() -> api.navigationRoute(id, status, origin, guided), route -> {
+        task(() -> {
+            try { return api.navigationRoute(id, status, origin, guided); }
+            catch (DriverApi.Failure error) {
+                if (guided && error.status == 422) return new JSONObject().put("guidance_error", true);
+                throw error;
+            }
+        }, route -> {
             if (!visible || active == null || !id.equals(active.optString("id")) || !status.equals(active.optString("status"))) return;
             if (guided) {
+                if (route.optBoolean("guidance_error")) {
+                    new AlertDialog.Builder(this).setTitle("Navegación no disponible")
+                        .setMessage("No se pudo verificar la ruta guiada. Comprueba que el destino de esta etapa se seleccionó mediante un pin en el mapa.")
+                        .setPositiveButton("Entendido", null).show();
+                    return;
+                }
                 var steps = route.optJSONArray("navigation_steps");
                 if (steps == null || steps.length() == 0) {
                     message.setText("La guía de giros no está disponible para esta ruta.");
