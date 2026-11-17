@@ -286,7 +286,7 @@ public final class MainActivity extends Activity {
     private void previewOfferRoute(String id) {
         task(() -> api.offerRoute(id), route -> {
             if (!visible || !"home".equals(screen) || active != null) return;
-            RouteMapView map = new RouteMapView(this, api);
+            RouteMapView map = new RouteMapView(appearance.context(), api);
             AlertDialog dialog = new AlertDialog.Builder(appearance.context()).setTitle("Ruta estimada del servicio")
                 .setView(map).setPositiveButton("Cerrar", null).create();
             offerRouteDialog = dialog;
