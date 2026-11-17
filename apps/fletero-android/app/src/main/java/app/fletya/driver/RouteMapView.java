@@ -103,7 +103,9 @@ final class RouteMapView extends LinearLayout {
         guidedFix = fix;
         if (map == null || disposed) return;
         String point = fix == null ? "null" : "[" + fix.getLatitude() + "," + fix.getLongitude() + "]";
-        map.evaluateJavascript("if (window.updateVehicle) window.updateVehicle(" + point + ")", null);
+        String bearing = fix != null && fix.hasBearing() && fix.hasSpeed() && fix.getSpeed() >= 2.5f
+            && (!fix.hasBearingAccuracy() || fix.getBearingAccuracyDegrees() <= 30) ? Float.toString(fix.getBearing()) : "null";
+        map.evaluateJavascript("if (window.updateVehicle) window.updateVehicle(" + point + "," + bearing + ")", null);
     }
     private String asset(String name) throws Exception {
         try (var input = getContext().getAssets().open(name)) { var output = new java.io.ByteArrayOutputStream(); byte[] buffer = new byte[8192]; int count; while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count); return output.toString(StandardCharsets.UTF_8.name()); }
@@ -140,12 +142,12 @@ final class RouteMapView extends LinearLayout {
             : new LayoutParams(-1, Math.round(270 * getResources().getDisplayMetrics().density)));
         String html = "<!doctype html><html lang='es'><meta name='viewport' content='width=device-width,initial-scale=1'>"
             + "<meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src https://tile.openstreetmap.org data:; style-src 'unsafe-inline'; script-src 'unsafe-inline';\">"
-            + "<style>" + css + "html,body,#map{height:100%;margin:0}#notice{position:absolute;bottom:24px;left:8px;z-index:999;background:white;font:12px sans-serif;padding:4px}</style>"
-            + "<div id='map' aria-label='Ruta del servicio'></div><div id='notice' hidden>Mapa base sin conexión. Reintenta al recuperar la señal.</div><script>" + js
-            + "\nconst points=" + points + ";const map=L.map('map',{scrollWheelZoom:false});"
+            + "<style>" + css + "html,body,#map{height:100%;margin:0}body{overflow:hidden}body.guided #map{position:absolute;width:200vmax;height:200vmax;left:50%;top:50%;transform:translate(-50%,-50%);transform-origin:center;pointer-events:none}#credit{position:absolute;bottom:0;right:0;background:white;color:#333;font:11px sans-serif;z-index:1000}#notice{position:absolute;bottom:24px;left:8px;z-index:999;background:white;font:12px sans-serif;padding:4px}</style>"
+            + (guided ? "<body class='guided'>" : "<body>") + "<div id='map' aria-label='Ruta del servicio'></div>" + (guided ? "<a id='credit' href='https://www.openstreetmap.org/copyright'>© OpenStreetMap</a>" : "") + "<div id='notice' hidden>Mapa base sin conexión. Reintenta al recuperar la señal.</div><script>" + js
+            + "\nconst points=" + points + ";const map=L.map('map',{scrollWheelZoom:false" + (guided ? ",zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,doubleClickZoom:false,keyboard:false" : "") + "});"
             + "L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors'}).on('tileerror',()=>document.getElementById('notice').hidden=false).addTo(map);"
             + "const line=L.polyline(points,{color:'#087f88',weight:5}).addTo(map);map.fitBounds(line.getBounds(),{padding:[25,25]});"
-            + (guided ? "let vehicle,frame;window.updateVehicle=p=>{cancelAnimationFrame(frame);if(!p){if(vehicle){vehicle.remove();vehicle=null;}return;}"
+            + (guided ? "let vehicle,frame,heading=0;window.updateVehicle=(p,b)=>{if(Number.isFinite(b)){heading+=((b-heading+540)%360+360)%360-180;document.getElementById('map').style.transform='translate(-50%,-50%) rotate('+(-heading)+'deg)';}cancelAnimationFrame(frame);if(!p){if(vehicle){vehicle.remove();vehicle=null;}return;}"
                 + "if(vehicle){const a=vehicle.getLatLng(),t=performance.now();const move=now=>{const k=Math.min(1,(now-t)/450);vehicle.setLatLng([a.lat+(p[0]-a.lat)*k,a.lng+(p[1]-a.lng)*k]);if(k<1)frame=requestAnimationFrame(move);};frame=requestAnimationFrame(move);map.panTo(p,{animate:true,duration:0.45});}"
                 + "else{vehicle=L.circleMarker(p,{radius:9,color:'#1264ce',fillOpacity:1}).addTo(map);map.setView(p,16);}};"
                 : "L.circleMarker(points[0],{radius:8,color:'#087f88',fillOpacity:1}).addTo(map).bindTooltip('" + (navigation ? "Tu ubicación" : "Recogida") + "');")
