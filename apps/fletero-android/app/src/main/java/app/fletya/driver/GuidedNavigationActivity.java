@@ -38,7 +38,7 @@ public final class GuidedNavigationActivity extends Activity {
                     .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build());
             }
-            voiceButton.setText(voiceReady ? (voiceEnabled ? "Voz activada" : "Voz silenciada") : "Voz no disponible");
+            refreshVoiceButton();
             voiceButton.setEnabled(voiceReady);
         }));
     }
@@ -60,7 +60,49 @@ public final class GuidedNavigationActivity extends Activity {
             : meters > 30 ? "En " + Math.round(meters/10.0)*10 + " metros, " : "";
         say(distance + phrase);
     }
-    private TextView instruction, tripSummary;
+    private TextView instruction, tripSummary, maneuverIcon;
+    private LinearLayout navigationRoot, maneuverPanel, toolbar;
+    private TextView creditLabel;
+    private Button closeButton, themeButton;
+    private boolean dark;
+    private int dp(int n) { return Math.round(n * getResources().getDisplayMetrics().density); }
+    private android.graphics.drawable.GradientDrawable rounded(int color) {
+        var bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(color); bg.setCornerRadius(dp(16)); return bg;
+    }
+    private void refreshVoiceButton() {
+        voiceButton.setText(!voiceReady ? "Voz no disponible" : voiceEnabled ? "🔊 Voz" : "🔇 Voz");
+        voiceButton.setContentDescription(voiceReady ? (voiceEnabled ? "Silenciar voz" : "Activar voz") : "Voz no disponible");
+    }
+    private void applyPalette() {
+        int surface = dark ? 0xff14213a : 0xfff4f6fa;
+        int foreground = dark ? 0xfff5f7ff : 0xff14213a;
+        navigationRoot.setBackgroundColor(surface);
+        maneuverPanel.setBackground(rounded(dark ? 0xff243d71 : 0xff174280));
+        instruction.setTextColor(0xffffffff);
+        maneuverIcon.setTextColor(0xffffffff);
+        tripSummary.setBackground(rounded(dark ? 0xff24304b : 0xffffffff));
+        tripSummary.setTextColor(foreground);
+        for (Button b : new Button[]{closeButton, voiceButton, themeButton}) {
+            b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(dark ? 0xff30446d : 0xffe1e8f5));
+            b.setTextColor(foreground);
+        }
+        themeButton.setText(dark ? "Claro" : "Oscuro");
+        if (creditLabel != null) creditLabel.setTextColor(foreground);
+    }
+    private void showHint(GuidanceProgress.Hint hint) {
+        String phrase = hint.instruction().toLowerCase(java.util.Locale.ROOT);
+        String symbol = "•";
+        if (phrase.contains("rotonda") || phrase.contains("glorieta")) symbol = "⟳";
+        else if (phrase.contains("retorno") || phrase.contains("media vuelta")) symbol = "↶";
+        else if (phrase.contains("derecha") && !phrase.contains("izquierda")) symbol = "↱";
+        else if (phrase.contains("izquierda") && !phrase.contains("derecha")) symbol = "↰";
+        else if (phrase.contains("recto") || phrase.contains("continúe")) symbol = "↑";
+        else if (phrase.equals("destino de esta etapa")) symbol = "◎";
+        maneuverIcon.setText(symbol);
+        instruction.setText(hint.meters() <= 10 ? hint.instruction() : hint.meters() + " m · " + hint.instruction());
+    }
+    private void status(String value) { maneuverIcon.setText("•"); instruction.setText(value); }
     private void updateSummary(boolean valid) {
         double meters = valid ? progress.remainingMeters() : Double.NaN;
         if (!Double.isFinite(meters)) { tripSummary.setText("Distancia y llegada · calculando…"); return; }
@@ -115,38 +157,58 @@ public final class GuidedNavigationActivity extends Activity {
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        var close = new Button(this);
-        close.setText(demo ? "Volver a Fletero" : "Volver al servicio");
-        close.setOnClickListener(view -> finish());
-        layout.addView(close);
+        navigationRoot = layout;
+        dark = getPreferences(MODE_PRIVATE).getBoolean("navigation_dark", false);
+        toolbar = new LinearLayout(this);
+        toolbar.setPadding(dp(6),0,dp(6),0);
+        closeButton = new Button(this);
+        closeButton.setText("‹ Servicio");
+        closeButton.setContentDescription(demo ? "Volver a Fletero" : "Volver al servicio");
+        closeButton.setOnClickListener(view -> finish());
+        toolbar.addView(closeButton, new LinearLayout.LayoutParams(0,dp(52),1));
         voiceButton = new Button(this);
-        voiceButton.setText("Preparando voz…");
+        voiceButton.setText("Voz…");
         voiceButton.setEnabled(false);
         voiceButton.setOnClickListener(view -> {
             voiceEnabled = !voiceEnabled;
-            voiceButton.setText(voiceEnabled ? "Voz activada" : "Voz silenciada");
+            refreshVoiceButton();
             if (!voiceEnabled && voice != null) voice.stop();
             resetVoice();
             lastFix = 0;
         });
-        layout.addView(voiceButton);
+        toolbar.addView(voiceButton, new LinearLayout.LayoutParams(0,dp(52),1));
+        themeButton = new Button(this);
+        themeButton.setOnClickListener(view -> {
+            dark = !dark;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("navigation_dark",dark).apply();
+            applyPalette();
+        });
+        toolbar.addView(themeButton,new LinearLayout.LayoutParams(0,dp(52),1));
+        layout.addView(toolbar);
+        for (Button b : new Button[]{closeButton, voiceButton, themeButton}) b.setAllCaps(false);
         initVoice();
-        if (demo) {
-            var label = new TextView(this);
-            label.setPadding(24, 12, 24, 0);
-            label.setText("Simulación · Ruta de ejemplo a Zona Hotelera");
-            layout.addView(label);
-        }
+        maneuverPanel = new LinearLayout(this);
+        maneuverPanel.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        maneuverPanel.setPadding(dp(14),dp(12),dp(14),dp(12));
+        maneuverIcon = new TextView(this);
+        maneuverIcon.setText("•");
+        maneuverIcon.setTextSize(42);
+        maneuverIcon.setGravity(android.view.Gravity.CENTER);
+        maneuverPanel.addView(maneuverIcon,new LinearLayout.LayoutParams(dp(62),-2));
         instruction = new TextView(this);
-        instruction.setPadding(24, 20, 24, 20);
-        instruction.setTextSize(22);
-        instruction.setText("Cargando mapa de Pruebas…");
-        layout.addView(instruction);
+        instruction.setTextSize(20);
+        instruction.setTypeface(null,android.graphics.Typeface.BOLD);
+        instruction.setText(demo ? "Simulación · Cargando ruta…" : "Cargando ruta…");
+        maneuverPanel.addView(instruction,new LinearLayout.LayoutParams(0,-2,1));
+        var panelParams = new LinearLayout.LayoutParams(-1,-2);
+        panelParams.setMargins(dp(8),dp(4),dp(8),dp(6));
+        layout.addView(maneuverPanel,panelParams);
         tripSummary = new TextView(this);
-        tripSummary.setPadding(24, 8, 24, 12);
+        tripSummary.setPadding(dp(12),dp(8),dp(12),dp(8));
+        tripSummary.setGravity(android.view.Gravity.CENTER);
         tripSummary.setTextSize(16);
         tripSummary.setText("Distancia y llegada · calculando…");
-        layout.addView(tripSummary);
+        applyPalette();
         setContentView(layout);
         layout.requestApplyInsets();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -163,9 +225,12 @@ public final class GuidedNavigationActivity extends Activity {
         }
         map = new RouteMapView(this, ((DriverApplication) getApplication()).api());
         layout.addView(map, new LinearLayout.LayoutParams(-1, 0, 1));
+        layout.addView(tripSummary, new LinearLayout.LayoutParams(-1,-2));
         if (stadia) {
             var credit = new TextView(this);
-            credit.setPadding(24, 12, 24, 12);
+            creditLabel = credit;
+            credit.setPadding(dp(12), dp(3), dp(12), dp(3));
+            credit.setTextSize(12);
             credit.setText("Rutas de Stadia Maps · Atribución");
             credit.setOnClickListener(view -> {
                 try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://stadiamaps.com/attribution/"))); }
@@ -173,6 +238,7 @@ public final class GuidedNavigationActivity extends Activity {
             });
             layout.addView(credit);
         }
+        applyPalette();
         map.showGuidedRoute(coordinates);
         instruction.setText(demo ? "Iniciando simulación…" : "Esperando ubicación GPS precisa…");
     }
@@ -224,7 +290,7 @@ public final class GuidedNavigationActivity extends Activity {
     private final Runnable replay = new Runnable() {
         @Override public void run() {
             if (demoIndex == demoPoints.size()) {
-                instruction.setText("Simulación completada");
+                status("Simulación completada");
                 tripSummary.setText("0 m restantes · Simulación completada");
                 say("Simulación completada");
                 return;
@@ -241,7 +307,7 @@ public final class GuidedNavigationActivity extends Activity {
 
     private void updatePosition(Location fix) {
         if (fix == null || fix.getAccuracy() > 25) {
-            instruction.setText("Esperando ubicación GPS precisa…");
+            status("Esperando ubicación GPS precisa…");
             updateSummary(false);
             if (voice != null) voice.stop();
             resetVoice();
@@ -260,22 +326,22 @@ public final class GuidedNavigationActivity extends Activity {
         var hint = progress.update(new GuidanceProgress.Point(fix.getLatitude(), fix.getLongitude()), fix.getAccuracy());
         updateSummary(hint != null);
         if (hint == null) {
-            if (demo) { instruction.setText("Siguiendo ruta de ejemplo…"); return; }
+            if (demo) { status("Siguiendo ruta de ejemplo…"); return; }
             offRoute++;
             if (offRoute == 1 && voice != null) { voice.stop(); resetVoice(); }
-            instruction.setText(rerouting ? "Calculando nueva ruta…" : "Fuera de ruta · verificando ubicación…");
+            status(rerouting ? "Calculando nueva ruta…" : "Fuera de ruta · verificando ubicación…");
             if (offRoute >= 3 && !rerouting && android.os.SystemClock.elapsedRealtime() - lastReroute >= 15_000) reroute(fix);
         } else {
             offRoute = 0;
             announce(hint);
-            instruction.setText(hint.meters() <= 10 ? hint.instruction() : hint.meters() + " m · " + hint.instruction());
+            showHint(hint);
         }
     }
 
     private void reroute(Location fix) {
         rerouting = true;
         lastReroute = android.os.SystemClock.elapsedRealtime();
-        instruction.setText("Calculando nueva ruta…");
+        status("Calculando nueva ruta…");
         say("Recalculando ruta");
         String origin = fix.getLatitude() + "," + fix.getLongitude();
         routeWorker.execute(() -> {
@@ -289,12 +355,12 @@ public final class GuidedNavigationActivity extends Activity {
                         var coordinates = loadRoute(route);
                         map.replaceGuidedRoute(coordinates);
                         offRoute = 0;
-                        instruction.setText("Nueva ruta verificada");
+                        status("Nueva ruta verificada");
                         updateSummary(false);
-                    } catch (Exception error) { instruction.setText("Ruta alternativa no verificada. Sigue las señales de tránsito."); }
+                    } catch (Exception error) { status("Ruta alternativa no verificada. Sigue las señales de tránsito."); }
                 });
             } catch (Exception error) {
-                main.post(() -> { rerouting = false; if (resumed && !isDestroyed() && offRoute > 0) instruction.setText("No se pudo verificar otra ruta. Reintentando…"); });
+                main.post(() -> { rerouting = false; if (resumed && !isDestroyed() && offRoute > 0) status("No se pudo verificar otra ruta. Reintentando…"); });
             }
         });
     }
