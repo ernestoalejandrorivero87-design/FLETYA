@@ -167,6 +167,7 @@ public final class MainActivity extends Activity {
     }
     private void loginScreen() {
         clearRoute(); screen = "login"; shell();
+        showNavigationDemoButton();
         LinearLayout box = card("Entra como fletero");
         text(box, "Usa tu cuenta de fletero de FLETYA.", 15, false);
         EditText email = field(box, "Correo electrónico", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
@@ -196,6 +197,7 @@ public final class MainActivity extends Activity {
         }, panel -> {
             if (!visible) return;
             screen = "home"; shell();
+            showNavigationDemoButton();
             if ("approved".equals(panel.profile().optString("driver_status","approved"))) PushManager.activate(this, api);
             text(root, "Hola, " + panel.profile().optString("full_name", "fletero"), 16, true);
             if (!"approved".equals(panel.profile().optString("driver_status","approved"))) {
@@ -226,7 +228,10 @@ public final class MainActivity extends Activity {
                 }
                 boolean picked = "picked_up".equals(job.optString("status"));
                 text(box, picked ? "Carga recogida · Lleva la carga al destino" : "En camino a recoger", 17, true);
-                button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job));
+                button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job, false));
+                if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+                    button(box, "Probar navegación guiada", () -> navigate(job, true));
+                }
                 button(box,picked?"Llegué al punto de entrega":"Llegué al punto de recogida",()->new AlertDialog.Builder(this).setTitle("¿Confirmar llegada?").setMessage("El cliente recibirá el aviso de tu llegada a este punto.").setNegativeButton("Volver",null).setPositiveButton("Confirmar llegada",(d,w)->task(()->{api.arrive(job.optString("id"),picked?"delivery":"pickup");return true;},ok->{message.setText("Llegada registrada. El cliente puede consultar el aviso.");})).show());
                 button(box, picked ? "Completar servicio" : "Carga recogida", () -> confirmTransition(job, picked ? "completed" : "picked_up"));
                 if (!picked) button(box, "Liberar antes de recoger", () -> release(job));
@@ -268,6 +273,11 @@ public final class MainActivity extends Activity {
     }
     private void clearRoute() {
         if (routeMap != null) { routeMap.dispose(); routeMap = null; }
+    }
+    private void showNavigationDemoButton() {
+        if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+            button(root, "Simular navegación", () -> GuidedNavigationActivity.showDemo(this));
+        }
     }
     private void showMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
@@ -474,7 +484,7 @@ public final class MainActivity extends Activity {
             });
         })); dialog.show();
     }
-    private void navigate(JSONObject job) {
+    private void navigate(JSONObject job, boolean guided) {
         String id = job.optString("id");
         String status = job.optString("status");
         var fix = TrackingService.recentNavigationFix(id);
@@ -484,8 +494,29 @@ public final class MainActivity extends Activity {
             return;
         }
         String origin = fix.getLatitude() + "," + fix.getLongitude();
-        task(() -> api.navigationRoute(id, status, origin), route -> {
-            if (active == null || !id.equals(active.optString("id")) || !status.equals(active.optString("status"))) return;
+        task(() -> {
+            try { return api.navigationRoute(id, status, origin, guided); }
+            catch (DriverApi.Failure error) {
+                if (guided && error.status == 422) return new JSONObject().put("guidance_error", true);
+                throw error;
+            }
+        }, route -> {
+            if (!visible || active == null || !id.equals(active.optString("id")) || !status.equals(active.optString("status"))) return;
+            if (guided) {
+                if (route.optBoolean("guidance_error")) {
+                    new AlertDialog.Builder(this).setTitle("Navegación no disponible")
+                        .setMessage("No se pudo verificar la ruta guiada. Comprueba que el destino de esta etapa se seleccionó mediante un pin en el mapa.")
+                        .setPositiveButton("Entendido", null).show();
+                    return;
+                }
+                var steps = route.optJSONArray("navigation_steps");
+                if (steps == null || steps.length() == 0) {
+                    message.setText("La guía de giros no está disponible para esta ruta.");
+                    return;
+                }
+                GuidedNavigationActivity.show(this, id, api.userId(), status, route);
+                return;
+            }
             if ("external".equals(route.optString("navigation_mode"))) {
                 open("https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination="
                     + Uri.encode(route.getString("navigation_destination")));
