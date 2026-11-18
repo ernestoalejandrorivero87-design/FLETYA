@@ -93,12 +93,14 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (guided) {
-      const stadiaKey = Deno.env.get("FLETYA_PRUEBAS_STADIA_API_KEY")?.trim();
-      const endpoint = stadiaKey ? "https://api.stadiamaps.com/route/v1" : Deno.env.get("FLETYA_PRUEBAS_VALHALLA_ROUTE_URL");
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const pilot = supabaseUrl === "https://wsdfqscrvfygxripmrzi.supabase.co";
+      const prefix = pilot ? "FLETYA_PILOT" : "FLETYA_PRUEBAS";
+      const stadiaKey = Deno.env.get(prefix + "_STADIA_API_KEY")?.trim();
+      const endpoint = stadiaKey ? "https://api.stadiamaps.com/route/v1" : Deno.env.get(prefix + "_VALHALLA_ROUTE_URL");
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-      if (supabaseUrl !== "https://ccdtpwvalqznasstnqxj.supabase.co" || !anonKey) {
-        return jsonResponse({ error: "guidance_unavailable", message: "La guía aún no está disponible en Pruebas." }, 503);
+      if (!supabaseUrl || (!pilot && supabaseUrl !== "https://ccdtpwvalqznasstnqxj.supabase.co") || !anonKey) {
+        return jsonResponse({ error: "guidance_unavailable", message: "La guía aún no está disponible en este entorno." }, 503);
       }
       const authorization = req.headers.get("Authorization");
       if (!authorization) return jsonResponse({ error: "authentication_required" }, 401);
@@ -123,7 +125,7 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: "active_job_required", message: "La guía requiere un servicio asignado y en ruta." }, 403);
       }
       if (!endpoint?.startsWith("https://")) {
-        return jsonResponse({ error: "guidance_unavailable", message: "La guía aún no está disponible en Pruebas." }, 503);
+        return jsonResponse({ error: "guidance_unavailable", message: "La guía aún no está disponible en este entorno." }, 503);
       }
       const from = (originWaypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
       const to = (destinationWaypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
