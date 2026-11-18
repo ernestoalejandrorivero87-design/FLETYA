@@ -61,14 +61,13 @@ public final class GuidedNavigationActivity extends Activity {
         say(distance + phrase);
     }
     private TextView instruction, tripSummary;
-    private double assumedKmh = 30;
     private void updateSummary(boolean valid) {
         double meters = valid ? progress.remainingMeters() : Double.NaN;
         if (!Double.isFinite(meters)) { tripSummary.setText("Distancia y llegada · calculando…"); return; }
-        long minutes = (long)Math.ceil(meters / (assumedKmh * 1000 / 60));
+        long minutes = (long)Math.ceil(progress.remainingSeconds() / 60);
         String distance = meters < 1000 ? Math.round(meters) + " m" : String.format(java.util.Locale.ROOT,"%.1f km",meters/1000);
         String arrival = new java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(new java.util.Date(System.currentTimeMillis()+minutes*60_000));
-        tripSummary.setText(distance + " restantes · ~" + minutes + " min · " + arrival + "\nEstimación sin tráfico en vivo");
+        tripSummary.setText(distance + " restantes · ~" + minutes + " min · " + arrival + (progress.hasProviderDurations() ? "\nTiempo de ruta · sin tráfico en vivo" : "\nEstimación aproximada · sin tráfico en vivo"));
     }
     private GuidanceProgress progress;
     private String jobId;
@@ -188,13 +187,16 @@ public final class GuidedNavigationActivity extends Activity {
             }
             var values = route.getJSONArray("navigation_steps");
             List<GuidanceProgress.Step> steps = new ArrayList<>();
+            double[] durations = new double[values.length()];
             for (int i = 0; i < values.length(); i++) {
                 var step = values.getJSONObject(i);
                 int begin = step.getInt("begin"), end = step.getInt("end");
                 if (begin < 0 || end <= begin || end >= points.size()) throw new IllegalArgumentException();
+                durations[i] = step.optDouble("duration_seconds", Double.NaN);
                 steps.add(new GuidanceProgress.Step(points.subList(begin, end + 1), step.getString("instruction")));
             }
             progress = new GuidanceProgress(steps);
+            progress.setDurations(durations);
             resetVoice();
             if (demo) demoPoints = points;
         return coordinates;
