@@ -1,7 +1,7 @@
 import { crossesNichupteVehicularBridge, decodePolyline, nichupteCut } from "./route-geometry.ts";
 
 type Location = { latitude: number; longitude: number };
-type Maneuver = { begin_shape_index: number; end_shape_index: number; instruction: string };
+type Maneuver = { begin_shape_index: number; end_shape_index: number; instruction: string; time?: number };
 type Leg = { shape: string; maneuvers: Maneuver[] };
 
 export async function requestGuidedRoute(endpoint: string, from: Location, to: Location, signal: AbortSignal, stadiaKey?: string) {
@@ -40,7 +40,7 @@ export async function requestGuidedRoute(endpoint: string, from: Location, to: L
     const { begin_shape_index: begin, end_shape_index: end, instruction } = maneuver;
     if (!Number.isInteger(begin) || !Number.isInteger(end) || begin !== cursor || end < begin ||
         end >= points.length || typeof instruction !== "string") return null;
-    if (end > begin) steps.push({ begin, end, instruction: instruction.trim().slice(0, 240) });
+    if (end > begin) steps.push({ begin, end, instruction: instruction.trim().slice(0, 240), ...(typeof maneuver.time === 'number' && Number.isFinite(maneuver.time) && maneuver.time > 0 ? { duration_seconds: maneuver.time } : {}) });
     cursor = end;
   }
   return steps.length && cursor === points.length - 1 ? { points, navigation_steps: steps } : null;
