@@ -229,9 +229,7 @@ public final class MainActivity extends Activity {
                 boolean picked = "picked_up".equals(job.optString("status"));
                 text(box, picked ? "Carga recogida · Lleva la carga al destino" : "En camino a recoger", 17, true);
                 button(box, picked ? "Navegar al destino" : "Navegar al origen", () -> navigate(job, false));
-                if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
-                    button(box, "Probar navegación guiada", () -> navigate(job, true));
-                }
+                button(box, "Navegación guiada", () -> navigate(job, true));
                 button(box,picked?"Llegué al punto de entrega":"Llegué al punto de recogida",()->new AlertDialog.Builder(this).setTitle("¿Confirmar llegada?").setMessage("El cliente recibirá el aviso de tu llegada a este punto.").setNegativeButton("Volver",null).setPositiveButton("Confirmar llegada",(d,w)->task(()->{api.arrive(job.optString("id"),picked?"delivery":"pickup");return true;},ok->{message.setText("Llegada registrada. El cliente puede consultar el aviso.");})).show());
                 button(box, picked ? "Completar servicio" : "Carga recogida", () -> confirmTransition(job, picked ? "completed" : "picked_up"));
                 if (!picked) button(box, "Liberar antes de recoger", () -> release(job));
