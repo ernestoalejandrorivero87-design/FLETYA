@@ -1,5 +1,6 @@
 import { crossesNichupteVehicularBridge, decodePolyline, insideRing } from "./route-geometry.ts";
 import { pilotEndpointAreas } from "./pilot-endpoints.ts";
+import { requestGuidedRoute } from "./guided-route.ts";
 
 type ProviderRoute = { distanceMeters?: number; duration?: string; polyline?: { encodedPolyline?: string } };
 type QuoteRoute = { distanceMeters: number; duration: string; polyline: { encodedPolyline: string } };
@@ -51,12 +52,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "method_not_allowed", message: "Usa POST." }, 405);
   }
 
-  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
-  if (!apiKey) {
-    console.error("Missing GOOGLE_MAPS_API_KEY secret");
-    return jsonResponse({ error: "server_configuration_error" }, 500);
-  }
-
   let payload: unknown;
   try {
     payload = await req.json();
@@ -68,8 +63,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "invalid_input", message: "Envía origen y destino como texto." }, 400);
   }
 
-  const { origin, destination, purpose, include_route } = payload as Record<string, unknown>;
+  const { origin, destination, purpose, include_route, include_steps } = payload as Record<string, unknown>;
   const navigation = purpose === "navigation";
+  const guided = navigation && include_steps === true;
   const bookable = purpose === "bookable_quote";
   const quote = purpose === "quote" || bookable;
   if (
@@ -96,6 +92,61 @@ Deno.serve(async (req: Request) => {
   const timeout = setTimeout(() => controller.abort(), 12_000);
 
   try {
+    if (guided) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const pilot = supabaseUrl === "https://wsdfqscrvfygxripmrzi.supabase.co";
+      const prefix = pilot ? "FLETYA_PILOT" : "FLETYA_PRUEBAS";
+      const stadiaKey = Deno.env.get(prefix + "_STADIA_API_KEY")?.trim();
+      const endpoint = stadiaKey ? "https://api.stadiamaps.com/route/v1" : Deno.env.get(prefix + "_VALHALLA_ROUTE_URL");
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+      if (!supabaseUrl || (!pilot && supabaseUrl !== "https://ccdtpwvalqznasstnqxj.supabase.co") || !anonKey) {
+        return jsonResponse({ error: "guidance_unavailable", message: "La guía aún no está disponible en este entorno." }, 503);
+      }
+      const authorization = req.headers.get("Authorization");
+      if (!authorization) return jsonResponse({ error: "authentication_required" }, 401);
+      const headers = { apikey: anonKey, Authorization: authorization };
+      const auth = await fetch(supabaseUrl + "/auth/v1/user", {
+        headers, signal: controller.signal,
+      });
+      if (!auth.ok) return jsonResponse({ error: "authentication_required" }, 401);
+      const { id } = await auth.json();
+      if (typeof id !== "string" || !id) return jsonResponse({ error: "authentication_required" }, 401);
+      const jobsUrl = new URL(supabaseUrl + "/rest/v1/jobs");
+      jobsUrl.search = new URLSearchParams({
+        select: "origin,destination,status",
+        driver_id: "eq." + id,
+        status: "in.(en_route,picked_up)",
+        limit: "2",
+      }).toString();
+      const jobs = await fetch(jobsUrl.toString(), { headers, signal: controller.signal });
+      if (!jobs.ok) return jsonResponse({ error: "job_verification_failed" }, 502);
+      const active = await jobs.json();
+      if (!Array.isArray(active) || active.length !== 1) {
+        return jsonResponse({ error: "active_job_required", message: "La guía requiere un servicio asignado y en ruta." }, 403);
+      }
+      if (!endpoint?.startsWith("https://")) {
+        return jsonResponse({ error: "guidance_unavailable", message: "La guía aún no está disponible en este entorno." }, 503);
+      }
+      const from = (originWaypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
+      const to = (destinationWaypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
+      if (!from || !to) return jsonResponse({ error: "guidance_requires_pins", message: "La guía requiere coordenadas en ambos puntos." }, 422);
+      const job = active[0];
+      const jobDestination = job.status === "en_route" ? job.origin : job.destination;
+      const waypoint = typeof jobDestination === "string" ? routeWaypoint(jobDestination) : {};
+      const assignedPin = (waypoint.location as { latLng?: typeof to } | undefined)?.latLng;
+      if (assignedPin?.latitude !== to.latitude || assignedPin.longitude !== to.longitude) {
+        return jsonResponse({ error: "job_destination_mismatch", message: "El destino no corresponde a la etapa del servicio." }, 422);
+      }
+      const route = await requestGuidedRoute(endpoint, from, to, controller.signal, stadiaKey);
+      return route ? jsonResponse({ ...route, ...(stadiaKey ? { provider: "stadia" } : {}) })
+        : jsonResponse({ error: "restricted_route", message: "No se pudo verificar una ruta con indicaciones." }, 422);
+    }
+
+    const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+    if (!apiKey) {
+      console.error("Missing GOOGLE_MAPS_API_KEY secret");
+      return jsonResponse({ error: "server_configuration_error" }, 500);
+    }
     const supabaseUrl = bookable ? Deno.env.get("SUPABASE_URL") : undefined;
     const anonKey = bookable ? Deno.env.get("SUPABASE_ANON_KEY") : undefined;
     const serviceKey = bookable ? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") : undefined;
@@ -238,6 +289,9 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       return jsonResponse({ error: "routes_provider_timeout" }, 504);
+    }
+    if (error instanceof Error && error.message === "guidance_provider_error") {
+      return jsonResponse({ error: "guidance_provider_error", message: "El servidor de rutas de Pruebas no respondió correctamente." }, 502);
     }
     console.error("Unexpected error while calculating route");
     return jsonResponse({ error: "internal_error" }, 500);

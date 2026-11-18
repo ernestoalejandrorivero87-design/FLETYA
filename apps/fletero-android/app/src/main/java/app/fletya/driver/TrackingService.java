@@ -78,7 +78,7 @@ public final class TrackingService extends Service implements LocationListener {
                 : locations.isProviderEnabled(LocationManager.GPS_PROVIDER) || locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
             if (!enabled) { status("Activa la ubicación del teléfono."); stopSelf(); return START_NOT_STICKY; }
             for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
-                if (locations.isProviderEnabled(provider)) locations.requestLocationUpdates(provider, 5_000, 0, this, Looper.getMainLooper());
+                if (locations.isProviderEnabled(provider)) locations.requestLocationUpdates(provider, "PRUEBAS".equals(BuildConfig.ENVIRONMENT) && LocationManager.GPS_PROVIDER.equals(provider) ? 1_000 : 5_000, 0, this, Looper.getMainLooper());
             }
             main.post(tick);
         } catch (RuntimeException error) { report = "No se pudo iniciar el GPS. Abre FLETYA y revisa los permisos."; stopSelf(); }
