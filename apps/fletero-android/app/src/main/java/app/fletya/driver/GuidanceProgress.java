@@ -15,6 +15,18 @@ final class GuidanceProgress {
     private int current;
     private double totalRemaining = Double.NaN;
     private final double[] suffix;
+    private double[] seconds;
+    void setDurations(double[] durations) { seconds = durations.clone(); }
+    boolean hasProviderDurations() { if (seconds == null || seconds.length != steps.size()) return false; for (double s : seconds) if (!Double.isFinite(s) || s <= 0) return false; return true; }
+    double remainingSeconds() {
+        if (!Double.isFinite(totalRemaining)) return Double.NaN;
+        if (!hasProviderDurations()) return totalRemaining / (30_000.0 / 3600);
+        double length = suffix[current] - suffix[current+1];
+        double fraction = length > 0 ? Math.max(0, Math.min(1, (totalRemaining-suffix[current+1])/length)) : 0;
+        double result = seconds[current]*fraction;
+        for (int i=current+1;i<seconds.length;i++) result += seconds[i];
+        return result;
+    }
     double remainingMeters() { return totalRemaining; }
     private double lastRemaining = Double.POSITIVE_INFINITY;
 
