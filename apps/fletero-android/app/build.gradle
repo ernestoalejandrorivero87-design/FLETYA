@@ -48,8 +48,8 @@ android {
             if (pilotSigning.store) signingConfig signingConfigs.debug
             manifestPlaceholders = [fletyaMapsAndroidKey: testMapsKey ?: "disabled"]
             buildConfigField 'boolean', 'NATIVE_ROUTE_MAP', (!testMapsKey.isEmpty()).toString()
-            versionCode 22
-            versionName '0.6.16'
+            versionCode 23
+            versionName '0.6.17'
             buildConfigField 'boolean', 'TEST_ROUTE_PRICING', 'true'
             dimension 'environment'
             applicationIdSuffix '.pruebas'
