@@ -1,4 +1,4 @@
-export function decodePolyline(encoded: string): number[][] {
+export function decodePolyline(encoded: string, scale = 100_000): number[][] {
   if (!encoded || encoded.length > 100_000) return [];
   let offset = 0;
   let lat = 0;
@@ -18,8 +18,8 @@ export function decodePolyline(encoded: string): number[][] {
     while (offset < encoded.length) {
       lat += delta();
       lng += delta();
-      if (Math.abs(lat) > 9_000_000 || Math.abs(lng) > 18_000_000) return [];
-      points.push([lng / 100_000, lat / 100_000]);
+      if (Math.abs(lat) > 90 * scale || Math.abs(lng) > 180 * scale) return [];
+      points.push([lng / scale, lat / scale]);
     }
   } catch {
     return [];
@@ -37,13 +37,12 @@ export function insideRing([x, y]: number[], ring: number[][]): boolean {
   return inside;
 }
 
+// Cut over the lagoon near the mapped midpoint of the vehicular bridge.
+// https://agepro.qroo.gob.mx/proyecto-puente-vehicular-nichupte/
+export const nichupteCut = { longitude: -86.80347, south: 21.125, north: 21.142 };
+
 export function crossesNichupteVehicularBridge(points: number[][]): boolean {
-  // Cut across the bridge over the lagoon near its mapped midpoint. The
-  // northern and southern stretches of Boulevard Kukulcán lie outside it.
-  // https://agepro.qroo.gob.mx/proyecto-puente-vehicular-nichupte/
-  const longitude = -86.80347;
-  const south = 21.125;
-  const north = 21.142;
+  const { longitude, south, north } = nichupteCut;
   for (let i = 1; i < points.length; i++) {
     const [ax, ay] = points[i - 1];
     const [bx, by] = points[i];
