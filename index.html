@@ -227,7 +227,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 </div>
  <div class="card" style="margin-top:18px">
   <h2>📊 Reporte financiero</h2>
-  <p class="muted">Consulta el rendimiento de FLETYA por período. Los importes excluyen solicitudes canceladas.</p>
+  <p class="muted">Consulta el rendimiento de FLETYA por período. Los importes incluyen únicamente servicios completados y excluyen pruebas históricas.</p>
 <p class="muted" id="reportPeriodLabel">📅 Período: Este mes</p>
   <select
     id="adminReportPeriod"
@@ -2414,6 +2414,17 @@ async function renderAdmin(){
   }
 
   const services = jobs || [];
+  let historicalIds = new Set();
+  if (IS_FLETYA_PRODUCTION_HOST) {
+    const historical = await supabaseClient.rpc('admin_historical_test_ids');
+    if (revision !== sessionRevision || renderVersion !== adminRenderVersion || logoutPending) return;
+    if (historical.error || !Array.isArray(historical.data)) {
+      toast('No se pudo verificar el historial de pruebas. Reporte financiero no actualizado.');
+      return;
+    }
+    historicalIds = new Set(historical.data);
+  }
+  const financialServices = services.filter(job => !historicalIds.has(job.id));
   const { data: adminUsers, error: adminUsersError } =
     await supabaseClient
       .from('profiles')
@@ -2473,7 +2484,7 @@ const filteredServices = services.filter(job => {
 });
   const servicePage=localPage('adminServices',filteredServices,statusFilter+'|'+search);
   const userPage=localPage('adminUsers',filteredUsers,userSearch);
-  const billableServices = services.filter(job => job.status !== 'cancelled');
+  const billableServices = financialServices.filter(job => job.status === 'completed');
   const sales = billableServices.reduce(
     (total, job) => total + Number(job.price || 0),
     0
@@ -2484,7 +2495,7 @@ const filteredServices = services.filter(job => {
  const driverAccounts = adminUsers
   .filter(user => user.role === 'driver')
   .map(driver => {
-    const driverJobs = services.filter(
+    const driverJobs = financialServices.filter(
       job =>
         job.driver_id === driver.id &&
         job.status === 'completed'
@@ -2538,7 +2549,7 @@ const filteredServices = services.filter(job => {
     ? `
       <div class="card">
         <h2>💰 Estado de cuenta de fleteros</h2>
-        <p class="muted">Resumen de servicios completados y pagos.</p>
+        <p class="muted">Resumen de servicios completados y pagos, sin operaciones históricas de prueba.</p>
 
         <table>
           <tr>
