@@ -22,7 +22,8 @@ create function private.assign_cash_commission_spei_reference() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   if new.payment_method = 'cash' and new.status = 'completed'
-     and new.cash_collected_at is not null and new.cash_collected_at is distinct from old.cash_collected_at then
+     and new.cash_collected_at is not null and new.cash_collected_at is distinct from old.cash_collected_at
+     and not exists(select 1 from private.historical_test_jobs h where h.job_id=new.id) then
     insert into private.cash_commission_spei_references (driver_id, week_start)
       values(new.driver_id, date_trunc('week', new.cash_collected_at at time zone 'America/Cancun')::date)
       on conflict (driver_id, week_start) do nothing;
@@ -37,6 +38,7 @@ insert into private.cash_commission_spei_references (driver_id, week_start)
 select distinct driver_id, date_trunc('week', cash_collected_at at time zone 'America/Cancun')::date
 from public.jobs
 where payment_method='cash' and status='completed' and cash_collected_at is not null and driver_id is not null
+  and not exists(select 1 from private.historical_test_jobs h where h.job_id=public.jobs.id)
 on conflict (driver_id, week_start) do nothing;
 
 create function private.cash_commission_cuts_with_spei() returns jsonb
