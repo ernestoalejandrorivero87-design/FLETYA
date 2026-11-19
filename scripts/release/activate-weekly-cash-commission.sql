@@ -1,4 +1,18 @@
 -- Apply after cash payments are enabled, when fleteros can update to the compatible app.
+-- Pilot historical test orders: snapshot only during controlled activation.
+lock table public.jobs in share row exclusive mode;
+do $ begin
+  if (select count(*) from public.jobs) <> 46 or exists(select 1 from public.jobs where status not in ('completed','cancelled')) then
+    raise exception 'Historical order inventory changed; reconcile before activation';
+  end if;
+end $;
+create table private.historical_test_jobs (
+  job_id uuid primary key references public.jobs(id) on delete restrict
+);
+alter table private.historical_test_jobs enable row level security;
+revoke all on private.historical_test_jobs from public, anon, authenticated;
+insert into private.historical_test_jobs(job_id) select id from public.jobs;
+
 create table private.cash_collection_issues (
   job_id uuid primary key references public.jobs(id) on delete cascade,
   reported_by uuid not null references public.profiles(id),
@@ -91,6 +105,7 @@ begin
           order by j.cash_collected_at, j.id) as jobs
       from public.jobs j
       where j.status='completed' and j.payment_method='cash' and j.cash_collected_at is not null
+        and not exists(select 1 from private.historical_test_jobs h where h.job_id=j.id)
         and (admin or j.driver_id=actor)
       group by j.driver_id, 2
     ) cut
@@ -114,6 +129,7 @@ begin
   from (
     select id, price from public.jobs where driver_id=p_driver and status='completed'
       and payment_method='cash' and cash_commission_settled_at is null
+      and not exists(select 1 from private.historical_test_jobs h where h.job_id=public.jobs.id)
       and cash_collected_at >= p_week::timestamp at time zone 'America/Cancun'
       and cash_collected_at < (p_week + 7)::timestamp at time zone 'America/Cancun'
     order by id for update
