@@ -18,3 +18,8 @@ Requisitos solicitados: foto del fletero, licencia vigente, permiso de movilidad
 - Cliente: verificación básica de correo y propuesta de teléfono, sin exigir documentos de identidad por defecto.
 - Fase inicial propuesta: revisión manual y consultas oficiales cuando sea posible; futura integración con proveedor de identidad y prueba de vida, previa evaluación de privacidad y costo.
 - Pendiente: requisitos legales de movilidad, aviso de privacidad, procedimiento de revisión, diseño y pruebas. No implementado todavía.
+
+## Validaciones registradas — 2026-11-19
+- GPS Fletero Piloto 0.5.13: prueba en carretera confirmada satisfactoria por el operador.
+- Candidatos Cliente 0.3.9 y Fletero 0.5.14: artefactos firmados generados, instalación y validación financiera pendientes.
+- Conciliar seis servicios históricos en efectivo completados sin confirmación registrada antes de activar los cortes.
