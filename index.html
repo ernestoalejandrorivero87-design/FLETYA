@@ -2879,7 +2879,7 @@ function renderCashPayment(box, job, payment) {
     'Método de pago: Efectivo al entregar',
     'Cobro al cliente: ' + (job.cash_collected_at ? 'Registrado' : job.status === 'cancelled' ? 'No corresponde' : 'Pendiente'),
     'Comisión FLETYA: $' + money2(payment.commission) + ' MXN · ' +
-      (job.cash_commission_settled_at ? 'Recibida' : job.status === 'cancelled' ? 'No corresponde' : 'Pendiente')
+      (job.status === 'cancelled' ? 'No corresponde' : !job.cash_collected_at ? 'Por generar' : job.cash_commission_settled_at ? 'Liquidada' : 'Pendiente de liquidación')
   ]) {
     const row = document.createElement('p');
     row.textContent = label;
