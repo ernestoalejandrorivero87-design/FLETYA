@@ -333,7 +333,13 @@ public final class MainActivity extends Activity {
             };
             if (!refund.isEmpty()) text(box, refund, 15, true);
         }
-        if ("cash".equals(job.optString("payment_method"))) text(box, cashPaymentLabel(), 15, true);
+        if ("cash".equals(job.optString("payment_method"))) {
+            text(box, cashPaymentLabel(), 15, true);
+            String cashStatus = !job.optString("cash_collected_at", "").isEmpty() && !job.isNull("cash_collected_at")
+                ? "Pagado · efectivo recibido por el fletero"
+                : "cancelled".equals(job.optString("status")) ? "Pago cancelado" : "Pendiente de confirmación del fletero";
+            text(box, cashStatus, 15, true);
+        }
         text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
         text(box,job.optString("service_type")+" · "+ClientRules.vehicle(job.optString("vehicle_type")),15,false);
         text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(appearance.accent());
