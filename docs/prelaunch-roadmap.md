@@ -23,3 +23,5 @@ Requisitos solicitados: foto del fletero, licencia vigente, permiso de movilidad
 - GPS Fletero Piloto 0.5.13: prueba en carretera confirmada satisfactoria por el operador.
 - Candidatos Cliente 0.3.9 y Fletero 0.5.14: artefactos firmados generados, instalación y validación financiera pendientes.
 - Conciliar seis servicios históricos en efectivo completados sin confirmación registrada antes de activar los cortes.
+
+- Operador confirma que todos los servicios históricos de Piloto fueron pruebas sin cobros reales. Conservar historial, excluir operaciones históricas de liquidaciones reales mediante identificación explícita y verificable; no marcar pagos ficticios como cobrados ni borrar pedidos. Pendiente implementación y validación de exclusión antes de activar cortes.
