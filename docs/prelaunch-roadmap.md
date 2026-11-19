@@ -1,0 +1,20 @@
+# FLETYA — Hoja de ruta previa al lanzamiento
+Actualización: 2026-11-19. Alcance inicial: Cancún.
+
+## Orden acordado
+1. Terminar integración financiera en Piloto: efectivo, comisión, cortes, SPEI, tarjetas, reembolsos, liquidaciones y reportes. Validar GPS y conciliación de operaciones anteriores. No activar tarjeta real sin revisar proveedor y condiciones.
+2. Estudio de mercado local y diseño de fórmula rentable para fletero, competitiva para cliente y sostenible para FLETYA. No modificar tarifas hasta estudiar cotizaciones. Propuesta: configuración de tarifas desde Admin, versión de tarifa por cotización, precio confirmado inmutable.
+3. Verificación obligatoria de fleteros antes del lanzamiento.
+4. Retoques, pruebas integrales, revisión legal y operativa.
+5. Lanzamiento local y publicidad.
+
+## Verificación de fleteros
+Requisitos solicitados: foto del fletero, licencia vigente, permiso de movilidad según vehículo, fotos de vehículo con placas. Propuestas adicionales: identificación oficial, tarjeta de circulación, seguro aplicable, fotos lateral y área de carga. Confirmar requisitos locales antes de determinar obligatoriedad por categoría.
+- Registro con carga privada de documentos, estados pendiente/en revisión/aprobado/observado/rechazado/vencido.
+- Admin revisa identidad, vigencia, coincidencia de placas y titularidad/autorización de uso. Consultar fuentes oficiales disponibles; no afirmar validación oficial cuando solo se revisó visualmente.
+- Impedir aceptación de servicios desde servidor si fletero o vehículo no está aprobado o documentación obligatoria vencida. Avisos de vencimiento. No interrumpir entrega activa automáticamente.
+- Al cliente mostrar solo foto de perfil, nombre de pila y datos necesarios del vehículo asignado, placas y distintivo de revisión documental; nunca imágenes de licencia, identificación o domicilio.
+- Archivos en almacenamiento privado; RLS por propietario y personal autorizado, enlaces temporales, auditoría de revisión, retención y eliminación según normativa de privacidad. No incluir datos sensibles en logs.
+- Cliente: verificación básica de correo y propuesta de teléfono, sin exigir documentos de identidad por defecto.
+- Fase inicial propuesta: revisión manual y consultas oficiales cuando sea posible; futura integración con proveedor de identidad y prueba de vida, previa evaluación de privacidad y costo.
+- Pendiente: requisitos legales de movilidad, aviso de privacidad, procedimiento de revisión, diseño y pruebas. No implementado todavía.
