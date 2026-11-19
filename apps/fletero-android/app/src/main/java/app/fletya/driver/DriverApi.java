@@ -214,6 +214,9 @@ public final class DriverApi {
         return true;
     }
     public synchronized JSONObject navigationRoute(String jobId, String status, String origin) throws Exception {
+        return navigationRoute(jobId, status, origin, false);
+    }
+    public synchronized JSONObject navigationRoute(String jobId, String status, String origin, boolean guided) throws Exception {
         JSONObject assigned = job(jobId);
         if (assigned == null || !status.equals(assigned.optString("status")) ||
             !DriverRules.ownsActive(status, assigned.optString("driver_id"), userId()))
@@ -225,7 +228,8 @@ public final class DriverApi {
             destination += ", Quintana Roo, México";
         }
         JSONObject route = new JSONObject(call("POST", "/functions/v1/fletya-routes", new JSONObject()
-            .put("origin", origin).put("destination", destination).put("purpose", "navigation"), null).body());
+            .put("origin", origin).put("destination", destination).put("purpose", "navigation")
+            .put("include_steps", guided), null).body());
         return route.put("navigation_destination", destination);
     }
     public synchronized JSONObject route(String jobId) throws Exception {
