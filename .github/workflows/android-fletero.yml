@@ -30,7 +30,7 @@ jobs:
         working-directory: apps/fletero-android
         run: gradle --no-daemon testPruebasDebugUnitTest testPilotoDebugUnitTest lintPruebasDebug lintPilotoRelease assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
       - name: Sign and verify Piloto release
-        if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/codex/pilot-signed-appearance-recovery' || github.ref == 'refs/heads/codex/pilot-gps-0617-integration')
+        if: github.event_name == 'workflow_dispatch' && ((github.ref == 'refs/heads/codex/pilot-signed-appearance-recovery' || github.ref == 'refs/heads/codex/pilot-gps-0617-integration') || github.ref == 'refs/heads/codex/pilot-finance-integration')
         shell: bash
         env:
           KEYSTORE_B64: ${{ secrets.FLETYA_PILOT_KEYSTORE_BASE64 }}
@@ -52,7 +52,7 @@ jobs:
             grep -Fi '42c513aceaca6fe4d58a2529b1a7c6143145ecffd4becfeac0e63f9ff60c1813' "$RUNNER_TEMP/cert.txt"
           done
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/codex/pilot-signed-appearance-recovery' || github.ref == 'refs/heads/codex/pilot-gps-0617-integration')
+        if: github.event_name == 'workflow_dispatch' && ((github.ref == 'refs/heads/codex/pilot-signed-appearance-recovery' || github.ref == 'refs/heads/codex/pilot-gps-0617-integration') || github.ref == 'refs/heads/codex/pilot-finance-integration')
         with:
           name: FLETYA-Fletero-Piloto-signed-${{ github.sha }}
           path: signed-piloto/*.apk
