@@ -1,11 +1,11 @@
 -- Apply after cash payments are enabled, when fleteros can update to the compatible app.
 -- Pilot historical test orders: snapshot only during controlled activation.
 lock table public.jobs in share row exclusive mode;
-do $ begin
+do $$ begin
   if (select count(*) from public.jobs) <> 46 or exists(select 1 from public.jobs where status not in ('completed','cancelled')) then
     raise exception 'Historical order inventory changed; reconcile before activation';
   end if;
-end $;
+end $$;
 create table private.historical_test_jobs (
   job_id uuid primary key references public.jobs(id) on delete restrict
 );
