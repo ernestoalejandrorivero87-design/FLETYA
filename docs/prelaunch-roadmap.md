@@ -25,3 +25,8 @@ Requisitos solicitados: foto del fletero, licencia vigente, permiso de movilidad
 - Conciliar seis servicios históricos en efectivo completados sin confirmación registrada antes de activar los cortes.
 
 - Operador confirma que todos los servicios históricos de Piloto fueron pruebas sin cobros reales. Conservar historial, excluir operaciones históricas de liquidaciones reales mediante identificación explícita y verificable; no marcar pagos ficticios como cobrados ni borrar pedidos. Pendiente implementación y validación de exclusión antes de activar cortes.
+
+## Pendientes detectados durante validación financiera — 2026-11-19
+- Admin: distinguir comisión por generar mientras no se confirma efectivo, pendiente de liquidación tras cobro y liquidada tras corte; comprobar redondeo y estados.
+- Navegación guiada: reproducir y corregir error reportado por operador al simular navegación con direcciones seleccionadas por nombre en Cliente; comparar con coordenadas, probar origen y destino, preservar cotización y validar en Pruebas antes de Piloto.
+- Efectivo Piloto: cobro, historial Cliente, estado de cuenta Fletero, reporte de falta de pago y resolución comprobados por capturas; dos servicios simulados, comisión acumulada 247.79 MXN. Cierre calculado, liquidación y datos SPEI aún pendientes de prueba controlada. Excluir nuevos servicios simulados antes del lanzamiento.
