@@ -181,6 +181,17 @@ public final class ClientApi {
             throw new Failure(409,"No se pudo confirmar la solicitud. Actualiza el seguimiento antes de volver a solicitar.");
         return rows.getJSONObject(0);
     }
+    public synchronized JSONObject previewCargoRoute(String origin,String destination,String category,int helpers,int pickupLevel,boolean pickupElevator,int dropoffLevel,boolean dropoffElevator) throws Exception {
+        if(!"PRUEBAS".equals(BuildConfig.ENVIRONMENT))throw new Failure(403,"Disponible únicamente en Pruebas.");
+        profile();
+        JSONObject route=new JSONObject(call("POST","/functions/v1/fletya-routes",new JSONObject().put("origin",ClientRules.address(origin)).put("destination",ClientRules.address(destination)).put("purpose","bookable_quote").put("include_route",true),null).body());
+        if(!route.optBoolean("local_quote"))throw new Failure(400,route.optString("message","No se pudo cotizar la ruta."));
+        String routeId=route.getString("quote_id");java.util.UUID.fromString(routeId);
+        JSONObject price=new JSONObject(call("POST","/rest/v1/rpc/preview_cargo_route_v2",new JSONObject().put("p_quote",routeId).put("p_category",category).put("p_helpers",helpers).put("p_pickup_level",pickupLevel).put("p_pickup_elevator",pickupElevator).put("p_dropoff_level",dropoffLevel).put("p_dropoff_elevator",dropoffElevator),null).body());
+        if(!price.optBoolean("preview_only")||!routeId.equals(price.optString("route_quote_id")))throw new Failure(409,"No se pudo verificar la cotización.");
+        return price;
+    }
+
     public record TestQuote(Quote quote, String routeId) {}
 
     public synchronized TestQuote quoteForTest(String origin, String destination, String vehicle,
