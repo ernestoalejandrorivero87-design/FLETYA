@@ -204,6 +204,7 @@ public final class MainActivity extends Activity {
         category.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona categoría","Paquetería / entregas comerciales","Mudanza","Materiales"}));
         box.addView(category);
         var description=field(box,"Describe la carga (obligatorio)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES|InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        description.setSingleLine(false);description.setMinLines(3);
         var quantity=field(box,"Cantidad aproximada de piezas","",InputType.TYPE_CLASS_NUMBER);
         var dimensions=field(box,"Dimensiones aproximadas (cm)","",InputType.TYPE_CLASS_TEXT);
         var weight=field(box,"Peso aproximado total (kg)","",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
@@ -221,7 +222,7 @@ public final class MainActivity extends Activity {
             try{
                 int q=Integer.parseInt(quantity.getText().toString()),p=Integer.parseInt(pickupLevel.getText().toString()),d=Integer.parseInt(dropoffLevel.getText().toString());double w=Double.parseDouble(weight.getText().toString());
                 if(q<1||p<0||d<0||!Double.isFinite(w)||w<=0||w>3500){result.setText("Revisa cantidad, niveles y peso. El límite general es 3,500 kg; la capacidad real depende del vehículo.");return;}
-                result.setText("Datos listos para revisar. La conexión con direcciones, cotización y envío al fletero aún está pendiente.");
+                result.setText(category.getSelectedItem()+"\nCarga: "+description.getText().toString().trim()+"\nCantidad: "+q+" · "+w+" kg\nDimensiones: "+dimensions.getText()+"\n"+vehicle.getSelectedItem()+" · "+helpers.getSelectedItem()+"\nRecogida: nivel "+p+" · "+(p==0?"Sin suplemento":pickupElevator.isChecked()?"Elevador":"Escaleras")+"\nEntrega: nivel "+d+" · "+(d==0?"Sin suplemento":dropoffElevator.isChecked()?"Elevador":"Escaleras")+"\n"+(fragile.isChecked()?"Carga frágil\n":"")+"Observaciones: "+access.getText()+"\nVista previa: sin pedido ni cobro.");
             }catch(NumberFormatException ex){result.setText("Revisa los campos numéricos.");}
         });
         dialog().setTitle("Vista previa de solicitud").setView(scroll).setPositiveButton("Cerrar",null).show();
