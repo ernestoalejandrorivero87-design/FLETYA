@@ -208,6 +208,12 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <button id="saveRecoveryPassword" class="btn" onclick="finishPasswordRecovery()">Guardar contraseña nueva</button><p id="passwordRecoveryMessage" role="status"></p>
 </section>
 <section id="admin" class="hidden">
+<div class="card" id="sandboxRefunds">
+  <h2>Reembolsos de tarjeta · Simulación</h2>
+  <p class="muted">Solo pagos de prueba; no implica devoluciones de dinero real.</p>
+  <button class="btn light" type="button" onclick="loadSandboxRefunds()">Consultar reembolsos</button>
+  <div id="sandboxRefundCases" aria-live="polite"></div>
+</div>
 <div class="card"><h2>Nuevas cuentas de fletero</h2><p>Revisa los datos y la documentación del conductor antes de autorizar su acceso al piloto.</p><button class="btn light" onclick="loadDriverApplications()">Consultar cuentas pendientes</button><div id="driverApplications"></div></div>
 <div class="hero"><h1>FLETYA Admin</h1><p>Control básico de servicios, ventas y comisión.</p></div>
 <div class="grid">
@@ -3112,6 +3118,69 @@ async function finishPasswordRecovery(){
   recoveryPending=false;await supabaseClient.auth.signOut({scope:'local'});document.getElementById('passwordRecovery').classList.add('hidden');showAccess('client');
   document.getElementById('authMessage').textContent='Contraseña actualizada. Vuelve a tu app e inicia sesión.';
  }catch{message.textContent='No se pudo confirmar el cambio. Revisa la conexión.';}finally{button.disabled=false;}
+}
+async function loadSandboxRefunds() {
+  if (activeSessionRole !== 'admin' || logoutPending) return;
+  const revision = sessionRevision;
+  const box = document.getElementById('sandboxRefundCases');
+  box.textContent = 'Consultando…';
+  const {data: cases, error} = await supabaseClient.rpc('review_sandbox_refund', {});
+  if (revision !== sessionRevision || activeSessionRole !== 'admin' || logoutPending) return;
+  if (error || !Array.isArray(cases)) {
+    box.textContent = 'No se pudieron consultar los reembolsos.';
+    return;
+  }
+  box.replaceChildren();
+  if (!cases.length) {
+    box.textContent = 'No hay reembolsos para revisar.';
+    return;
+  }
+  const money = new Intl.NumberFormat('es-MX', {style: 'currency', currency: 'MXN'});
+  for (const entry of cases) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const heading = document.createElement('h3');
+    heading.textContent = money.format(Number(entry.amount)) + ' MXN · ' + (entry.service_type || 'Flete');
+    const status = document.createElement('p');
+    const labels = {review:'En revisión', requested:'Reembolso solicitado', confirmed:'Reembolso confirmado', denied:'Reembolso rechazado'};
+    status.textContent = [entry.client_name, labels[entry.refund_state], entry.id].filter(Boolean).join(' · ');
+    card.append(heading, status);
+    if (entry.decided_at) {
+      const note = document.createElement('p');
+      note.textContent = entry.note;
+      card.append(note);
+    } else if (entry.refund_state === 'review') {
+      for (const [approved, label] of [[true, 'Aprobar reembolso total'], [false, 'Rechazar reembolso']]) {
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'btn light';
+        action.textContent = label;
+        action.onclick = async () => {
+          if (revision !== sessionRevision || activeSessionRole !== 'admin' || logoutPending) return;
+          const note = window.prompt(label + ' de ' + money.format(Number(entry.amount)) + ' MXN. Escribe el motivo que verá el cliente.');
+          if (note === null) return;
+          const reason = note.trim();
+          if (reason.length < 10 || reason.length > 500) {
+            toast('Escribe un motivo de 10 a 500 caracteres.');
+            return;
+          }
+          for (const control of card.querySelectorAll('button')) control.disabled = true;
+          const {data, error} = await supabaseClient.rpc('review_sandbox_refund', {
+            p_id: entry.id, p_approved: approved, p_note: reason
+          });
+          if (revision !== sessionRevision || activeSessionRole !== 'admin' || logoutPending) return;
+          if (error || data?.id !== entry.id) {
+            toast('No se registró otra decisión. Consulta el estado del caso.');
+          } else {
+            toast(approved ? 'Reembolso aprobado. Pendiente de confirmación de Stripe.' : 'Reembolso rechazado. El cliente ya tiene un aviso.');
+          }
+          await loadSandboxRefunds();
+        };
+        card.append(action);
+      }
+    }
+    box.append(card);
+  }
 }
 async function loadDriverApplications(){
  const revision=sessionRevision,box=document.getElementById('driverApplications');box.textContent='Consultando…';
