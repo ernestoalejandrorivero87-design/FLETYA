@@ -527,7 +527,7 @@ notify pgrst,'reload schema';
 
 -- Source: supabase/pruebas/guard_cash_stripe_checkout.sql
 create function private.guard_cash_stripe_checkout() returns trigger
-language plpgsql security invoker set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if new.payment_method is distinct from 'cash' then
     return new;
