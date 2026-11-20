@@ -50,3 +50,6 @@ MXN, primeros 3 km incluidos: paquetería $400 + $45/km adicional; mudanza $500 
 
 ### Comisión confirmada por el propietario
 FLETYA cobra 15% sobre el importe total del servicio, incluidos ayudantes y suplementos. El 85% corresponde al fletero antes de sus gastos. No excluir ayudantes de la base de comisión. Extras y tratamiento fiscal aún por definir; sin cambios de código ni tarifas en Piloto.
+
+### Ayudantes: propuesta de arranque
+$300 MXN por ayudante adicional, máximo 3; comisión 15% sobre el total, incluido este concepto. Definir duración incluida y horas adicionales antes de implementación. No implica salario fijo ni cambio de tarifas en Piloto.
