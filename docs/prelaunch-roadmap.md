@@ -30,3 +30,12 @@ Requisitos solicitados: foto del fletero, licencia vigente, permiso de movilidad
 - Admin: distinguir comisión por generar mientras no se confirma efectivo, pendiente de liquidación tras cobro y liquidada tras corte; comprobar redondeo y estados.
 - Navegación guiada: reproducir y corregir error reportado por operador al simular navegación con direcciones seleccionadas por nombre en Cliente; comparar con coordenadas, probar origen y destino, preservar cotización y validar en Pruebas antes de Piloto.
 - Efectivo Piloto: cobro, historial Cliente, estado de cuenta Fletero, reporte de falta de pago y resolución comprobados por capturas; dos servicios simulados, comisión acumulada 247.79 MXN. Cierre calculado, liquidación y datos SPEI aún pendientes de prueba controlada. Excluir nuevos servicios simulados antes del lanzamiento.
+
+
+## Rediseño obligatorio de solicitud y tarifas (20 nov 2026)
+- Seleccionar categoría antes de cotizar: mudanza, materiales, paquetería/entregas comerciales (incluye electrodomésticos de tienda), cada una con tarifa propia pendiente de estudio.
+- Descripción obligatoria de lo transportado por categoría, cantidad, dimensiones y peso estimados; ayudantes 0–3.
+- Capturar niveles de carga y descarga por separado, planta baja, escaleras, elevador y disponibilidad para carga.
+- Evaluar fotos opcionales, objetos frágiles, maniobras especiales, distancia de acarreo, acceso/estacionamiento, espera, capacidad del vehículo y carga prohibida. Propuestas pendientes de aprobación.
+- Mostrar desglose antes de confirmar y al fletero antes de aceptar; sincronizar Cliente, Fletero, Admin y cotización validada en servidor. Limitar a vehículos autorizados hasta 3.5 t, respetando carga útil real.
+- No cambiar tarifas en Piloto hasta aprobar estudio y probar reglas en Pruebas, incluyendo regresión de efectivo, tarjeta, comisiones y reembolsos.
