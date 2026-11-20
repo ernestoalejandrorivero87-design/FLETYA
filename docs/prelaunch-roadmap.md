@@ -39,3 +39,8 @@ Requisitos solicitados: foto del fletero, licencia vigente, permiso de movilidad
 - Evaluar fotos opcionales, objetos frágiles, maniobras especiales, distancia de acarreo, acceso/estacionamiento, espera, capacidad del vehículo y carga prohibida. Propuestas pendientes de aprobación.
 - Mostrar desglose antes de confirmar y al fletero antes de aceptar; sincronizar Cliente, Fletero, Admin y cotización validada en servidor. Limitar a vehículos autorizados hasta 3.5 t, respetando carga útil real.
 - No cambiar tarifas en Piloto hasta aprobar estudio y probar reglas en Pruebas, incluyendo regresión de efectivo, tarjeta, comisiones y reembolsos.
+
+### GPS: pendiente prioritario de direcciones escritas
+- Reproducir y corregir el fallo al introducir direcciones por texto en Cliente y luego iniciar/simular navegación en Fletero, tanto hacia recogida como entrega.
+- Conservar dirección legible y coordenadas geocodificadas de cada punto; comprobar coincidencia del pin, ruta y destino de navegación. Mantener selección manual y ubicación actual.
+- Validar navegación guiada, recálculo de ruta sin modificar el precio confirmado, voz y seguimiento; probar primero en Pruebas y después en Piloto.
