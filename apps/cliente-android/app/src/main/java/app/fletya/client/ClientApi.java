@@ -262,7 +262,7 @@ public final class ClientApi {
     }
 
     public synchronized JSONObject requestSandboxCardRefund(String id) throws Exception {
-        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) throw new Failure(403, "Reembolso de prueba no disponible.");
+        if (!sandboxPaymentsAllowed()) throw new Failure(403, "Reembolso de prueba no disponible para esta cuenta.");
         java.util.UUID.fromString(id);
         JSONObject body = new JSONObject().put("action", "refund_card").put("id", id);
         JSONObject result = new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body())
