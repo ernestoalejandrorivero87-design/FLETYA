@@ -216,13 +216,25 @@ public final class MainActivity extends Activity {
         var dropoffElevator=new CheckBox(appearance.context());dropoffElevator.setText("Elevador apto para la carga en entrega");box.addView(dropoffElevator);
         var fragile=new CheckBox(appearance.context());fragile.setText("Carga frágil");box.addView(fragile);
         var access=field(box,"Observaciones de acceso y maniobras (opcional)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        var from=field(box,"Dirección de recogida",originDraft,InputType.TYPE_CLASS_TEXT);
+        var to=field(box,"Dirección de entrega",destDraft,InputType.TYPE_CLASS_TEXT);
         var result=text(box,"",14,false);
-        button(box,"Revisar datos",()->{
+        button(box,"Revisar datos y cotizar",()->{
             if(category.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3||quantity.getText().toString().trim().isEmpty()||dimensions.getText().toString().trim().isEmpty()||weight.getText().toString().trim().isEmpty()){result.setText("Completa la categoría, descripción, cantidad, dimensiones y peso aproximado.");return;}
             try{
                 int q=Integer.parseInt(quantity.getText().toString()),p=Integer.parseInt(pickupLevel.getText().toString()),d=Integer.parseInt(dropoffLevel.getText().toString());double w=Double.parseDouble(weight.getText().toString());
                 if(q<1||p<0||d<0||!Double.isFinite(w)||w<=0||w>3500){result.setText("Revisa cantidad, niveles y peso. El límite general es 3,500 kg; la capacidad real depende del vehículo.");return;}
                 result.setText(category.getSelectedItem()+"\nCarga: "+description.getText().toString().trim()+"\nCantidad: "+q+" · "+w+" kg\nDimensiones: "+dimensions.getText()+"\n"+vehicle.getSelectedItem()+" · "+helpers.getSelectedItem()+"\nRecogida: nivel "+p+" · "+(p==0?"Sin suplemento":pickupElevator.isChecked()?"Elevador":"Escaleras")+"\nEntrega: nivel "+d+" · "+(d==0?"Sin suplemento":dropoffElevator.isChecked()?"Elevador":"Escaleras")+"\n"+(fragile.isChecked()?"Carga frágil\n":"")+"Observaciones: "+access.getText()+"\nVista previa: sin pedido ni cobro.");
+                final String summary=result.getText().toString();
+                final String cat=new String[]{"","Paquetería","Mudanza","Materiales"}[category.getSelectedItemPosition()];
+                final String start=from.getText().toString().trim(),end=to.getText().toString().trim();
+                final int h=helpers.getSelectedItemPosition();
+                final boolean pe=pickupElevator.isChecked(),de=dropoffElevator.isChecked();
+                if(start.isEmpty()||end.isEmpty()){result.setText("Indica las dos direcciones.");return;}
+                result.setText("Consultando ruta y tarifas…");
+                task(()->api.previewCargoRoute(start,end,cat,h,p,pe,d,de),price->{
+                    result.setText(summary+"\n\nCotización de la ruta consultada: "+start+" → "+end+"\n"+price.getDouble("distance_km")+" km\nBase: "+money(price.getDouble("base"))+"\nDistancia adicional: "+money(price.getDouble("distance_extra"))+"\nAyudantes: "+money(price.getDouble("helpers"))+"\nRecogida: "+money(price.getDouble("pickup_access"))+"\nEntrega: "+money(price.getDouble("dropoff_access"))+"\nTOTAL: "+money(price.getDouble("total"))+"\nSin pedido ni cobro. Si cambias datos, vuelve a cotizar.");
+                });
             }catch(NumberFormatException ex){result.setText("Revisa los campos numéricos.");}
         });
         dialog().setTitle("Vista previa de solicitud").setView(scroll).setPositiveButton("Cerrar",null).show();
