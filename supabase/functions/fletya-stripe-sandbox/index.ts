@@ -1,5 +1,8 @@
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const sandboxProject = "https://ccdtpwvalqznasstnqxj.supabase.co";
+const pruebasProject = "https://ccdtpwvalqznasstnqxj.supabase.co";
+const pilotoProject = "https://wsdfqscrvfygxripmrzi.supabase.co";
+const sandboxProject = Deno.env.get("SUPABASE_URL");
+const allowedProject = sandboxProject === pruebasProject || sandboxProject === pilotoProject;
 const returnPage = sandboxProject + "/functions/v1/fletya-stripe-sandbox";
 const intentId = /^pi_[A-Za-z0-9]+$/;
 const refundId = /^re_[A-Za-z0-9]+$/;
@@ -23,17 +26,17 @@ function checkoutUrl(value: unknown): string {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === "GET" && Deno.env.get("SUPABASE_URL") === sandboxProject) {
+  if (request.method === "GET" && allowedProject) {
     return new Response(
-      "FLETYA Cliente - Pruebas\n\nVuelve a la app y toca Consultar pago para comprobar el estado del pago de prueba.",
+      "FLETYA Cliente - Pago de prueba\n\nVuelve a la app y toca Consultar pago para comprobar el estado del pago de prueba.",
       { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } },
     );
   }
   if (request.method !== "POST") return json({ message: "Método no permitido." }, 405);
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const stripeKey = Deno.env.get("STRIPE_TEST_SECRET_KEY");
-  if (url !== sandboxProject || !serviceKey || !/^sk_test_[A-Za-z0-9]+$/.test(stripeKey ?? "")) {
+  const stripeKey = Deno.env.get(sandboxProject === pilotoProject ? "FLETYA_PILOT_STRIPE_TEST_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY");
+  if (!allowedProject || !url || url !== sandboxProject || !serviceKey || !/^sk_test_[A-Za-z0-9]+$/.test(stripeKey ?? "")) {
     return json({ message: "El entorno de pagos de prueba aún no está configurado." }, 503);
   }
   const token = request.headers.get("Authorization");
