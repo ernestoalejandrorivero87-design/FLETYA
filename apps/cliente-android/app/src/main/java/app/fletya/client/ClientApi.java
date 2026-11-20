@@ -123,7 +123,7 @@ public final class ClientApi {
     }
     public synchronized JSONArray activeJobs() throws Exception {
         token();
-        return get("jobs?select=*&client_id=eq." + eq(userId()) + "&status=in.(" + ("PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? "requested,accepted,en_route,picked_up" : "requested,en_route,picked_up") + ")&order=created_at.desc,id.desc&limit=2");
+        return get("jobs?select=*&client_id=eq." + eq(userId()) + "&status=in.(" + (sandboxPaymentsAllowed() ? "requested,accepted,en_route,picked_up" : "requested,en_route,picked_up") + ")&order=created_at.desc,id.desc&limit=2");
     }
     public synchronized JSONArray notifications(int offset) throws Exception {
         return get("notifications?select=id,title,message,type,read,created_at,job_id&user_id=eq."+eq(userId())+"&type=like.client_*&order=created_at.desc,id.desc&limit=13&offset="+Math.max(0,offset));
@@ -212,9 +212,13 @@ public final class ClientApi {
         return sandboxPayment("cancel", null, null, null);
     }
 
+    private boolean sandboxPaymentsAllowed() {
+        return "PRUEBAS".equals(BuildConfig.ENVIRONMENT) || (BuildConfig.PILOT_SANDBOX_CARD && "133d9fff-26d4-4f72-aabf-c65c974b7109".equals(userId()));
+    }
+
     private JSONObject sandboxPayment(String action, TestQuote selected, String id, String method) throws Exception {
-        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
-            throw new Failure(403, "Los pagos de prueba solo están disponibles en FLETYA Pruebas.");
+        if (!sandboxPaymentsAllowed()) {
+            throw new Failure(403, "Los pagos de prueba no están habilitados para esta cuenta.");
         }
         JSONObject body = new JSONObject().put("action", action);
         if (selected != null) {
