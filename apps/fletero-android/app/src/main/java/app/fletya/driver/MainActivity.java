@@ -236,7 +236,7 @@ public final class MainActivity extends Activity {
                 button(box, "Navegación guiada", () -> navigate(job, true));
                 button(box,picked?"Llegué al punto de entrega":"Llegué al punto de recogida",()->new AlertDialog.Builder(appearance.context()).setTitle("¿Confirmar llegada?").setMessage("El cliente recibirá el aviso de tu llegada a este punto.").setNegativeButton("Volver",null).setPositiveButton("Confirmar llegada",(d,w)->task(()->{api.arrive(job.optString("id"),picked?"delivery":"pickup");return true;},ok->{message.setText("Llegada registrada. El cliente puede consultar el aviso.");})).show());
                 button(box, picked ? "Completar servicio" : "Carga recogida", () -> confirmTransition(job, picked ? "completed" : "picked_up"));
-                if (!picked) button(box, "Liberar antes de recoger", () -> release(job));
+                if (!picked && job.isNull("sandbox_payment_method")) button(box, "Liberar antes de recoger", () -> release(job));
                 text(box, TrackingService.report(), 14, false);
                 if (!trackingPermissionsGranted()) {
                     button(box, "Revisar permisos y activar ubicación", () -> requestTracking(null, true));
@@ -362,8 +362,11 @@ public final class MainActivity extends Activity {
         if ("cash".equals(job.optString("payment_method"))) {
             text(box, "Cobras en efectivo al entregar", 16, true);
         }
+        if (!job.isNull("sandbox_payment_method")) {
+            text(box, "Tarjeta de prueba · No cobrar efectivo ni esperar transferencia real", 16, true);
+        }
         if (BuildConfig.TEST_ROUTE_PRICING && !job.isNull("test_driver_payout")) {
-            text(box, "Recibes " + money.format(job.optDouble("test_driver_payout")) + " MXN", 16, true);
+            text(box, (job.isNull("sandbox_payment_method") ? "Recibes " : "Neto simulado ") + money.format(job.optDouble("test_driver_payout")) + " MXN", 16, true);
         }
     }
     private String vehicleLabel(String value) {
