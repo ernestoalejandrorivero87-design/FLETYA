@@ -2315,14 +2315,14 @@ async function markJobPaid(jobId) {
     }
     // Read the selected service again before showing the amount to confirm.
     const { data: job, error: jobError } = await supabaseClient.from('jobs')
-      .select('id, origin, destination, price, driver_id, status, driver_paid, payment_method')
+      .select('*')
       .eq('id', jobId).maybeSingle();
     if (!stillCurrent()) return;
     if (jobError || !job) {
       toast('No se pudo comprobar el servicio. No se registró el pago.');
       return;
     }
-    if (job.payment_method === 'cash' || job.status !== 'completed' || job.driver_paid !== false || !job.driver_id) {
+    if (job.sandbox_payment_method || job.payment_method === 'cash' || job.status !== 'completed' || job.driver_paid !== false || !job.driver_id) {
       toast(job.driver_paid === true ? 'Este servicio ya tiene el pago registrado.'
         : 'Solo se puede registrar el pago de un servicio completado y pendiente.');
       return;
@@ -2473,7 +2473,7 @@ const filteredServices = services.filter(job => {
 });
   const servicePage=localPage('adminServices',filteredServices,statusFilter+'|'+search);
   const userPage=localPage('adminUsers',filteredUsers,userSearch);
-  const billableServices = services.filter(job => job.status !== 'cancelled');
+  const billableServices = services.filter(job => job.status !== 'cancelled' && !job.sandbox_payment_method);
   const sales = billableServices.reduce(
     (total, job) => total + Number(job.price || 0),
     0
@@ -2487,7 +2487,7 @@ const filteredServices = services.filter(job => {
     const driverJobs = services.filter(
       job =>
         job.driver_id === driver.id &&
-        job.status === 'completed'
+        job.status === 'completed' && !job.sandbox_payment_method
     );
 
     // Contabilidad por servicio: trabajar en centavos enteros para evitar
@@ -2682,16 +2682,16 @@ const reportCommission = reportSales * 0.15;
 const reportDriverNet = reportSales - reportCommission;
 
 document.getElementById('reportSales').textContent =
-  money(reportSales);
+  money2(reportSales);
 
 document.getElementById('reportJobs').textContent =
   reportJobs;
 
 document.getElementById('reportCommission').textContent =
-  money(reportCommission);
+  money2(reportCommission);
 
 document.getElementById('reportDriverNet').textContent =
-  money(reportDriverNet);
+  money2(reportDriverNet);
 const requestedCount = services.filter(
   job => job.status === 'requested'
 ).length;
@@ -2723,17 +2723,17 @@ document.getElementById('summaryEnRoute').textContent =
 
 document.getElementById('summaryCompleted').textContent =
   completedCount;
-document.getElementById('monthlySales').textContent = money(monthlySales);
+document.getElementById('monthlySales').textContent = money2(monthlySales);
 document.getElementById('monthlyJobs').textContent = monthlyServices.length;
-document.getElementById('monthlyCommission').textContent = money(monthlyCommission);
+document.getElementById('monthlyCommission').textContent = money2(monthlyCommission);
   document.getElementById('sales').textContent =
-    money(sales);
+    money2(sales);
 
   document.getElementById('commission').textContent =
-    money(commission);
+    money2(commission);
 
   document.getElementById('driverNet').textContent =
-    money(driverNet);
+    money2(driverNet);
 
   document.getElementById('adminTable').innerHTML =
     filteredServices.length
@@ -2922,7 +2922,9 @@ function renderCashPayment(box, job, payment) {
 const payment = driverPaymentFor(job);
 const paymentBox = document.createElement('div');
 paymentBox.className = 'card';
-if (job.payment_method === 'cash') {
+if (job.sandbox_payment_method) {
+  paymentBox.textContent = 'Pago simulado · excluido de la contabilidad y de la liquidación real al fletero.';
+} else if (job.payment_method === 'cash') {
   renderCashPayment(paymentBox, job, payment);
 } else {
 const paymentStatus = document.createElement('p');
