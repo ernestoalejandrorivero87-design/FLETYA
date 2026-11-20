@@ -44,3 +44,6 @@ Requisitos solicitados: foto del fletero, licencia vigente, permiso de movilidad
 - Reproducir y corregir el fallo al introducir direcciones por texto en Cliente y luego iniciar/simular navegación en Fletero, tanto hacia recogida como entrega.
 - Conservar dirección legible y coordenadas geocodificadas de cada punto; comprobar coincidencia del pin, ruta y destino de navegación. Mantener selección manual y ubicación actual.
 - Validar navegación guiada, recálculo de ruta sin modificar el precio confirmado, voz y seguimiento; probar primero en Pruebas y después en Piloto.
+
+### Tarifas iniciales acordadas provisionalmente
+MXN, primeros 3 km incluidos: paquetería $400 + $45/km adicional; mudanza $500 + $50/km adicional; materiales $550 + $55/km adicional. Ajustables tras observar demanda, aceptación y rentabilidad. Extras aún por cerrar. Diseñar configuración administrable, versionada y cotización fija tras confirmar. Validar primero en Pruebas; Piloto sin cambios de precios por ahora.
