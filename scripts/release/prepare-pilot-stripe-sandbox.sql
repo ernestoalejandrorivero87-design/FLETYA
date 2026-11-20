@@ -546,3 +546,19 @@ end $$;
 revoke all on function private.guard_cash_stripe_checkout() from public, anon, authenticated;
 create trigger guard_cash_stripe_checkout before insert on public.jobs
 for each row execute function private.guard_cash_stripe_checkout();
+
+-- Sandbox jobs must never be recorded as real cash or driver payouts.
+create function private.guard_pilot_sandbox_accounting() returns trigger
+language plpgsql set search_path='' as $$
+begin
+  if new.sandbox_payment_method is not null and (
+    new.payment_method is not null or new.cash_collected_at is not null
+    or new.cash_commission_settled_at is not null or coalesce(new.driver_paid,false)
+  ) then
+    raise insufficient_privilege using message='Un servicio simulado no admite liquidaciones reales.';
+  end if;
+  return new;
+end $$;
+revoke all on function private.guard_pilot_sandbox_accounting() from public,anon,authenticated;
+create trigger guard_pilot_sandbox_accounting before insert or update on public.jobs
+for each row execute function private.guard_pilot_sandbox_accounting();
