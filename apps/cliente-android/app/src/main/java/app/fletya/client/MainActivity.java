@@ -194,10 +194,43 @@ public final class MainActivity extends Activity {
             if(active==null){clearTrackingMap();form();}else{stopLocation();clearPreview();quote=null;testQuote=null;requestId="";renderActive(panel.tracking(),panel.trackingError());}
         });
     }
+    // Isolated prototype: does not create jobs or change existing payment/quote contracts.
+    private void cargoFormPrototype(){
+        var box=new LinearLayout(appearance.context());box.setOrientation(LinearLayout.VERTICAL);
+        var scroll=new ScrollView(appearance.context());scroll.addView(box);
+        text(box,"Nuevo formulario · Pruebas",18,true);
+        text(box,"Vista de diseño. No crea solicitudes ni cobra.",14,false);
+        var category=new Spinner(appearance.context());
+        category.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona categoría","Paquetería / entregas comerciales","Mudanza","Materiales"}));
+        box.addView(category);
+        var description=field(box,"Describe la carga (obligatorio)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES|InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        var quantity=field(box,"Cantidad aproximada de piezas","",InputType.TYPE_CLASS_NUMBER);
+        var dimensions=field(box,"Dimensiones aproximadas (cm)","",InputType.TYPE_CLASS_TEXT);
+        var weight=field(box,"Peso aproximado total (kg)","",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        var vehicle=new Spinner(appearance.context());vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta"}));text(box,"Vehículo",14,true);box.addView(vehicle);
+        var helpers=new Spinner(appearance.context());helpers.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Sin ayudante adicional","1 ayudante","2 ayudantes","3 ayudantes"}));text(box,"Ayudantes adicionales al conductor",14,true);box.addView(helpers);
+        var pickupLevel=field(box,"Nivel de recogida (0 = planta baja)","0",InputType.TYPE_CLASS_NUMBER);
+        var pickupElevator=new CheckBox(appearance.context());pickupElevator.setText("Elevador apto para la carga en recogida");box.addView(pickupElevator);
+        var dropoffLevel=field(box,"Nivel de entrega (0 = planta baja)","0",InputType.TYPE_CLASS_NUMBER);
+        var dropoffElevator=new CheckBox(appearance.context());dropoffElevator.setText("Elevador apto para la carga en entrega");box.addView(dropoffElevator);
+        var fragile=new CheckBox(appearance.context());fragile.setText("Carga frágil");box.addView(fragile);
+        var access=field(box,"Observaciones de acceso y maniobras (opcional)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        var result=text(box,"",14,false);
+        button(box,"Revisar datos",()->{
+            if(category.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3||quantity.getText().toString().trim().isEmpty()||dimensions.getText().toString().trim().isEmpty()||weight.getText().toString().trim().isEmpty()){result.setText("Completa la categoría, descripción, cantidad, dimensiones y peso aproximado.");return;}
+            try{
+                int q=Integer.parseInt(quantity.getText().toString()),p=Integer.parseInt(pickupLevel.getText().toString()),d=Integer.parseInt(dropoffLevel.getText().toString());double w=Double.parseDouble(weight.getText().toString());
+                if(q<1||p<0||d<0||!Double.isFinite(w)||w<=0||w>3500){result.setText("Revisa cantidad, niveles y peso. El límite general es 3,500 kg; la capacidad real depende del vehículo.");return;}
+                result.setText("Datos listos para revisar. La conexión con direcciones, cotización y envío al fletero aún está pendiente.");
+            }catch(NumberFormatException ex){result.setText("Revisa los campos numéricos.");}
+        });
+        dialog().setTitle("Vista previa de solicitud").setView(scroll).setPositiveButton("Cerrar",null).show();
+    }
     private void form(){
         screen="home";shell();text(root,"Hola, "+profileName,17,true);
         var intro=card("Solicitar flete");text(intro,"Elige la ruta y revisa el precio antes de confirmar.",15,false);
         addNoticePermissionButton(intro);
+        if(isPruebas())button(intro,"Probar nuevo formulario de carga",this::cargoFormPrototype,false);
         originField=field(intro,"Punto de recogida",originDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         button(intro,"Elegir recogida en mapa",()->picker(originField),false);button(intro,"Usar mi ubicación como recogida",()->locate(originField),false);
         destField=field(intro,"Destino",destDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
