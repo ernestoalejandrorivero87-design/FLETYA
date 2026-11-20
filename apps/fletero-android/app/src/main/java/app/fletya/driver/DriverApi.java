@@ -123,7 +123,7 @@ public final class DriverApi {
     }
     public synchronized JSONArray activeJobs() throws Exception {
         token();
-        return get("jobs?select=*&driver_id=eq." + eq(userId()) + "&status=in.(" + ("PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? "accepted,en_route,picked_up" : "en_route,picked_up") + ")&order=created_at.desc,id.desc&limit=2");
+        return get("jobs?select=*&driver_id=eq." + eq(userId()) + "&status=in.(" + "accepted,en_route,picked_up" + ")&order=created_at.desc,id.desc&limit=2");
     }
     public synchronized JSONArray offers() throws Exception {
         return get("jobs?select=*&status=eq.requested&driver_id=is.null&order=created_at.desc,id.desc&limit=20");
@@ -137,8 +137,9 @@ public final class DriverApi {
         return rows.length() == 1 ? rows.getJSONObject(0) : null;
     }
     public synchronized JSONObject acceptOffer(String id) throws Exception {
-        if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
+        {
             JSONObject offer = job(id);
+            if (offer == null) throw new Failure(409, "La solicitud ya no está disponible.");
             if (offer != null && "held".equals(offer.optString("sandbox_card_state"))) {
                 JSONObject body = new JSONObject().put("action","accept_card").put("id",id);
                 return new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body())
