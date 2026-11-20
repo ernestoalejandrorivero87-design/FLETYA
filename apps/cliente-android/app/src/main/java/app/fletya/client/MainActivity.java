@@ -239,17 +239,21 @@ public final class MainActivity extends Activity {
                 catch (Exception error) { message.setText("No se pudo abrir la ruta."); }
             });
         }
-        if (offersCashPayment() && !sandboxPayments()) text(quoteArea, cashPaymentLabel(), 15, true);
         if (sandboxPayments()) {
+            text(quoteArea, "Elige cómo pagar", 15, true);
+            if (offersCashPayment()) button(quoteArea, cashPaymentLabel(), this::confirmRequest);
             button(quoteArea, "Autorizar tarjeta de prueba", () -> beginPayment("card"));
-            button(quoteArea, "Pagar por SPEI de prueba", () -> beginPayment("spei"));
-            if (offersCashPayment()) button(quoteArea, "Simular pago en efectivo", this::confirmRequest);
+            if (isPruebas()) button(quoteArea, "Pagar por SPEI de prueba", () -> beginPayment("spei"));
         } else {
+            if (offersCashPayment()) text(quoteArea, cashPaymentLabel(), 15, true);
             button(quoteArea,"Solicitar FLETYA",this::confirmRequest);
         }
     }
-    private boolean sandboxPayments() {
+    private boolean isPruebas() {
         return "PRUEBAS".equals(BuildConfig.ENVIRONMENT);
+    }
+    private boolean sandboxPayments() {
+        return isPruebas() || BuildConfig.PILOT_SANDBOX_CARD;
     }
 
     private void beginPayment(String method) {
@@ -302,7 +306,7 @@ public final class MainActivity extends Activity {
         return BuildConfig.TEST_ROUTE_PRICING;
     }
     private String cashPaymentLabel() {
-        return sandboxPayments() ? "Pago en efectivo simulado" : "Pago en efectivo al entregar";
+        return isPruebas() ? "Pago en efectivo simulado" : "Pago en efectivo al entregar";
     }
     private void confirmRequest(){
         if(quote==null)return;var selected=quote;String id=requestId;long draft=draftRevision;
