@@ -1,0 +1,3 @@
+select cron.schedule('fletya-stripe-sandbox-reconcile','* * * * *',$cron$
+ select net.http_post(url := 'https://wsdfqscrvfygxripmrzi.supabase.co/functions/v1/fletya-stripe-sandbox',headers := jsonb_build_object('Content-Type','application/json','X-Fletya-Schedule',(select token::text from private.stripe_sandbox_scheduler limit 1)),body := '{"action":"sweep"}'::jsonb,timeout_milliseconds := 20000);
+$cron$);
