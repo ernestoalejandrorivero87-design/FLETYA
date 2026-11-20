@@ -253,7 +253,7 @@ public final class MainActivity extends Activity {
         return "PRUEBAS".equals(BuildConfig.ENVIRONMENT);
     }
     private boolean sandboxPayments() {
-        return isPruebas() || BuildConfig.PILOT_SANDBOX_CARD;
+        return isPruebas() || (BuildConfig.PILOT_SANDBOX_CARD && "133d9fff-26d4-4f72-aabf-c65c974b7109".equals(api.userId()));
     }
 
     private void beginPayment(String method) {
