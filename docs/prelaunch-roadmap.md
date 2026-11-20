@@ -53,3 +53,6 @@ FLETYA cobra 15% sobre el importe total del servicio, incluidos ayudantes y supl
 
 ### Ayudantes: propuesta de arranque
 $300 MXN por ayudante adicional, máximo 3; comisión 15% sobre el total, incluido este concepto. Definir duración incluida y horas adicionales antes de implementación. No implica salario fijo ni cambio de tarifas en Piloto.
+
+### Ayudantes: condiciones aprobadas
+$300 por ayudante hasta dos horas de servicio; $150 por hora adicional por ayudante; máximo tres adicionales al conductor. Comisión del 15% sobre el total. Pendiente definir medición y autorización de tiempo adicional antes de cobrarlo; probar antes de activar en Piloto.
