@@ -47,3 +47,6 @@ Requisitos solicitados: foto del fletero, licencia vigente, permiso de movilidad
 
 ### Tarifas iniciales acordadas provisionalmente
 MXN, primeros 3 km incluidos: paquetería $400 + $45/km adicional; mudanza $500 + $50/km adicional; materiales $550 + $55/km adicional. Ajustables tras observar demanda, aceptación y rentabilidad. Extras aún por cerrar. Diseñar configuración administrable, versionada y cotización fija tras confirmar. Validar primero en Pruebas; Piloto sin cambios de precios por ahora.
+
+### Comisión confirmada por el propietario
+FLETYA cobra 15% sobre el importe total del servicio, incluidos ayudantes y suplementos. El 85% corresponde al fletero antes de sus gastos. No excluir ayudantes de la base de comisión. Extras y tratamiento fiscal aún por definir; sin cambios de código ni tarifas en Piloto.
