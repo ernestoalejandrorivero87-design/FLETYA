@@ -3,6 +3,9 @@ const pruebasProject = "https://ccdtpwvalqznasstnqxj.supabase.co";
 const pilotoProject = "https://wsdfqscrvfygxripmrzi.supabase.co";
 const sandboxProject = Deno.env.get("SUPABASE_URL");
 const allowedProject = sandboxProject === pruebasProject || sandboxProject === pilotoProject;
+const isPilot = sandboxProject === pilotoProject;
+const pilotEnabled = Deno.env.get("FLETYA_PILOT_CARD_ENABLED") === "true";
+const pilotParticipants = new Set((Deno.env.get("FLETYA_PILOT_CARD_PARTICIPANTS") ?? "").split(",").map(v => v.trim().toLowerCase()).filter(v => uuid.test(v)));
 const returnPage = sandboxProject + "/functions/v1/fletya-stripe-sandbox";
 const intentId = /^pi_[A-Za-z0-9]+$/;
 const refundId = /^re_[A-Za-z0-9]+$/;
@@ -172,6 +175,16 @@ Deno.serve(async (request) => {
     const user = (await auth.json()).id;
     if (!uuid.test(user) || !body || !["start", "status", "cancel", "accept_card", "cancel_card", "refund_card"].includes(body.action)) {
       return json({ message: "Solicitud de pago inválida." }, 400);
+    }
+    if (isPilot) {
+      if (body.action === "start" || body.action === "accept_card") {
+        if (!pilotEnabled || !pilotParticipants.has(user.toLowerCase())) {
+          return json({ message: "Tarjeta de prueba no habilitada para esta cuenta." }, 403);
+        }
+        if (body.action === "start" && body.method !== "card") {
+          return json({ message: "Piloto solo admite tarjeta de prueba." }, 400);
+        }
+      }
     }
     if (body.action === "refund_card") {
       if (!uuid.test(body.id)) return json({ message: "Solicitud inválida." }, 400);
