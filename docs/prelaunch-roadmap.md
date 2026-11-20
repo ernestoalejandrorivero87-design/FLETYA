@@ -56,3 +56,6 @@ $300 MXN por ayudante adicional, máximo 3; comisión 15% sobre el total, inclui
 
 ### Ayudantes: condiciones aprobadas
 $300 por ayudante hasta dos horas de servicio; $150 por hora adicional por ayudante; máximo tres adicionales al conductor. Comisión del 15% sobre el total. Pendiente definir medición y autorización de tiempo adicional antes de cobrarlo; probar antes de activar en Piloto.
+
+### Admin: gestión manual de tarifas (requisito obligatorio)
+Permitir editar tarifas base, kilómetros incluidos, tarifa por km por categoría, ayudantes, horas incluidas y adicionales, niveles, elevadores, espera y suplementos aprobados. Motivos: inflación, combustible, temporada alta/baja. Vista previa de cotización, validación de importes, confirmación, historial de cambios con usuario/fecha/valores, versiones y vigencia. Escritura admin autorizada en servidor; Cliente y Fletero consumen configuración vigente sin APK nueva. Cotizaciones confirmadas conservan versión e importe; no alterar servicios históricos. Comisión 15% confirmada, no modificar automáticamente. Probar en Pruebas antes de Piloto.
