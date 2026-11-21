@@ -126,7 +126,19 @@ public final class DriverApi {
         return get("jobs?select=*&driver_id=eq." + eq(userId()) + "&status=in.(" + "accepted,en_route,picked_up" + ")&order=created_at.desc,id.desc&limit=2");
     }
     public synchronized JSONArray offers() throws Exception {
-        return get("jobs?select=*&status=eq.requested&driver_id=is.null&order=created_at.desc,id.desc&limit=20");
+        JSONArray jobs = get("jobs?select=*&status=eq.requested&driver_id=is.null&order=created_at.desc,id.desc&limit=20");
+        if (!BuildConfig.TEST_ROUTE_PRICING) return jobs;
+        JSONObject driver = profile();
+        String vehicle = driver.optString("vehicle_type", "");
+        JSONArray compatible = new JSONArray();
+        for (int i = 0; i < jobs.length(); i++) {
+            JSONObject job = jobs.getJSONObject(i);
+            if (vehicle.equals(job.optString("vehicle_type", "")) &&
+                java.util.Arrays.asList("pickup", "estaquita_abierta", "estaquita_caja_seca", "camion_3_5t").contains(vehicle)) {
+                compatible.put(job);
+            }
+        }
+        return compatible;
     }
     public synchronized JSONArray history(int offset) throws Exception {
         token();
