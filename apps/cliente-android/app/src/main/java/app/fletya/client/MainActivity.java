@@ -214,8 +214,7 @@ public final class MainActivity extends Activity {
         var dropoffElevator=new CheckBox(appearance.context());dropoffElevator.setText("Elevador apto para la carga en entrega");box.addView(dropoffElevator);
         var fragile=new CheckBox(appearance.context());fragile.setText("Carga frágil");box.addView(fragile);
         var access=field(box,"Observaciones de acceso y maniobras (opcional)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        var from=field(box,"Dirección de recogida",originDraft,InputType.TYPE_CLASS_TEXT);
-        var to=field(box,"Dirección de entrega",destDraft,InputType.TYPE_CLASS_TEXT);
+        text(box,"Se usarán las direcciones indicadas arriba en la solicitud.",13,false);
         var result=text(box,"",14,false);
         button(box,"Revisar datos y cotizar",()->{
             if(category.getSelectedItemPosition()==0||vehicle.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3){result.setText("Selecciona categoría y vehículo y describe la carga. Cantidad, medidas y peso son opcionales.");return;}
@@ -225,10 +224,10 @@ public final class MainActivity extends Activity {
                 result.setText(category.getSelectedItem()+"\nCarga: "+description.getText().toString().trim()+"\nCantidad: "+q+" · "+w+" kg\nDimensiones: "+dimensions.getText()+"\n"+vehicle.getSelectedItem()+" · "+helpers.getSelectedItem()+"\nRecogida: nivel "+p+" · "+(p==0?"Sin suplemento":pickupElevator.isChecked()?"Elevador":"Escaleras")+"\nEntrega: nivel "+d+" · "+(d==0?"Sin suplemento":dropoffElevator.isChecked()?"Elevador":"Escaleras")+"\n"+(fragile.isChecked()?"Carga frágil\n":"")+"Observaciones: "+access.getText()+"\nVista previa: sin pedido ni cobro.");
                 final String summary=result.getText().toString();
                 final String cat=new String[]{"","Paquetería","Mudanza","Materiales"}[category.getSelectedItemPosition()];
-                final String start=from.getText().toString().trim(),end=to.getText().toString().trim();
+                final String start=originField.getText().toString().trim(),end=destField.getText().toString().trim();
                 final int h=helpers.getSelectedItemPosition();
                 final boolean pe=pickupElevator.isChecked(),de=dropoffElevator.isChecked();
-                if(start.isEmpty()||end.isEmpty()){result.setText("Indica las dos direcciones.");return;}
+                if(start.isEmpty()||end.isEmpty()){result.setText("Indica recogida y destino en los campos principales.");return;}
                 result.setText("Consultando ruta y tarifas…");
                 task(()->api.previewCargoRoute(start,end,cat,h,p,pe,d,de),price->{
                     result.setText(summary+"\n\nCotización de la ruta consultada: "+start+" → "+end+"\n"+price.getDouble("distance_km")+" km\nBase: "+money(price.getDouble("base"))+"\nDistancia adicional: "+money(price.getDouble("distance_extra"))+"\nAyudantes: "+money(price.getDouble("helpers"))+"\nRecogida: "+money(price.getDouble("pickup_access"))+"\nEntrega: "+money(price.getDouble("dropoff_access"))+"\nTOTAL: "+money(price.getDouble("total"))+"\nSin pedido ni cobro. Si cambias datos, vuelve a cotizar.");
