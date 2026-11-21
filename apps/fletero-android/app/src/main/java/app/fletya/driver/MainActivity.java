@@ -596,7 +596,7 @@ public final class MainActivity extends Activity {
                 String fullName = name.getText().toString(); String vehicle = codes[vehicles.getSelectedItemPosition()]; String plate = plates.getText().toString(); String telephone=phone.getText().toString().trim();
                 task(() -> { api.saveProfile(fullName, vehicle, plate,telephone); return true; }, result -> message.setText("Perfil guardado."));
             });
-            if (BuildConfig.TEST_ROUTE_PRICING) {
+            if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) {
                 text(box, "Capacidad útil y espacio de carga (sujetos a verificación de Admin)", 14, true);
                 EditText payload = field(box, "Carga útil máxima (kg)", profile.isNull("vehicle_payload_kg") ? "" : profile.optString("vehicle_payload_kg"), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
                 EditText length = field(box, "Largo interior (cm)", profile.isNull("vehicle_cargo_length_cm") ? "" : profile.optString("vehicle_cargo_length_cm"), InputType.TYPE_CLASS_NUMBER);
