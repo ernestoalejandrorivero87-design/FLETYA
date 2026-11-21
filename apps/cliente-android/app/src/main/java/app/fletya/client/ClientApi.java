@@ -189,6 +189,9 @@ public final class ClientApi {
         String routeId=route.getString("quote_id");java.util.UUID.fromString(routeId);
         JSONObject price=new JSONObject(call("POST","/rest/v1/rpc/preview_cargo_route_v2",new JSONObject().put("p_quote",routeId).put("p_category",category).put("p_helpers",helpers).put("p_pickup_level",pickupLevel).put("p_pickup_elevator",pickupElevator).put("p_dropoff_level",dropoffLevel).put("p_dropoff_elevator",dropoffElevator),null).body());
         if(!price.optBoolean("preview_only")||!routeId.equals(price.optString("route_quote_id")))throw new Failure(409,"No se pudo verificar la cotización.");
+        String routePolyline=route.optString("route_polyline", "");
+        if(routePolyline.isEmpty())throw new Failure(409,"No se pudo confirmar la ruta. Revisa las direcciones.");
+        price.put("route_polyline",routePolyline);
         return price;
     }
 
