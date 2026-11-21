@@ -195,7 +195,7 @@ public final class ClientApi {
         return price;
     }
 
-    public synchronized JSONObject previewVehicleRoute(String origin,String destination,String vehicle) throws Exception {
+    public synchronized JSONObject previewVehicleRoute(String origin,String destination,String vehicle,String category,int helpers,int pickupLevel,boolean pickupElevator,int dropoffLevel,boolean dropoffElevator) throws Exception {
         if(!"PRUEBAS".equals(BuildConfig.ENVIRONMENT))throw new Failure(403,"Disponible únicamente en Pruebas.");
         profile();
         JSONObject route=new JSONObject(call("POST","/functions/v1/fletya-routes",new JSONObject()
@@ -203,8 +203,8 @@ public final class ClientApi {
             .put("purpose","bookable_quote").put("include_route",true),null).body());
         if(!route.optBoolean("local_quote"))throw new Failure(400,route.optString("message","No se pudo cotizar la ruta."));
         String routeId=route.getString("quote_id");java.util.UUID.fromString(routeId);
-        JSONObject price=new JSONObject(call("POST","/rest/v1/rpc/preview_vehicle_route_v1",
-            new JSONObject().put("p_quote",routeId).put("p_vehicle",vehicle),null).body());
+        JSONObject price=new JSONObject(call("POST","/rest/v1/rpc/preview_vehicle_cargo_route_v1",
+            new JSONObject().put("p_quote",routeId).put("p_vehicle",vehicle).put("p_category",category).put("p_helpers",helpers).put("p_pickup_level",pickupLevel).put("p_pickup_elevator",pickupElevator).put("p_dropoff_level",dropoffLevel).put("p_dropoff_elevator",dropoffElevator),null).body());
         if(!price.optBoolean("preview_only")||!routeId.equals(price.optString("route_quote_id")))
             throw new Failure(409,"No se pudo verificar la cotización.");
         String polyline=route.optString("route_polyline","");
