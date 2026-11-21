@@ -151,14 +151,14 @@ public final class MainActivity extends Activity {
         EditText repeat=field(box,"Repite la contraseña","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);repeat.setSaveEnabled(false);
         EditText phone=true?field(box,"Teléfono con lada (10 a 15 dígitos)","",InputType.TYPE_CLASS_PHONE):null;
         Spinner vehicle=new Spinner(appearance.context());
-        vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta","Camión"}));
+        vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Camioneta pickup","Estaquita abierta","Estaquita caja seca","Camión 3.5 t"}));
         if(true){text(box,"Vehículo",14,true);box.addView(vehicle,new LinearLayout.LayoutParams(-1,dp(52)));}
         EditText plates=true?field(box,"Placas","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS):null;
         if(true)text(box,"Después de confirmar tu correo, tu cuenta quedará pendiente de revisión por administración. Podrás completar tus datos desde Mi perfil.",14,false);
         button(box,"Crear cuenta",()->{
             String fullName=name.getText().toString(),address=email.getText().toString(),secret=password.getText().toString();
             if(!secret.equals(repeat.getText().toString())){message.setText("Las contraseñas no coinciden.");return;}
-            String telephone=phone==null?"":phone.getText().toString(),plate=plates==null?"":plates.getText().toString();String code=new String[]{"pickup","camioneta","camion"}[vehicle.getSelectedItemPosition()];
+            String telephone=phone==null?"":phone.getText().toString(),plate=plates==null?"":plates.getText().toString();String code=new String[]{"pickup","estaquita_abierta","estaquita_caja_seca","camion_3_5t"}[vehicle.getSelectedItemPosition()];
             task(()->{api.register(fullName,address,secret,telephone,code,plate);return true;},ok->{password.setText("");repeat.setText("");screen="verify";shell();LinearLayout confirmation=card("Confirma tu correo");text(confirmation,"Si el registro procede, recibirás un correo de FLETYA. Abre el enlace de confirmación y vuelve a esta app para iniciar sesión.",16,false);button(confirmation,"Reenviar confirmación",()->task(()->{api.resendConfirmation(address);return true;},sent->message.setText("Si corresponde, enviamos otro correo. Revisa también spam.")));button(root,"Ya confirmé · Iniciar sesión",this::loginScreen);});
         });
         button(root,"Volver a iniciar sesión",this::loginScreen);
@@ -370,7 +370,7 @@ public final class MainActivity extends Activity {
         }
     }
     private String vehicleLabel(String value) {
-        return switch (value) { case "pickup" -> "Pickup / Estaquita"; case "camioneta" -> "Camioneta"; case "camion" -> "Camión"; default -> "Sin registrar"; };
+        return switch (value) { case "pickup" -> "Camioneta pickup"; case "estaquita_abierta" -> "Estaquita abierta"; case "estaquita_caja_seca" -> "Estaquita caja seca"; case "camion_3_5t" -> "Camión 3.5 t"; case "camioneta" -> "Camioneta (registro anterior)"; case "camion" -> "Camión (registro anterior)"; default -> "Sin registrar"; };
     }
     private void requestNoticePermission() {
         PushManager.markPermissionRequested(this);
