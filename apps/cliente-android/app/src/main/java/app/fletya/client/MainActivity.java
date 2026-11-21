@@ -208,7 +208,7 @@ public final class MainActivity extends Activity {
         var quantity=field(box,"Cantidad aproximada de piezas","",InputType.TYPE_CLASS_NUMBER);
         var dimensions=field(box,"Dimensiones aproximadas (cm)","",InputType.TYPE_CLASS_TEXT);
         var weight=field(box,"Peso aproximado total (kg)","",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        var vehicle=new Spinner(appearance.context());vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta"}));text(box,"Vehículo",14,true);box.addView(vehicle);
+        var vehicle=new Spinner(appearance.context());vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona vehículo","Camioneta pickup","Estaquita abierta","Estaquita caja seca","Camión de 3.5 toneladas"}));text(box,"Vehículo",14,true);box.addView(vehicle);
         var helpers=new Spinner(appearance.context());helpers.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Sin ayudante adicional","1 ayudante","2 ayudantes","3 ayudantes"}));text(box,"Ayudantes adicionales al conductor",14,true);box.addView(helpers);
         var pickupLevel=field(box,"Nivel de recogida (0 = planta baja)","0",InputType.TYPE_CLASS_NUMBER);
         var pickupElevator=new CheckBox(appearance.context());pickupElevator.setText("Elevador apto para la carga en recogida");box.addView(pickupElevator);
@@ -220,10 +220,10 @@ public final class MainActivity extends Activity {
         var to=field(box,"Dirección de entrega",destDraft,InputType.TYPE_CLASS_TEXT);
         var result=text(box,"",14,false);
         button(box,"Revisar datos y cotizar",()->{
-            if(category.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3||quantity.getText().toString().trim().isEmpty()||dimensions.getText().toString().trim().isEmpty()||weight.getText().toString().trim().isEmpty()){result.setText("Completa la categoría, descripción, cantidad, dimensiones y peso aproximado.");return;}
+            if(category.getSelectedItemPosition()==0||vehicle.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3){result.setText("Selecciona categoría y vehículo y describe la carga. Cantidad, medidas y peso son opcionales.");return;}
             try{
-                int q=Integer.parseInt(quantity.getText().toString()),p=Integer.parseInt(pickupLevel.getText().toString()),d=Integer.parseInt(dropoffLevel.getText().toString());double w=Double.parseDouble(weight.getText().toString());
-                if(q<1||p<0||d<0||!Double.isFinite(w)||w<=0||w>3500){result.setText("Revisa cantidad, niveles y peso. El límite general es 3,500 kg; la capacidad real depende del vehículo.");return;}
+                int q=quantity.getText().toString().trim().isEmpty()?0:Integer.parseInt(quantity.getText().toString().trim()),p=Integer.parseInt(pickupLevel.getText().toString()),d=Integer.parseInt(dropoffLevel.getText().toString());double w=weight.getText().toString().trim().isEmpty()?0:Double.parseDouble(weight.getText().toString().trim());
+                if(q<0||p<0||d<0||!Double.isFinite(w)||w<0||w>3500){result.setText("Revisa cantidad, niveles y peso. La capacidad real depende del vehículo verificado.");return;}
                 result.setText(category.getSelectedItem()+"\nCarga: "+description.getText().toString().trim()+"\nCantidad: "+q+" · "+w+" kg\nDimensiones: "+dimensions.getText()+"\n"+vehicle.getSelectedItem()+" · "+helpers.getSelectedItem()+"\nRecogida: nivel "+p+" · "+(p==0?"Sin suplemento":pickupElevator.isChecked()?"Elevador":"Escaleras")+"\nEntrega: nivel "+d+" · "+(d==0?"Sin suplemento":dropoffElevator.isChecked()?"Elevador":"Escaleras")+"\n"+(fragile.isChecked()?"Carga frágil\n":"")+"Observaciones: "+access.getText()+"\nVista previa: sin pedido ni cobro.");
                 final String summary=result.getText().toString();
                 final String cat=new String[]{"","Paquetería","Mudanza","Materiales"}[category.getSelectedItemPosition()];
