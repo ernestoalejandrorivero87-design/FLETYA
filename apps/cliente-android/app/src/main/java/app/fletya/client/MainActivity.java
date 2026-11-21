@@ -195,11 +195,9 @@ public final class MainActivity extends Activity {
         });
     }
     // Isolated prototype: does not create jobs or change existing payment/quote contracts.
-    private void cargoFormPrototype(){
-        var box=new LinearLayout(appearance.context());box.setOrientation(LinearLayout.VERTICAL);
-        var scroll=new ScrollView(appearance.context());scroll.addView(box);
-        text(box,"Nuevo formulario · Pruebas",18,true);
-        text(box,"Vista de diseño. No crea solicitudes ni cobra.",14,false);
+    private void cargoFormPrototype(LinearLayout box){
+        text(box,"Detalles de la carga · Vista previa",17,true);
+        text(box,"Puedes revisar vehículos y extras. Este bloque todavía no crea solicitudes ni cobra.",13,false);
         var category=new Spinner(appearance.context());
         category.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona categoría","Paquetería / entregas comerciales","Mudanza","Materiales"}));
         box.addView(category);
@@ -237,13 +235,23 @@ public final class MainActivity extends Activity {
                 });
             }catch(NumberFormatException ex){result.setText("Revisa los campos numéricos.");}
         });
-        dialog().setTitle("Vista previa de solicitud").setView(scroll).setPositiveButton("Cerrar",null).show();
     }
     private void form(){
         screen="home";shell();text(root,"Hola, "+profileName,17,true);
         var intro=card("Solicitar flete");text(intro,"Elige la ruta y revisa el precio antes de confirmar.",15,false);
         addNoticePermissionButton(intro);
-        if(isPruebas())button(intro,"Probar nuevo formulario de carga",this::cargoFormPrototype,false);
+        if(isPruebas()) {
+            LinearLayout cargoDetails = new LinearLayout(appearance.context());
+            cargoDetails.setOrientation(LinearLayout.VERTICAL);
+            cargoDetails.setPadding(dp(8),dp(8),dp(8),dp(12));
+            cargoFormPrototype(cargoDetails);
+            cargoDetails.setVisibility(View.GONE);
+            Button toggleCargo = button(intro,"＋ Detalles de carga y tipos de vehículo",()->{
+                boolean open=cargoDetails.getVisibility()!=View.VISIBLE;
+                cargoDetails.setVisibility(open?View.VISIBLE:View.GONE);
+            },false);
+            intro.addView(cargoDetails);
+        }
         originField=field(intro,"Punto de recogida",originDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         if (isPruebas()) compactLocationActions(intro, originField);
         else {button(intro,"Elegir recogida en mapa",()->picker(originField),false);button(intro,"Usar mi ubicación como recogida",()->locate(originField),false);}
