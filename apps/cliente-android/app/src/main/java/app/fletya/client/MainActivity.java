@@ -219,6 +219,7 @@ public final class MainActivity extends Activity {
         var access=field(box,"Observaciones de acceso y maniobras (opcional)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         text(box,"Usaremos los puntos de recogida y entrega que elegiste arriba.",13,false);
         var result=text(box,"",14,false);
+        LinearLayout routeReview=new LinearLayout(appearance.context());routeReview.setOrientation(LinearLayout.VERTICAL);box.addView(routeReview);
         button(box,"Ver precio de prueba",()->{
             if(category.getSelectedItemPosition()==0||vehicle.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3){result.setText("Selecciona categoría y vehículo y describe la carga. Cantidad, medidas y peso son opcionales.");return;}
             try{
@@ -232,8 +233,15 @@ public final class MainActivity extends Activity {
                 final boolean pe=pickupElevator.isChecked(),de=dropoffElevator.isChecked();
                 if(start.isEmpty()||end.isEmpty()){result.setText("Indica recogida y destino en los campos principales.");return;}
                 result.setText("Consultando ruta y tarifas…");
+                routeReview.removeAllViews();
+                final long routeDraft=draftRevision;
                 task(()->api.previewCargoRoute(start,end,cat,h,p,pe,d,de),price->{
+                    if(routeDraft!=draftRevision || !start.equals(originDraft.trim()) || !end.equals(destDraft.trim())) {result.setText("La dirección cambió. Vuelve a revisar la ruta.");return;}
                     result.setText(summary+"\n\nCotización de la ruta consultada: "+start+" → "+end+"\n"+price.getDouble("distance_km")+" km\nBase: "+money(price.getDouble("base"))+"\nDistancia adicional: "+money(price.getDouble("distance_extra"))+"\nAyudantes: "+money(price.getDouble("helpers"))+"\nRecogida: "+money(price.getDouble("pickup_access"))+"\nEntrega: "+money(price.getDouble("dropoff_access"))+"\nTOTAL: "+money(price.getDouble("total"))+"\nSin pedido ni cobro. Si cambias datos, vuelve a cotizar.");
+                    if(BuildConfig.NATIVE_ROUTE_MAP)button(routeReview,"Ver y confirmar ruta en mapa",()->{
+                        try{RouteMapActivity.show(this,RouteMapData.decode(price.getString("route_polyline")));}
+                        catch(Exception error){message.setText("No se pudo mostrar la ruta. Revisa las direcciones.");}
+                    },false);
                 });
             }catch(NumberFormatException ex){result.setText("Revisa los campos numéricos.");}
         });
