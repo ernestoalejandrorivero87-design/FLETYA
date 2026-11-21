@@ -214,7 +214,7 @@ public final class MainActivity extends Activity {
         var dropoffElevator=new CheckBox(appearance.context());dropoffElevator.setText("Elevador apto para la carga en entrega");box.addView(dropoffElevator);
         var fragile=new CheckBox(appearance.context());fragile.setText("Carga frágil");box.addView(fragile);
         var access=field(box,"Observaciones de acceso y maniobras (opcional)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        text(box,"Se usarán las direcciones indicadas arriba en la solicitud.",13,false);
+        text(box,"Usaremos los puntos de recogida y entrega que elegiste arriba.",13,false);
         var result=text(box,"",14,false);
         button(box,"Revisar datos y cotizar",()->{
             if(category.getSelectedItemPosition()==0||vehicle.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3){result.setText("Selecciona categoría y vehículo y describe la carga. Cantidad, medidas y peso son opcionales.");return;}
@@ -239,18 +239,6 @@ public final class MainActivity extends Activity {
         screen="home";shell();text(root,"Hola, "+profileName,17,true);
         var intro=card("Solicitar flete");text(intro,"Elige la ruta y revisa el precio antes de confirmar.",15,false);
         addNoticePermissionButton(intro);
-        if(isPruebas()) {
-            LinearLayout cargoDetails = new LinearLayout(appearance.context());
-            cargoDetails.setOrientation(LinearLayout.VERTICAL);
-            cargoDetails.setPadding(dp(8),dp(8),dp(8),dp(12));
-            cargoFormPrototype(cargoDetails);
-            cargoDetails.setVisibility(View.GONE);
-            Button toggleCargo = button(intro,"＋ Detalles de carga y tipos de vehículo",()->{
-                boolean open=cargoDetails.getVisibility()!=View.VISIBLE;
-                cargoDetails.setVisibility(open?View.VISIBLE:View.GONE);
-            },false);
-            intro.addView(cargoDetails);
-        }
         originField=field(intro,"Punto de recogida",originDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         if (isPruebas()) compactLocationActions(intro, originField);
         else {button(intro,"Elegir recogida en mapa",()->picker(originField),false);button(intro,"Usar mi ubicación como recogida",()->locate(originField),false);}
@@ -258,6 +246,18 @@ public final class MainActivity extends Activity {
         if (isPruebas()) compactLocationActions(intro, destField);
         else {button(intro,"Elegir entrega en mapa",()->picker(destField),false);button(intro,"Usar mi ubicación como entrega",()->locate(destField),false);}
         watch(originField,true);watch(destField,false);
+        if(isPruebas()) {
+            LinearLayout cargoDetails = new LinearLayout(appearance.context());
+            cargoDetails.setOrientation(LinearLayout.VERTICAL);
+            cargoDetails.setPadding(dp(8),dp(8),dp(8),dp(12));
+            cargoFormPrototype(cargoDetails);
+            cargoDetails.setVisibility(View.GONE);
+            Button toggleCargo = button(intro,"＋ Describir lo que vas a transportar",()->{
+                boolean open=cargoDetails.getVisibility()!=View.VISIBLE;
+                cargoDetails.setVisibility(open?View.VISIBLE:View.GONE);
+            },false);
+            intro.addView(cargoDetails);
+        }
         spinner(intro,"Vehículo",new String[]{"Pickup / Estaquita","Camioneta","Camión"},vehicleChoice,0);
         spinner(intro,"Ayudantes",new String[]{"Sin ayudante","1 ayudante","2 ayudantes"},helperChoice,1);
         spinner(intro,"Servicio",availableServices(),serviceChoice,2);
