@@ -37,6 +37,7 @@ public final class MainActivity extends Activity {
     private JSONObject active;
     private boolean showingPayment;
     private EditText originField,destField;
+    private int pruebasVehicleSelection = 0;
     private ClientApi.Quote quote;
     private ClientApi.TestQuote testQuote;
     private JSONArray activeRoutePoints;
@@ -207,6 +208,8 @@ public final class MainActivity extends Activity {
         var dimensions=field(box,"Dimensiones aproximadas (cm)","",InputType.TYPE_CLASS_TEXT);
         var weight=field(box,"Peso aproximado total (kg)","",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         var vehicle=new Spinner(appearance.context());vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona vehículo","Camioneta pickup","Estaquita abierta","Estaquita caja seca","Camión de 3.5 toneladas"}));text(box,"Vehículo",14,true);box.addView(vehicle);
+        vehicle.setSelection(pruebasVehicleSelection);
+        vehicle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int position,long id){if(pruebasVehicleSelection!=position){pruebasVehicleSelection=position;invalidateQuote();}}});
         var helpers=new Spinner(appearance.context());helpers.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Sin ayudante adicional","1 ayudante","2 ayudantes","3 ayudantes"}));text(box,"Ayudantes adicionales al conductor",14,true);box.addView(helpers);
         var pickupLevel=field(box,"Nivel de recogida (0 = planta baja)","0",InputType.TYPE_CLASS_NUMBER);
         var pickupElevator=new CheckBox(appearance.context());pickupElevator.setText("Elevador apto para la carga en recogida");box.addView(pickupElevator);
@@ -258,10 +261,10 @@ public final class MainActivity extends Activity {
             },false);
             intro.addView(cargoDetails);
         }
-        spinner(intro,"Vehículo",new String[]{"Pickup / Estaquita","Camioneta","Camión"},vehicleChoice,0);
+        if(!isPruebas())spinner(intro,"Vehículo",new String[]{"Pickup / Estaquita","Camioneta","Camión"},vehicleChoice,0);
         spinner(intro,"Ayudantes",new String[]{"Sin ayudante","1 ayudante","2 ayudantes"},helperChoice,1);
         spinner(intro,"Servicio",availableServices(),serviceChoice,2);
-        button(intro,"Cotizar flete",this::calculate);
+        if(!isPruebas())button(intro,"Cotizar flete",this::calculate);
         quoteArea=new LinearLayout(appearance.context());quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();
     }
     private void compactLocationActions(LinearLayout parent, EditText target) {
@@ -287,6 +290,7 @@ public final class MainActivity extends Activity {
         return "PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? TEST_SERVICES : ClientRules.SERVICES;
     }
     private void calculate(){
+        if(isPruebas()) {message.setText("Para evitar solicitudes con un vehículo incorrecto, la cotización definitiva está pausada mientras conectamos las cuatro categorías. Usa la vista previa de carga.");return;}
         String from=originDraft,to=destDraft,vehicle=ClientRules.VEHICLES[vehicleChoice],service=availableServices()[serviceChoice];int helpers=helperChoice;long draft=draftRevision;
         task(()->BuildConfig.TEST_ROUTE_PRICING ? api.quoteForTest(from,to,vehicle,helpers,service) : new ClientApi.TestQuote(api.quote(from,to,vehicle,helpers,service), null),value->{if(draft!=draftRevision){message.setText("La ruta cambió. Calcula de nuevo el precio.");return;}testQuote=value;quote=value.quote();requestId=UUID.randomUUID().toString();showQuote();message.setText("Revisa el precio y confirma cuando estés listo.");});
     }
