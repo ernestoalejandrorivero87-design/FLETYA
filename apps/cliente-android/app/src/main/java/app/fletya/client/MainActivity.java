@@ -242,8 +242,12 @@ public final class MainActivity extends Activity {
                 result.setText("Consultando ruta y tarifas…");
                 routeReview.removeAllViews();
                 final long routeDraft=draftRevision;
+                final String cargoSnapshot=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
+                final int categorySnapshot=category.getSelectedItemPosition(),vehicleSnapshot=vehicle.getSelectedItemPosition();
+                final boolean fragileSnapshot=fragile.isChecked();
                 task(()->api.previewCargoRoute(start,end,cat,h,p,pe,d,de),price->{
-                    if(routeDraft!=draftRevision || !start.equals(originDraft.trim()) || !end.equals(destDraft.trim())) {result.setText("La dirección cambió. Vuelve a revisar la ruta.");return;}
+                    String currentCargo=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
+                    if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim()) || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(currentCargo) || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition() || h!=helpers.getSelectedItemPosition() || p!=Integer.parseInt(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim()) || d!=Integer.parseInt(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim()) || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked() || fragileSnapshot!=fragile.isChecked()) {routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar para ver un precio actualizado.");return;}
                     result.setText(summary+"\n\nCotización de la ruta consultada: "+start+" → "+end+"\n"+price.getDouble("distance_km")+" km\nBase: "+money(price.getDouble("base"))+"\nDistancia adicional: "+money(price.getDouble("distance_extra"))+"\nAyudantes: "+money(price.getDouble("helpers"))+"\nRecogida: "+money(price.getDouble("pickup_access"))+"\nEntrega: "+money(price.getDouble("dropoff_access"))+"\nTOTAL: "+money(price.getDouble("total"))+"\nSin pedido ni cobro. Si cambias datos, vuelve a cotizar.");
                     if(BuildConfig.NATIVE_ROUTE_MAP)button(routeReview,"Ver y confirmar ruta en mapa",()->{
                         try{RouteMapActivity.show(this,RouteMapData.decode(price.getString("route_polyline")));}
