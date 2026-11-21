@@ -200,6 +200,7 @@ public final class MainActivity extends Activity {
     private void cargoFormPrototype(LinearLayout box){
         text(box,"¿Qué vas a transportar?",17,true);
         text(box,"Describe la carga y elige tu vehículo. Puedes revisar un precio de prueba; todavía no se crean pedidos.",13,false);
+        text(box,"1. Elige qué transportas",14,true);
         var category=new Spinner(appearance.context());
         category.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona categoría","Paquetería / entregas comerciales","Mudanza","Materiales"}));
         box.addView(category);
@@ -208,10 +209,13 @@ public final class MainActivity extends Activity {
         var quantity=field(box,"Cantidad aproximada de piezas","",InputType.TYPE_CLASS_NUMBER);
         var dimensions=field(box,"Dimensiones aproximadas (cm)","",InputType.TYPE_CLASS_TEXT);
         var weight=field(box,"Peso aproximado total (kg)","",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        text(box,"2. Elige el vehículo",14,true);
         var vehicle=new Spinner(appearance.context());vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona vehículo","Camioneta pickup","Estaquita abierta","Estaquita caja seca","Camión de 3.5 toneladas"}));text(box,"Vehículo",14,true);box.addView(vehicle);
         vehicle.setSelection(pruebasVehicleSelection);
         vehicle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int position,long id){if(pruebasVehicleSelection!=position){pruebasVehicleSelection=position;invalidateQuote();}}});
+        text(box,"3. ¿Necesitas ayuda para cargar?",14,true);
         var helpers=new Spinner(appearance.context());helpers.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Sin ayudante adicional","1 ayudante","2 ayudantes","3 ayudantes"}));text(box,"Ayudantes adicionales al conductor",14,true);box.addView(helpers);
+        text(box,"4. Acceso a la carga (opcional)",14,true);
         var pickupLevel=field(box,"Nivel de recogida (0 = planta baja)","0",InputType.TYPE_CLASS_NUMBER);
         var pickupElevator=new CheckBox(appearance.context());pickupElevator.setText("Elevador apto para la carga en recogida");box.addView(pickupElevator);
         var dropoffLevel=field(box,"Nivel de entrega (0 = planta baja)","0",InputType.TYPE_CLASS_NUMBER);
@@ -222,6 +226,7 @@ public final class MainActivity extends Activity {
         var result=text(box,"",14,false);
         LinearLayout routeReview=new LinearLayout(appearance.context());routeReview.setOrientation(LinearLayout.VERTICAL);box.addView(routeReview);
         pruebasRouteReview=routeReview;
+        text(box,"El precio es orientativo. La solicitud real se habilitará cuando validemos las tarifas por vehículo.",13,false);
         button(box,"Ver precio de prueba",()->{
             if(category.getSelectedItemPosition()==0||vehicle.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3){result.setText("Selecciona categoría y vehículo y describe la carga. Cantidad, medidas y peso son opcionales.");return;}
             try{
