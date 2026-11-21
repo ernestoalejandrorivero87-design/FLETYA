@@ -586,8 +586,8 @@ public final class MainActivity extends Activity {
             EditText name = field(box, "Nombre completo", profile.optString("full_name"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
             text(box, "Vehículo", 14, true);
             Spinner vehicles = new Spinner(appearance.context());
-            vehicles.setAdapter(new ArrayAdapter<>(appearance.context(), android.R.layout.simple_spinner_dropdown_item, new String[]{"Elige tu vehículo", "Pickup / Estaquita", "Camioneta", "Camión"}));
-            String[] codes = {"", "pickup", "camioneta", "camion"};
+            vehicles.setAdapter(new ArrayAdapter<>(appearance.context(), android.R.layout.simple_spinner_dropdown_item, new String[]{"Elige tu vehículo", "Camioneta pickup", "Estaquita abierta", "Estaquita caja seca", "Camión 3.5 t", "Camioneta (anterior)", "Camión (anterior)"}));
+            String[] codes = {"", "pickup", "estaquita_abierta", "estaquita_caja_seca", "camion_3_5t", "camioneta", "camion"};
             for (int i = 0; i < codes.length; i++) if (codes[i].equals(profile.optString("vehicle_type"))) vehicles.setSelection(i);
             box.addView(vehicles, new LinearLayout.LayoutParams(-1, dp(52)));
             EditText phone = field(box,"Teléfono con lada",profile.isNull("phone")?"":profile.optString("phone"),InputType.TYPE_CLASS_PHONE);
@@ -596,6 +596,17 @@ public final class MainActivity extends Activity {
                 String fullName = name.getText().toString(); String vehicle = codes[vehicles.getSelectedItemPosition()]; String plate = plates.getText().toString(); String telephone=phone.getText().toString().trim();
                 task(() -> { api.saveProfile(fullName, vehicle, plate,telephone); return true; }, result -> message.setText("Perfil guardado."));
             });
+            if (BuildConfig.TEST_ROUTE_PRICING) {
+                text(box, "Capacidad útil y espacio de carga (sujetos a verificación de Admin)", 14, true);
+                EditText payload = field(box, "Carga útil máxima (kg)", profile.isNull("vehicle_payload_kg") ? "" : profile.optString("vehicle_payload_kg"), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+                EditText length = field(box, "Largo interior (cm)", profile.isNull("vehicle_cargo_length_cm") ? "" : profile.optString("vehicle_cargo_length_cm"), InputType.TYPE_CLASS_NUMBER);
+                EditText width = field(box, "Ancho interior (cm)", profile.isNull("vehicle_cargo_width_cm") ? "" : profile.optString("vehicle_cargo_width_cm"), InputType.TYPE_CLASS_NUMBER);
+                EditText height = field(box, "Alto útil (cm)", profile.isNull("vehicle_cargo_height_cm") ? "" : profile.optString("vehicle_cargo_height_cm"), InputType.TYPE_CLASS_NUMBER);
+                button(box, "Guardar capacidad y medidas", () -> task(() -> {
+                    api.saveVehicleCapacity(payload.getText().toString(), length.getText().toString(), width.getText().toString(), height.getText().toString());
+                    return true;
+                }, result -> message.setText("Medidas guardadas. Pendientes de verificación por Admin.")));
+            }
             button(root, "Volver al servicio", () -> { screen = "home"; refresh(); });
             message.setText("");
         });
