@@ -127,7 +127,7 @@ public final class DriverApi {
     }
     public synchronized JSONArray offers() throws Exception {
         JSONArray jobs = get("jobs?select=*&status=eq.requested&driver_id=is.null&order=created_at.desc,id.desc&limit=20");
-        if (!BuildConfig.TEST_ROUTE_PRICING) return jobs;
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) return jobs;
         JSONObject driver = profile();
         String vehicle = driver.optString("vehicle_type", "");
         JSONArray compatible = new JSONArray();
