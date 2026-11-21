@@ -1,0 +1,1 @@
+grant execute on function private.vehicle_request_matches_v2(text,text) to authenticated;
