@@ -37,6 +37,7 @@ public final class MainActivity extends Activity {
     private JSONObject active;
     private boolean showingPayment;
     private EditText originField,destField;
+    private LinearLayout pruebasRouteReview;
     private int pruebasVehicleSelection = 0;
     private ClientApi.Quote quote;
     private ClientApi.TestQuote testQuote;
@@ -220,6 +221,7 @@ public final class MainActivity extends Activity {
         text(box,"Usaremos los puntos de recogida y entrega que elegiste arriba.",13,false);
         var result=text(box,"",14,false);
         LinearLayout routeReview=new LinearLayout(appearance.context());routeReview.setOrientation(LinearLayout.VERTICAL);box.addView(routeReview);
+        pruebasRouteReview=routeReview;
         button(box,"Ver precio de prueba",()->{
             if(category.getSelectedItemPosition()==0||vehicle.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3){result.setText("Selecciona categoría y vehículo y describe la carga. Cantidad, medidas y peso son opcionales.");return;}
             try{
@@ -276,7 +278,8 @@ public final class MainActivity extends Activity {
         spinner(intro,"Servicio",availableServices(),serviceChoice,2);
         }
         if(!isPruebas())button(intro,"Cotizar flete",this::calculate);
-        quoteArea=new LinearLayout(appearance.context());quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();
+        if(!isPruebas()){quoteArea=new LinearLayout(appearance.context());quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();}
+        else quoteArea=null;
     }
     private void compactLocationActions(LinearLayout parent, EditText target) {
         LinearLayout actions = new LinearLayout(appearance.context());
@@ -296,7 +299,7 @@ public final class MainActivity extends Activity {
         text(box,label,14,true);var spinner=new Spinner(appearance.context());spinner.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,items));spinner.setSelection(selected);box.addView(spinner,new LinearLayout.LayoutParams(-1,dp(52)));
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int position,long id){int old=kind==0?vehicleChoice:kind==1?helperChoice:serviceChoice;if(old==position)return;if(kind==0)vehicleChoice=position;else if(kind==1)helperChoice=position;else serviceChoice=position;invalidateQuote();}});
     }
-    private void invalidateQuote(){draftRevision++;quote=null;testQuote=null;requestId="";clearPreview();if(quoteArea!=null){quoteArea.removeAllViews();text(quoteArea,"Calcula el precio después de elegir tu ruta.",14,false);}}
+    private void invalidateQuote(){draftRevision++;quote=null;testQuote=null;requestId="";if(pruebasRouteReview!=null)pruebasRouteReview.removeAllViews();clearPreview();if(quoteArea!=null){quoteArea.removeAllViews();text(quoteArea,"Calcula el precio después de elegir tu ruta.",14,false);}}
     private String[] availableServices() {
         return "PRUEBAS".equals(BuildConfig.ENVIRONMENT) ? TEST_SERVICES : ClientRules.SERVICES;
     }
