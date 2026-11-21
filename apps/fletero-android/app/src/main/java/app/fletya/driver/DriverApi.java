@@ -115,7 +115,7 @@ public final class DriverApi {
     private static String eq(String value) { return androidSafeEncode(value); }
     public synchronized JSONObject profile() throws Exception {
         token();
-        JSONArray rows = get("profiles?select=id,role,full_name,phone,vehicle_type,plates,driver_status&id=eq." + eq(userId()));
+        JSONArray rows = get("profiles?select=id,role,full_name,phone,vehicle_type,plates,driver_status,vehicle_payload_kg,vehicle_cargo_length_cm,vehicle_cargo_width_cm,vehicle_cargo_height_cm&id=eq." + eq(userId()));
         if (rows.length() != 1 || !"driver".equals(rows.getJSONObject(0).optString("role"))) {
             clear(); throw new Failure(403, "Esta app es para cuentas de fletero. Usa tu cuenta de fletero.");
         }
@@ -189,13 +189,31 @@ public final class DriverApi {
         token();
         if(phone!=null&&!phone.matches("\\+?[0-9]{10,15}"))throw new Failure(400,"Escribe un teléfono de 10 a 15 dígitos.");
         plates = plates.trim().toUpperCase(java.util.Locale.ROOT);
-        if (name.trim().isEmpty() || !java.util.Arrays.asList("pickup", "camioneta", "camion").contains(vehicle)
+        if (name.trim().isEmpty() || !java.util.Arrays.asList("pickup", "camioneta", "camion", "estaquita_abierta", "estaquita_caja_seca", "camion_3_5t").contains(vehicle)
             || !plates.matches("[A-Z0-9 -]{3,15}"))
             throw new Failure(400, "Completa tu nombre, vehículo y placas válidas.");
         JSONArray rows = new JSONArray(call("PATCH", "/rest/v1/profiles?id=eq." + eq(userId()) + "&role=eq.driver&select=id",
             new JSONObject().put("full_name", name.trim()).put("vehicle_type", vehicle).put("plates", plates).putOpt("phone",phone), "return=representation").body());
         if (rows.length() != 1 || !userId().equals(rows.getJSONObject(0).optString("id")))
             throw new Failure(409, "No se pudo confirmar el guardado del perfil.");
+    }
+    public synchronized void saveVehicleCapacity(String payload, String length, String width, String height) throws Exception {
+        token();
+        String[] values = {payload.trim(), length.trim(), width.trim(), height.trim()};
+        String[] keys = {"vehicle_payload_kg", "vehicle_cargo_length_cm", "vehicle_cargo_width_cm", "vehicle_cargo_height_cm"};
+        JSONObject body = new JSONObject();
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].isEmpty()) { body.put(keys[i], JSONObject.NULL); continue; }
+            try {
+                double number = Double.parseDouble(values[i]);
+                if (!Double.isFinite(number) || number <= 0 || number > (i == 0 ? 20000 : i == 1 ? 3000 : 1000)
+                    || (i != 0 && number != Math.floor(number))) throw new NumberFormatException();
+                body.put(keys[i], i == 0 ? number : (int) number);
+            } catch (NumberFormatException error) { throw new Failure(400, "Revisa capacidad en kg y dimensiones en cm. Usa valores positivos."); }
+        }
+        JSONArray rows = new JSONArray(call("PATCH", "/rest/v1/profiles?id=eq." + eq(userId()) + "&role=eq.driver&select=id",
+            body, "return=representation").body());
+        if (rows.length() != 1) throw new Failure(409, "No se pudo guardar la capacidad del vehículo.");
     }
     public synchronized boolean uploadLocation(String jobId, double lat, double lng, float accuracy) throws Exception {
         return uploadLocation(jobId, lat, lng, accuracy, () -> true);
