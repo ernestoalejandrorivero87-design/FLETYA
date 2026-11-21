@@ -57,7 +57,7 @@ public final class DriverApi {
         name=name.trim();email=email.trim();phone=phone.trim();plates=plates.trim().toUpperCase(java.util.Locale.ROOT);
         if(name.isEmpty()||name.length()>100||!email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")||password.length()<8)
             throw new Failure(400,"Escribe nombre, correo válido y una contraseña de al menos 8 caracteres.");
-        if(true && (!phone.matches("\\+?[0-9]{10,15}")||!java.util.Arrays.asList("pickup","camioneta","camion").contains(vehicle)||!plates.matches("[A-Z0-9 -]{3,15}")))
+        if(true && (!phone.matches("\\+?[0-9]{10,15}")||!java.util.Arrays.asList("pickup","estaquita_abierta","estaquita_caja_seca","camion_3_5t").contains(vehicle)||!plates.matches("[A-Z0-9 -]{3,15}")))
             throw new Failure(400,"Completa teléfono (10 a 15 dígitos), vehículo y placas válidas.");
         JSONObject data=new JSONObject().put("full_name",name).put("role","driver").put("phone",phone);
         if(true)data.put("vehicle_type",vehicle).put("plates",plates);
