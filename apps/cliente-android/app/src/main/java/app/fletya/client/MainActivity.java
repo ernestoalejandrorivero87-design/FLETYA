@@ -197,8 +197,8 @@ public final class MainActivity extends Activity {
     }
     // Isolated prototype: does not create jobs or change existing payment/quote contracts.
     private void cargoFormPrototype(LinearLayout box){
-        text(box,"Detalles de la carga · Vista previa",17,true);
-        text(box,"Puedes revisar vehículos y extras. Este bloque todavía no crea solicitudes ni cobra.",13,false);
+        text(box,"¿Qué vas a transportar?",17,true);
+        text(box,"Describe la carga y elige tu vehículo. Puedes revisar un precio de prueba; todavía no se crean pedidos.",13,false);
         var category=new Spinner(appearance.context());
         category.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona categoría","Paquetería / entregas comerciales","Mudanza","Materiales"}));
         box.addView(category);
@@ -219,7 +219,7 @@ public final class MainActivity extends Activity {
         var access=field(box,"Observaciones de acceso y maniobras (opcional)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         text(box,"Usaremos los puntos de recogida y entrega que elegiste arriba.",13,false);
         var result=text(box,"",14,false);
-        button(box,"Revisar datos y cotizar",()->{
+        button(box,"Ver precio de prueba",()->{
             if(category.getSelectedItemPosition()==0||vehicle.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3){result.setText("Selecciona categoría y vehículo y describe la carga. Cantidad, medidas y peso son opcionales.");return;}
             try{
                 int q=quantity.getText().toString().trim().isEmpty()?0:Integer.parseInt(quantity.getText().toString().trim()),p=Integer.parseInt(pickupLevel.getText().toString()),d=Integer.parseInt(dropoffLevel.getText().toString());double w=weight.getText().toString().trim().isEmpty()?0:Double.parseDouble(weight.getText().toString().trim());
@@ -243,6 +243,7 @@ public final class MainActivity extends Activity {
         var intro=card("Solicitar flete");text(intro,"Elige la ruta y revisa el precio antes de confirmar.",15,false);
         addNoticePermissionButton(intro);
         originField=field(intro,"Punto de recogida",originDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        if(isPruebas())text(intro,"Puedes escribir un lugar por nombre (por ejemplo, Plaza Las Américas, Cancún) o elegirlo en el mapa. Confirma la ruta antes de continuar.",13,false);
         if (isPruebas()) compactLocationActions(intro, originField);
         else {button(intro,"Elegir recogida en mapa",()->picker(originField),false);button(intro,"Usar mi ubicación como recogida",()->locate(originField),false);}
         destField=field(intro,"Destino",destDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
@@ -262,8 +263,10 @@ public final class MainActivity extends Activity {
             intro.addView(cargoDetails);
         }
         if(!isPruebas())spinner(intro,"Vehículo",new String[]{"Pickup / Estaquita","Camioneta","Camión"},vehicleChoice,0);
+        if(!isPruebas()) {
         spinner(intro,"Ayudantes",new String[]{"Sin ayudante","1 ayudante","2 ayudantes"},helperChoice,1);
         spinner(intro,"Servicio",availableServices(),serviceChoice,2);
+        }
         if(!isPruebas())button(intro,"Cotizar flete",this::calculate);
         quoteArea=new LinearLayout(appearance.context());quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();
     }
