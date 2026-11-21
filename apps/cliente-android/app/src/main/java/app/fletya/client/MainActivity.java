@@ -245,15 +245,30 @@ public final class MainActivity extends Activity {
         addNoticePermissionButton(intro);
         if(isPruebas())button(intro,"Probar nuevo formulario de carga",this::cargoFormPrototype,false);
         originField=field(intro,"Punto de recogida",originDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        button(intro,"Elegir recogida en mapa",()->picker(originField),false);button(intro,"Usar mi ubicación como recogida",()->locate(originField),false);
+        if (isPruebas()) compactLocationActions(intro, originField);
+        else {button(intro,"Elegir recogida en mapa",()->picker(originField),false);button(intro,"Usar mi ubicación como recogida",()->locate(originField),false);}
         destField=field(intro,"Destino",destDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        button(intro,"Elegir entrega en mapa",()->picker(destField),false);button(intro,"Usar mi ubicación como entrega",()->locate(destField),false);
+        if (isPruebas()) compactLocationActions(intro, destField);
+        else {button(intro,"Elegir entrega en mapa",()->picker(destField),false);button(intro,"Usar mi ubicación como entrega",()->locate(destField),false);}
         watch(originField,true);watch(destField,false);
         spinner(intro,"Vehículo",new String[]{"Pickup / Estaquita","Camioneta","Camión"},vehicleChoice,0);
         spinner(intro,"Ayudantes",new String[]{"Sin ayudante","1 ayudante","2 ayudantes"},helperChoice,1);
         spinner(intro,"Servicio",availableServices(),serviceChoice,2);
         button(intro,"Cotizar flete",this::calculate);
         quoteArea=new LinearLayout(appearance.context());quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();
+    }
+    private void compactLocationActions(LinearLayout parent, EditText target) {
+        LinearLayout actions = new LinearLayout(appearance.context());
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(-1, -2);
+        row.topMargin = dp(4);
+        parent.addView(actions, row);
+        Button map = button(actions, "⌖ Mapa", () -> picker(target), false);
+        LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(0, dp(46), 1);
+        mapParams.setMarginEnd(dp(8));
+        map.setLayoutParams(mapParams);
+        Button location = button(actions, "◎ Mi ubicación", () -> locate(target), false);
+        location.setLayoutParams(new LinearLayout.LayoutParams(0, dp(46), 1));
     }
     private void watch(EditText field,boolean origin){field.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}public void afterTextChanged(Editable value){String next=value.toString();if(origin){if(next.equals(originDraft))return;originDraft=next;}else{if(next.equals(destDraft))return;destDraft=next;}invalidateQuote();}});}
     private void spinner(LinearLayout box,String label,String[] items,int selected,int kind){
