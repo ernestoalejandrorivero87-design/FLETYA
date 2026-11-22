@@ -40,6 +40,18 @@ public final class DriverApi {
             case 429 -> "Demasiados intentos. Espera un momento y vuelve a intentar.";
             default -> "No se pudo conectar con FLETYA. Revisa tu conexión.";
         };
+        if (response.status() == 422 && response.body() != null) {
+            try {
+                JSONObject details = new JSONObject(response.body());
+                String code = details.optString("error");
+                String detail = details.optString("message");
+                if (java.util.Set.of("guidance_requires_origin_pin", "job_destination_mismatch",
+                    "ambiguous_destination", "invalid_destination", "restricted_route").contains(code)
+                    && !detail.isBlank() && detail.length() <= 220) {
+                    message = detail;
+                }
+            } catch (Exception ignored) { /* Keep the safe default for non-JSON errors. */ }
+        }
         throw new Failure(response.status(), message);
     }
     private void saveSession(Response response) throws Exception {
