@@ -249,7 +249,34 @@ public final class MainActivity extends Activity {
                 task(()->api.previewVehicleRoute(start,end,vehicleCode,cat,h,p,pe,d,de),price->{
                     String currentCargo=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
                     if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim()) || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(currentCargo) || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition() || h!=helpers.getSelectedItemPosition() || p!=Integer.parseInt(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim()) || d!=Integer.parseInt(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim()) || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked() || fragileSnapshot!=fragile.isChecked()) {routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar para ver un precio actualizado.");return;}
-                    result.setText(summary+"\n\nRuta consultada: "+start+" → "+end+"\n"+price.getDouble("distance_km")+" km\n"+(price.optBoolean("available")?"Base del vehículo: "+money(price.getDouble("base"))+"\nDistancia adicional: "+money(price.getDouble("extra_charge"))+"\nSubtotal del vehículo: "+money(price.getDouble("total"))+"\nAyudantes: "+money(price.getDouble("helpers_cost"))+"\nRecogida: "+money(price.getDouble("pickup_access"))+"\nEntrega: "+money(price.getDouble("dropoff_access"))+"\nTOTAL ORIENTATIVO: "+money(price.getDouble("total")):"Tarifa del vehículo pendiente de configurar en Administrador. Todavía no hay precio disponible.")+"\nSin pedido ni cobro.");
+                    result.setText(summary+"\n\nRuta consultada: "+start+" → "+end+"\n"+price.getDouble("distance_km")+" km\n"+(price.optBoolean("available")?"Base del vehículo: "+money(price.getDouble("base"))+"\nDistancia adicional: "+money(price.getDouble("extra_charge"))+"\nSubtotal del vehículo: "+money(price.getDouble("vehicle_subtotal"))+"\nAyudantes: "+money(price.getDouble("helpers_cost"))+"\nRecogida: "+money(price.getDouble("pickup_access"))+"\nEntrega: "+money(price.getDouble("dropoff_access"))+"\nTOTAL ORIENTATIVO: "+money(price.getDouble("total")):"Tarifa del vehículo pendiente de configurar en Administrador. Todavía no hay precio disponible.")+"\nSin pedido ni cobro.");
+                    if(price.optBoolean("available") && price.has("saved_quote_id")) {
+                        final String savedQuote=price.getString("saved_quote_id");
+                        final String quotedDescription=description.getText().toString().trim();
+                        final String quotedSummary=summary;
+                        button(routeReview,"Confirmar flete de prueba (efectivo)",()->{
+                            String current=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
+                            if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim())
+                                || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(current)
+                                || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition()
+                                || h!=helpers.getSelectedItemPosition() || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked()
+                                || fragileSnapshot!=fragile.isChecked() || !String.valueOf(p).equals(pickupLevel.getText().toString().trim())
+                                || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim())) {
+                                routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar antes de confirmar.");return;
+                            }
+                            new AlertDialog.Builder(appearance.context())
+                                .setTitle("Confirmar solicitud de prueba")
+                                .setMessage("Se enviará un pedido REAL al sistema de Pruebas. Pago en efectivo. Total: "+money(price.getDouble("total"))+"\\n\\n"+quotedSummary)
+                                .setNegativeButton("Volver",null)
+                                .setPositiveButton("Solicitar flete",(dialog,which)->{
+                                    final String id=UUID.randomUUID().toString();
+                                    task(()->api.confirmSavedCargoQuote(savedQuote,id,quotedDescription),job->{
+                                        routeReview.removeAllViews();
+                                        result.setText("Solicitud creada en Pruebas. Folio: "+job.optString("id")+"\\nEstado: "+job.optString("status")+"\\nPrecio contratado: "+money(job.getDouble("price"))+"\\nConsulta el seguimiento para ver si un fletero la acepta.");
+                                    });
+                                }).show();
+                        },false);
+                    }
                     if(BuildConfig.NATIVE_ROUTE_MAP)button(routeReview,"Ver y confirmar ruta en mapa",()->{
                         try{RouteMapActivity.show(this,RouteMapData.decode(price.getString("route_polyline")));}
                         catch(Exception error){message.setText("No se pudo mostrar la ruta. Revisa las direcciones.");}
