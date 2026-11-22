@@ -188,7 +188,7 @@ public final class ClientApi {
         if(!route.optBoolean("local_quote"))throw new Failure(400,route.optString("message","No se pudo cotizar la ruta."));
         String routeId=route.getString("quote_id");java.util.UUID.fromString(routeId);
         JSONObject price=new JSONObject(call("POST","/rest/v1/rpc/preview_cargo_route_v2",new JSONObject().put("p_quote",routeId).put("p_category",category).put("p_helpers",helpers).put("p_pickup_level",pickupLevel).put("p_pickup_elevator",pickupElevator).put("p_dropoff_level",dropoffLevel).put("p_dropoff_elevator",dropoffElevator),null).body());
-        if(!price.optBoolean("preview_only")||!routeId.equals(price.optString("route_quote_id")) || (price.optBoolean("available") && !price.has("saved_quote_id")))throw new Failure(409,"No se pudo verificar la cotización.");
+        if(!price.optBoolean("preview_only")||!routeId.equals(price.optString("route_quote_id")))throw new Failure(409,"No se pudo verificar la cotización.");
         String routePolyline=route.optString("route_polyline", "");
         if(routePolyline.isEmpty())throw new Failure(409,"No se pudo confirmar la ruta. Revisa las direcciones.");
         price.put("route_polyline",routePolyline);
@@ -203,10 +203,20 @@ public final class ClientApi {
             .put("purpose","bookable_quote").put("include_route",true),null).body());
         if(!route.optBoolean("local_quote"))throw new Failure(400,route.optString("message","No se pudo cotizar la ruta."));
         String routeId=route.getString("quote_id");java.util.UUID.fromString(routeId);
-        JSONObject price=new JSONObject(call("POST","/rest/v1/rpc/save_vehicle_cargo_quote_v1",
+        JSONObject price=new JSONObject(call("POST","/rest/v1/rpc/preview_vehicle_cargo_route_v1",
             new JSONObject().put("p_quote",routeId).put("p_vehicle",vehicle).put("p_category",category).put("p_helpers",helpers).put("p_pickup_level",pickupLevel).put("p_pickup_elevator",pickupElevator).put("p_dropoff_level",dropoffLevel).put("p_dropoff_elevator",dropoffElevator),null).body());
         if(!price.optBoolean("preview_only")||!routeId.equals(price.optString("route_quote_id")))
             throw new Failure(409,"No se pudo verificar la cotización.");
+        if(price.optBoolean("available") && price.optBoolean("cargo_priced")) {
+            JSONObject saved=new JSONObject(call("POST","/rest/v1/rpc/save_vehicle_cargo_quote_v1",
+                new JSONObject().put("p_quote",routeId).put("p_vehicle",vehicle).put("p_category",category)
+                    .put("p_helpers",helpers).put("p_pickup_level",pickupLevel).put("p_pickup_elevator",pickupElevator)
+                    .put("p_dropoff_level",dropoffLevel).put("p_dropoff_elevator",dropoffElevator),null).body());
+            if(!routeId.equals(saved.optString("route_quote_id")) || !saved.has("saved_quote_id")
+                || saved.optDouble("total",-1)!=price.optDouble("total",-2))
+                throw new Failure(409,"La cotización cambió. Vuelve a calcular.");
+            price=saved;
+        }
         String polyline=route.optString("route_polyline","");
         if(polyline.isEmpty())throw new Failure(409,"No se pudo confirmar la ruta.");
         price.put("route_polyline",polyline);
