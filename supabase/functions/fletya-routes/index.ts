@@ -127,14 +127,31 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: "guidance_unavailable", message: "La guía aún no está disponible en este entorno." }, 503);
       }
       const from = (originWaypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
-      const to = (destinationWaypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
-      if (!from || !to) return jsonResponse({ error: "guidance_requires_pins", message: "La guía requiere coordenadas en ambos puntos." }, 422);
+      if (!from) return jsonResponse({ error: "guidance_requires_origin_pin", message: "Activa la ubicación GPS del conductor para navegar." }, 422);
       const job = active[0];
       const jobDestination = job.status === "en_route" ? job.origin : job.destination;
-      const waypoint = typeof jobDestination === "string" ? routeWaypoint(jobDestination) : {};
-      const assignedPin = (waypoint.location as { latLng?: typeof to } | undefined)?.latLng;
-      if (assignedPin?.latitude !== to.latitude || assignedPin.longitude !== to.longitude) {
+      if (typeof jobDestination !== "string" || destination.trim() !== jobDestination.trim()) {
         return jsonResponse({ error: "job_destination_mismatch", message: "El destino no corresponde a la etapa del servicio." }, 422);
+      }
+      const waypoint = routeWaypoint(jobDestination);
+      let to = (waypoint.location as { latLng?: { latitude: number; longitude: number } } | undefined)?.latLng;
+      if (!to) {
+        const googleKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+        if (!googleKey) return jsonResponse({ error: "guidance_unavailable", message: "No está configurada la búsqueda de direcciones." }, 503);
+        const geocodeUrl = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+        geocodeUrl.searchParams.set("address", jobDestination + (jobDestination.toLowerCase().includes("méxico") ? "" : ", Cancún, Quintana Roo, México"));
+        geocodeUrl.searchParams.set("components", "country:MX");
+        geocodeUrl.searchParams.set("key", googleKey);
+        const geocodeResponse = await fetch(geocodeUrl, { signal: controller.signal });
+        if (!geocodeResponse.ok) return jsonResponse({ error: "geocoding_unavailable", message: "No se pudo consultar la dirección." }, 502);
+        const geocoded = await geocodeResponse.json() as { status?: string; results?: { geometry?: { location?: { lat: number; lng: number } }; partial_match?: boolean; address_components?: { long_name: string; short_name: string; types: string[] }[] }[] };
+        const matches = geocoded.status === "OK" ? geocoded.results ?? [] : [];
+        const candidates = matches.filter(result => !result.partial_match && result.geometry?.location &&
+          result.address_components?.some(c => c.types.includes("administrative_area_level_1") && (c.short_name === "Q.R." || c.long_name === "Quintana Roo")));
+        if (candidates.length !== 1) return jsonResponse({ error: "ambiguous_destination", message: "No se pudo identificar un destino único. Confirma la ubicación en el mapa." }, 422);
+        const point = candidates[0].geometry!.location!;
+        if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return jsonResponse({ error: "invalid_destination", message: "No se pudo verificar la ubicación." }, 422);
+        to = { latitude: point.lat, longitude: point.lng };
       }
       const route = await requestGuidedRoute(endpoint, from, to, controller.signal, stadiaKey);
       return route ? jsonResponse({ ...route, ...(stadiaKey ? { provider: "stadia" } : {}) })
