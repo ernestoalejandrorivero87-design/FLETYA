@@ -139,15 +139,19 @@ Deno.serve(async (req: Request) => {
         const googleKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
         if (!googleKey) return jsonResponse({ error: "guidance_unavailable", message: "No está configurada la búsqueda de direcciones." }, 503);
         const geocodeUrl = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-        geocodeUrl.searchParams.set("address", jobDestination + (jobDestination.toLowerCase().includes("méxico") ? "" : ", Cancún, Quintana Roo, México"));
+        geocodeUrl.searchParams.set("address", jobDestination);
         geocodeUrl.searchParams.set("components", "country:MX");
         geocodeUrl.searchParams.set("key", googleKey);
         const geocodeResponse = await fetch(geocodeUrl, { signal: controller.signal });
         if (!geocodeResponse.ok) return jsonResponse({ error: "geocoding_unavailable", message: "No se pudo consultar la dirección." }, 502);
         const geocoded = await geocodeResponse.json() as { status?: string; results?: { geometry?: { location?: { lat: number; lng: number } }; partial_match?: boolean; address_components?: { long_name: string; short_name: string; types: string[] }[] }[] };
         const matches = geocoded.status === "OK" ? geocoded.results ?? [] : [];
-        const candidates = matches.filter(result => !result.partial_match && result.geometry?.location &&
-          result.address_components?.some(c => c.types.includes("administrative_area_level_1") && (c.short_name === "Q.R." || c.long_name === "Quintana Roo")));
+        const candidates = matches.filter(result => {
+          const location = result.geometry?.location;
+          // Cancun metropolitan area guard; avoid relying on Google's variable state abbreviation.
+          return !result.partial_match && location && Number.isFinite(location.lat) && Number.isFinite(location.lng)
+            && location.lat >= 20.8 && location.lat <= 21.35 && location.lng >= -87.1 && location.lng <= -86.65;
+        });
         if (candidates.length !== 1) return jsonResponse({ error: "ambiguous_destination", message: "No se pudo identificar un destino único. Confirma la ubicación en el mapa." }, 422);
         const point = candidates[0].geometry!.location!;
         if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return jsonResponse({ error: "invalid_destination", message: "No se pudo verificar la ubicación." }, 422);
