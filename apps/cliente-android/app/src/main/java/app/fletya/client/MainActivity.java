@@ -246,7 +246,18 @@ public final class MainActivity extends Activity {
                 final int categorySnapshot=category.getSelectedItemPosition(),vehicleSnapshot=vehicle.getSelectedItemPosition();
                 final boolean fragileSnapshot=fragile.isChecked();
                 final String vehicleCode=new String[]{"","pickup","estaquita_abierta","estaquita_caja_seca","camion_3_5t"}[vehicleSnapshot];
-                task(()->api.previewVehicleRoute(start,end,vehicleCode,cat,h,p,pe,d,de),price->{
+                task(()->{
+                    try{return api.previewVehicleRoute(start,end,vehicleCode,cat,h,p,pe,d,de);}
+                    catch(Exception error){
+                        return new JSONObject().put("_quote_error",error instanceof ClientApi.Failure || error instanceof IllegalArgumentException
+                            ?String.valueOf(error.getMessage()):"No se pudo completar la consulta de ruta. Revisa la conexión e inténtalo otra vez.");
+                    }
+                },price->{
+                    if(price.has("_quote_error")){
+                        routeReview.removeAllViews();
+                        result.setText("No se pudo cotizar: "+price.optString("_quote_error"));
+                        return;
+                    }
                     String currentCargo=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
                     if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim()) || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(currentCargo) || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition() || h!=helpers.getSelectedItemPosition() || !String.valueOf(p).equals(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim()) || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim()) || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked() || fragileSnapshot!=fragile.isChecked()) {routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar para ver un precio actualizado.");return;}
                     result.setText(summary+"\n\nRuta consultada: "+start+" → "+end+"\n"+price.getDouble("distance_km")+" km\n"+(price.optBoolean("available")?"Base del vehículo: "+money(price.getDouble("base"))+"\nDistancia adicional: "+money(price.getDouble("extra_charge"))+"\nSubtotal del vehículo: "+money(price.getDouble("vehicle_subtotal"))+"\nAyudantes: "+money(price.getDouble("helpers_cost"))+"\nRecogida: "+money(price.getDouble("pickup_access"))+"\nEntrega: "+money(price.getDouble("dropoff_access"))+"\nTOTAL ORIENTATIVO: "+money(price.getDouble("total")):"Tarifa del vehículo pendiente de configurar en Administrador. Todavía no hay precio disponible.")+"\nSin pedido ni cobro.");
