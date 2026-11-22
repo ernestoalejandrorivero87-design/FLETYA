@@ -541,7 +541,7 @@ public final class MainActivity extends Activity {
         task(() -> {
             try { return api.navigationRoute(id, status, origin, guided); }
             catch (DriverApi.Failure error) {
-                if (guided && error.status == 422) return new JSONObject().put("guidance_error", true);
+                if (guided && error.status == 422) return new JSONObject().put("guidance_error", true).put("guidance_message", error.getMessage());
                 throw error;
             }
         }, route -> {
@@ -549,7 +549,7 @@ public final class MainActivity extends Activity {
             if (guided) {
                 if (route.optBoolean("guidance_error")) {
                     new AlertDialog.Builder(appearance.context()).setTitle("Navegación no disponible")
-                        .setMessage("No se pudo verificar la ruta guiada. Comprueba que el destino de esta etapa se seleccionó mediante un pin en el mapa.")
+                        .setMessage(route.optString("guidance_message", "No se pudo verificar la ruta guiada. Comprueba el destino del servicio y vuelve a intentarlo."))
                         .setPositiveButton("Entendido", null).show();
                     return;
                 }
