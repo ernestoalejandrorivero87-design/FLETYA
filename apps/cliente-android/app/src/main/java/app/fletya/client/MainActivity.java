@@ -266,7 +266,7 @@ public final class MainActivity extends Activity {
                             }
                             new AlertDialog.Builder(appearance.context())
                                 .setTitle("Confirmar solicitud de prueba")
-                                .setMessage("Se enviará un pedido REAL al sistema de Pruebas. Pago en efectivo. Total: "+money(price.getDouble("total"))+"\\n\\n"+quotedSummary)
+                                .setMessage("Se enviará un pedido REAL al sistema de Pruebas. Pago en efectivo. Total: "+money(price.optDouble("total"))+"\\n\\n"+quotedSummary)
                                 .setNegativeButton("Volver",null)
                                 .setPositiveButton("Solicitar flete",(dialog,which)->{
                                     final String id=UUID.randomUUID().toString();
