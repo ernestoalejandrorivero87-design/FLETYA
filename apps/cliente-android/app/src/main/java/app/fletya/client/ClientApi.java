@@ -223,6 +223,19 @@ public final class ClientApi {
         return price;
     }
 
+    public synchronized JSONObject confirmSavedCargoQuote(String savedQuoteId,String requestId,String description) throws Exception {
+        if(!"PRUEBAS".equals(BuildConfig.ENVIRONMENT))throw new Failure(403,"Disponible únicamente en Pruebas.");
+        java.util.UUID.fromString(savedQuoteId);
+        java.util.UUID.fromString(requestId);
+        JSONObject job=new JSONObject(call("POST","/rest/v1/rpc/confirm_saved_vehicle_cargo_quote_v1",
+            new JSONObject().put("p_saved_quote",savedQuoteId).put("p_request",requestId)
+                .put("p_description",description),null).body());
+        if(!requestId.equals(job.optString("id")) || !ClientRules.owns(job,userId())
+            || !"cash".equals(job.optString("payment_method")))
+            throw new Failure(409,"No se pudo verificar la solicitud.");
+        return job;
+    }
+
     public record TestQuote(Quote quote, String routeId) {}
 
     public synchronized TestQuote quoteForTest(String origin, String destination, String vehicle,
