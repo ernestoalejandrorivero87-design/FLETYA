@@ -152,7 +152,16 @@ Deno.serve(async (req: Request) => {
           return !result.partial_match && location && Number.isFinite(location.lat) && Number.isFinite(location.lng)
             && location.lat >= 20.8 && location.lat <= 21.35 && location.lng >= -87.1 && location.lng <= -86.65;
         });
-        if (candidates.length !== 1) return jsonResponse({ error: "ambiguous_destination", message: "No se pudo identificar un destino único. Confirma la ubicación en el mapa." }, 422);
+        if (candidates.length !== 1) {
+          // Log only aggregate diagnostics, never the user's address or Google API key.
+          console.warn("guided_geocode_unresolved", JSON.stringify({
+            status: geocoded.status ?? "unknown",
+            result_count: matches.length,
+            local_candidate_count: candidates.length,
+            partial_count: matches.filter(result => result.partial_match).length
+          }));
+          return jsonResponse({ error: "ambiguous_destination", message: "No se pudo identificar un destino único. Confirma la ubicación en el mapa." }, 422);
+        }
         const point = candidates[0].geometry!.location!;
         if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return jsonResponse({ error: "invalid_destination", message: "No se pudo verificar la ubicación." }, 422);
         to = { latitude: point.lat, longitude: point.lng };
