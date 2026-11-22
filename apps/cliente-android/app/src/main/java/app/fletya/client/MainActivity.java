@@ -199,7 +199,7 @@ public final class MainActivity extends Activity {
     // Isolated prototype: does not create jobs or change existing payment/quote contracts.
     private void cargoFormPrototype(LinearLayout box){
         text(box,"¿Qué vas a transportar?",17,true);
-        text(box,"Describe la carga y elige tu vehículo. Puedes revisar un precio de prueba; todavía no se crean pedidos.",13,false);
+        text(box,"Describe la carga, revisa el precio y confirma tu solicitud.",13,false);
         text(box,"1. Elige qué transportas",14,true);
         var category=new Spinner(appearance.context());
         category.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Selecciona categoría","Paquetería / entregas comerciales","Mudanza","Materiales"}));
@@ -226,9 +226,12 @@ public final class MainActivity extends Activity {
         var result=text(box,"",14,false);
         LinearLayout routeReview=new LinearLayout(appearance.context());routeReview.setOrientation(LinearLayout.VERTICAL);box.addView(routeReview);
         pruebasRouteReview=routeReview;
-        text(box,"El precio es orientativo. La solicitud real se habilitará cuando validemos las tarifas por vehículo.",13,false);
-        button(box,"Ver precio de prueba",()->{
+        final Runnable[] confirmAction={null};
+        final Button[] quoteButton={null};
+        quoteButton[0]=button(box,"Ver precio",()->{
+            if(confirmAction[0]!=null){confirmAction[0].run();return;}
             if(category.getSelectedItemPosition()==0||vehicle.getSelectedItemPosition()==0||description.getText().toString().trim().length()<3){result.setText("Selecciona categoría y vehículo y describe la carga. Cantidad, medidas y peso son opcionales.");return;}
+            confirmAction[0]=null;quoteButton[0].setText("Ver precio");
             try{
                 int q=quantity.getText().toString().trim().isEmpty()?0:Integer.parseInt(quantity.getText().toString().trim()),p=Integer.parseInt(pickupLevel.getText().toString()),d=Integer.parseInt(dropoffLevel.getText().toString());double w=weight.getText().toString().trim().isEmpty()?0:Double.parseDouble(weight.getText().toString().trim());
                 if(q<0||p<0||d<0||!Double.isFinite(w)||w<0||w>3500){result.setText("Revisa cantidad, niveles y peso. La capacidad real depende del vehículo verificado.");return;}
@@ -260,12 +263,12 @@ public final class MainActivity extends Activity {
                     }
                     String currentCargo=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
                     if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim()) || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(currentCargo) || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition() || h!=helpers.getSelectedItemPosition() || !String.valueOf(p).equals(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim()) || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim()) || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked() || fragileSnapshot!=fragile.isChecked()) {routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar para ver un precio actualizado.");return;}
-                    result.setText(summary+"\n\nRuta consultada: "+start+" → "+end+"\n"+price.getDouble("distance_km")+" km\n"+(price.optBoolean("available")?"Base del vehículo: "+money(price.getDouble("base"))+"\nDistancia adicional: "+money(price.getDouble("extra_charge"))+"\nSubtotal del vehículo: "+money(price.getDouble("vehicle_subtotal"))+"\nAyudantes: "+money(price.getDouble("helpers_cost"))+"\nRecogida: "+money(price.getDouble("pickup_access"))+"\nEntrega: "+money(price.getDouble("dropoff_access"))+"\nTOTAL ORIENTATIVO: "+money(price.getDouble("total")):"Tarifa del vehículo pendiente de configurar en Administrador. Todavía no hay precio disponible.")+"\nSin pedido ni cobro.");
+                    result.setText(price.optBoolean("available")?"Cotización de prueba\n\n"+money(price.getDouble("total"))+"\n"+String.format(java.util.Locale.getDefault(),"%.2f km",price.getDouble("distance_km"))+" · "+vehicle.getSelectedItem()+"\n"+category.getSelectedItem()+" · "+helpers.getSelectedItem()+"\nPago en efectivo al entregar\n\nPrecio sujeto a los datos indicados.":"No hay una tarifa disponible para este vehículo.");
                     if(price.optBoolean("available") && price.has("saved_quote_id")) {
                         final String savedQuote=price.getString("saved_quote_id");
                         final String quotedDescription=description.getText().toString().trim();
                         final String quotedSummary=summary;
-                        button(routeReview,"Confirmar flete de prueba (efectivo)",()->{
+                        confirmAction[0]=()->{
                             String current=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
                             if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim())
                                 || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(current)
@@ -273,7 +276,7 @@ public final class MainActivity extends Activity {
                                 || h!=helpers.getSelectedItemPosition() || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked()
                                 || fragileSnapshot!=fragile.isChecked() || !String.valueOf(p).equals(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim())
                                 || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim())) {
-                                routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar antes de confirmar.");return;
+                                routeReview.removeAllViews();confirmAction[0]=null;quoteButton[0].setText("Ver precio");result.setText("Cambiaste los datos. Vuelve a cotizar antes de confirmar.");return;
                             }
                             new AlertDialog.Builder(appearance.context())
                                 .setTitle("Confirmar solicitud de prueba")
@@ -283,10 +286,12 @@ public final class MainActivity extends Activity {
                                     final String id=UUID.randomUUID().toString();
                                     task(()->api.confirmSavedCargoQuote(savedQuote,id,quotedDescription),job->{
                                         routeReview.removeAllViews();
+                                        confirmAction[0]=null;quoteButton[0].setText("Ver precio");
                                         result.setText("Solicitud creada en Pruebas. Folio: "+job.optString("id")+"\\nEstado: "+job.optString("status")+"\\nPrecio contratado: "+money(job.getDouble("price"))+"\\nConsulta el seguimiento para ver si un fletero la acepta.");
                                     });
                                 }).show();
-                        },false);
+                        };
+                        quoteButton[0].setText("Confirmar flete");
                     }
                     if(BuildConfig.NATIVE_ROUTE_MAP)button(routeReview,"Ver y confirmar ruta en mapa",()->{
                         try{RouteMapActivity.show(this,RouteMapData.decode(price.getString("route_polyline")));}
