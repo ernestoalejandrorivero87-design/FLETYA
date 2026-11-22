@@ -254,7 +254,7 @@ public final class DriverApi {
             throw new Failure(409, "Cambió el servicio. Actualiza el panel antes de navegar.");
         String destination = DriverRules.navigationPoint(status, assigned.optString("origin"), assigned.optString("destination"));
         if (destination.trim().isEmpty()) throw new Failure(400, "No hay ubicación de destino.");
-        if (!destination.matches("\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*")
+        if (!guided && !destination.matches("\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*")
             && !destination.toLowerCase(java.util.Locale.ROOT).contains("méxico")) {
             destination += ", Quintana Roo, México";
         }
