@@ -128,6 +128,13 @@ public final class ClientApi {
     public synchronized JSONArray notifications(int offset) throws Exception {
         return get("notifications?select=id,title,message,type,read,created_at,job_id&user_id=eq."+eq(userId())+"&type=like.client_*&order=created_at.desc,id.desc&limit=13&offset="+Math.max(0,offset));
     }
+    public synchronized JSONArray arrivalNotices(String jobId) throws Exception {
+        token();
+        return get("notifications?select=type,message,created_at&user_id=eq."+eq(userId())
+            +"&job_id=eq."+eq(jobId)
+            +"&type=in.(client_arrived_pickup,client_arrived_delivery)"
+            +"&order=created_at.desc&limit=2");
+    }
     public synchronized void markNoticeRead(String id) throws Exception {
         call("PATCH","/rest/v1/notifications?id=eq."+eq(id)+"&user_id=eq."+eq(userId()),new JSONObject().put("read",true),"return=minimal");
     }
