@@ -160,7 +160,7 @@ public final class MainActivity extends Activity {
             refresh();
         }, false);
     }
-    private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError,JSONObject payment){}
+    private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError,JSONObject payment,JSONArray arrivals){}
     private void refresh(){
         if(!visible||busy||picking||requestingNotices||!api.signedIn())return;
         task(()->{var profile=api.profile();var jobs=api.activeJobs();var tracking=new ClientApi.Tracking(null,null);boolean error=false;
@@ -174,7 +174,12 @@ public final class MainActivity extends Activity {
                     if (failure.status != 503) throw failure;
                 }
             }
-            return new Panel(profile,jobs,tracking,error,payment);
+            JSONArray arrivals = new JSONArray();
+            if (jobs.length()==1 && ClientRules.assigned(jobs.getJSONObject(0).optString("status"))) {
+                try { arrivals=api.arrivalNotices(jobs.getJSONObject(0).getString("id")); }
+                catch(Exception e) { if(!api.signedIn())throw e; }
+            }
+            return new Panel(profile,jobs,tracking,error,payment,arrivals);
         },panel->{
             if(!visible||!"home".equals(screen))return;
             PushManager.activate(this,api);
@@ -193,7 +198,7 @@ public final class MainActivity extends Activity {
             }
             if(next==null&&active==null&&originField!=null&&originField.isAttachedToWindow()&&"home".equals(rendered)){message.setText("");return;}
             active=next;
-            if(active==null){clearTrackingMap();form();}else{stopLocation();clearPreview();quote=null;testQuote=null;requestId="";renderActive(panel.tracking(),panel.trackingError());}
+            if(active==null){clearTrackingMap();form();}else{stopLocation();clearPreview();quote=null;testQuote=null;requestId="";renderActive(panel.tracking(),panel.trackingError(),panel.arrivals());}
         });
     }
     // Isolated prototype: does not create jobs or change existing payment/quote contracts.
@@ -509,9 +514,20 @@ public final class MainActivity extends Activity {
                 })).show());
     }
 
-    private void renderActive(ClientApi.Tracking tracking,boolean trackingError){
+    private void renderActive(ClientApi.Tracking tracking,boolean trackingError,JSONArray arrivals){
         screen="home";shell();trackingStatus=null;originField=null;destField=null;quoteArea=null;
         JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);text(box,"accepted".equals(job.optString("status")) ? "Confirmando aceptación" : ClientRules.status(job.optString("status")),19,true);details(box,job);
+        if (ClientRules.assigned(job.optString("status")) && arrivals!=null && arrivals.length()>0) {
+            JSONObject latest=arrivals.optJSONObject(0);
+            if (latest!=null) {
+                String type=latest.optString("type");
+                String status=job.optString("status");
+                if ("client_arrived_delivery".equals(type) && "picked_up".equals(status))
+                    text(box,"Tu fletero llegó al punto de entrega.",17,true);
+                else if ("client_arrived_pickup".equals(type) && "en_route".equals(status))
+                    text(box,"Tu fletero llegó al punto de recogida.",17,true);
+            }
+        }
         if("requested".equals(job.optString("status"))&&!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
         addSandboxRefundButton(box, job);
         if("requested".equals(job.optString("status"))&&job.isNull("driver_id")
