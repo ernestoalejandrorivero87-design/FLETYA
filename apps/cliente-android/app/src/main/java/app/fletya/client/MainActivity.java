@@ -4,9 +4,8 @@ import android.Manifest;
 import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
+import app.fletya.ui.Appearance;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.location.*;
 import android.net.Uri;
 import android.os.*;
@@ -22,7 +21,7 @@ import java.util.concurrent.*;
 
 /** Independent client app. Service mutations use the signed-in user's token and existing RLS. */
 public final class MainActivity extends Activity {
-    private static final int TEAL=Color.rgb(8,127,136);
+    private Appearance appearance;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private ClientApi api;
@@ -52,7 +51,11 @@ public final class MainActivity extends Activity {
     private long locationRevision;
     private AlertDialog pickerDialog;
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);pendingNoticeJob=getIntent().getStringExtra("notice_job_id");if(pendingNoticeJob==null)pendingNoticeJob="";api=((ClientApplication)getApplication()).api();
+        appearance = new Appearance(this, R.style.AppTheme, R.style.AppThemeDark);
+        setTheme(appearance.theme());
+        super.onCreate(state);
+        appearance.applyWindow();
+        pendingNoticeJob=getIntent().getStringExtra("notice_job_id");if(pendingNoticeJob==null)pendingNoticeJob="";api=((ClientApplication)getApplication()).api();
         if(api.signedIn()){screen="home";shell();}else login();
     }
     @Override public void onResume(){super.onResume();visible=true;if(api.signedIn()&&!pendingNoticeJob.isEmpty()){String id=pendingNoticeJob;pendingNoticeJob="";openNotice(id);}else if(api.signedIn()&&"home".equals(screen))refresh();if(locationTarget!=null&&locationListener==null&&!awaitingLocationPermission)startLocation();updateFreshness();main.postDelayed(freshnessTick,1000);main.postDelayed(poll,10_000);}
@@ -62,22 +65,33 @@ public final class MainActivity extends Activity {
     private final Runnable freshnessTick=new Runnable(){public void run(){if(!visible)return;updateFreshness();main.postDelayed(this,1000);}};
     private void updateFreshness(){if(activateNoticesButton!=null)activateNoticesButton.setVisibility(PushManager.permitted(this)?View.GONE:View.VISIBLE);if(pushStatusView!=null)pushStatusView.setText(PushManager.report());if("home".equals(screen)&&active!=null&&ClientRules.assigned(active.optString("status"))&&currentTrackingFix!=null){if(trackingStatus!=null)trackingStatus.setText(ClientRules.freshness(currentTrackingFix));if(trackingMap!=null)trackingMap.updateDriver(currentTrackingFix);}}
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
-    private GradientDrawable background(int color,int radius){var value=new GradientDrawable();value.setColor(color);value.setCornerRadius(dp(radius));return value;}
-    private TextView text(LinearLayout parent,String value,int size,boolean bold){var view=new TextView(this);view.setText(value);view.setTextSize(size);view.setTextColor(Color.rgb(32,45,49));if(bold)view.setTypeface(null,Typeface.BOLD);view.setPadding(0,dp(4),0,dp(8));parent.addView(view);return view;}
-    private Button button(LinearLayout parent,String label,Runnable action){var view=new Button(this);view.setText(label);view.setAllCaps(false);view.setTextSize(15);view.setTextColor(Color.WHITE);view.setMinHeight(dp(48));view.setBackground(background(TEAL,10));var lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(8);parent.addView(view,lp);view.setOnClickListener(v->{if(!busy)action.run();});return view;}
-    private LinearLayout card(String title){var box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(18),dp(18),dp(18),dp(18));box.setBackground(background(Color.WHITE,16));var lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(14);root.addView(box,lp);text(box,title,20,true);return box;}
-    private EditText field(LinearLayout box,String label,String value,int type){text(box,label,14,true);var v=new EditText(this);v.setSingleLine(true);v.setTextSize(16);v.setInputType(type);v.setText(value);v.setMinHeight(dp(48));box.addView(v,new LinearLayout.LayoutParams(-1,-2));return v;}
+    private TextView text(LinearLayout parent,String value,int size,boolean bold){var view=new TextView(appearance.context());view.setText(value);view.setTextSize(size);view.setTextColor(appearance.text());if(bold)view.setTypeface(null,Typeface.BOLD);view.setPadding(0,dp(4),0,dp(8));parent.addView(view);return view;}
+    private Button button(LinearLayout parent, String label, Runnable action) {
+        return button(parent, label, action, true);
+    }
+    private Button button(LinearLayout parent, String label, Runnable action, boolean primary) {
+        var view = new Button(appearance.context());
+        view.setText(label);
+        appearance.styleButton(view, primary);
+        var layout = new LinearLayout.LayoutParams(-1, -2);
+        layout.topMargin = dp(8);
+        parent.addView(view, layout);
+        view.setOnClickListener(ignored -> { if (!busy) action.run(); });
+        return view;
+    }
+    private LinearLayout card(String title){var box=new LinearLayout(appearance.context());box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(18),dp(18),dp(18),dp(18));box.setBackground(appearance.card());var lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(14);root.addView(box,lp);text(box,title,20,true);return box;}
+    private EditText field(LinearLayout box,String label,String value,int type){text(box,label,14,true);var v=new EditText(appearance.context());v.setSingleLine(true);v.setTextSize(16);v.setInputType(type);v.setText(value);v.setMinHeight(dp(48));appearance.styleField(v);box.addView(v,new LinearLayout.LayoutParams(-1,-2));return v;}
     private String money(double value){return NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX")).format(value)+" MXN";}
     private void shell(){
         activateNoticesButton=null;
         int y=scroll!=null&&screen.equals(rendered)?scroll.getScrollY():0;rendered=screen;
-        scroll=new ScrollView(this);scroll.setFillViewport(true);root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(20),dp(16),dp(20),dp(28));root.setBackgroundColor(Color.rgb(244,247,248));scroll.addView(root);
+        scroll=new ScrollView(appearance.context());scroll.setFillViewport(true);root=new LinearLayout(appearance.context());root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(20),dp(16),dp(20),dp(28));root.setBackgroundColor(appearance.canvas());scroll.addView(root);
         scroll.setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=30){var bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         setContentView(scroll);scroll.requestApplyInsets();scroll.post(()->{if(scroll!=null)scroll.scrollTo(0,y);});
-        var header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);root.addView(header);
-        var title=text(header,"FLETYA",26,true);title.setTextColor(TEAL);title.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1));
-        if(api.signedIn())button(header,"Menú",()->menu(header)).setLayoutParams(new LinearLayout.LayoutParams(dp(96),dp(48)));
-        text(root,"Clientes · "+BuildConfig.ENVIRONMENT,12,false);pushStatusView=api.signedIn()&&BuildConfig.PUSH_ENABLED?text(root,PushManager.report(),13,false):null;message=text(root,"",14,false);message.setTextColor(TEAL);
+        var header=new LinearLayout(appearance.context());header.setGravity(Gravity.CENTER_VERTICAL);root.addView(header);
+        appearance.addBrand(header);
+        if(api.signedIn())button(header,"Menú",()->menu(header),false).setLayoutParams(new LinearLayout.LayoutParams(dp(96),dp(48)));
+        text(root,"Cliente · "+BuildConfig.ENVIRONMENT,12,false);appearance.addAccent(root);pushStatusView=api.signedIn()&&BuildConfig.PUSH_ENABLED?text(root,PushManager.report(),13,false):null;message=text(root,"",14,false);message.setTextColor(appearance.accent());
     }
     private interface Work<T>{T run()throws Exception;}
     private interface Done<T>{void run(T value)throws Exception;}
@@ -100,8 +114,8 @@ public final class MainActivity extends Activity {
         EditText password=field(box,"Contraseña (mínimo 8 caracteres)","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setSaveEnabled(false);
         EditText repeat=field(box,"Repite la contraseña","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);repeat.setSaveEnabled(false);
         EditText phone=false?field(box,"Teléfono con lada (10 a 15 dígitos)","",InputType.TYPE_CLASS_PHONE):null;
-        Spinner vehicle=new Spinner(this);
-        vehicle.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta","Camión"}));
+        Spinner vehicle=new Spinner(appearance.context());
+        vehicle.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,new String[]{"Pickup / Estaquita","Camioneta","Camión"}));
         if(false){text(box,"Vehículo",14,true);box.addView(vehicle,new LinearLayout.LayoutParams(-1,dp(52)));}
         EditText plates=false?field(box,"Placas","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS):null;
         if(false)text(box,"Después de confirmar tu correo, tu cuenta quedará pendiente de revisión por administración. Podrás completar tus datos desde Mi perfil.",14,false);
@@ -129,8 +143,20 @@ public final class MainActivity extends Activity {
         button(box,"Crear cuenta de cliente",this::registrationScreen);button(box,"Olvidé mi contraseña",this::recoveryScreen);
     }
     private void menu(View anchor){
-        var menu=new PopupMenu(this,anchor);menu.getMenu().add(0,1,0,"Solicitar / Seguimiento");menu.getMenu().add(0,2,1,"Historial de servicios");menu.getMenu().add(0,3,2,"Mi perfil");menu.getMenu().add(0,4,5,"Cerrar sesión");menu.getMenu().add(0,5,3,"Avisos de mis servicios");if(BuildConfig.PUSH_ENABLED)menu.getMenu().add(0,6,4,"Activar avisos del teléfono");
-        menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();case 5->{clearTrackingMap();noticePage=0;notices();}case 6->activateNotices();default->{return false;}}return true;});menuOpen=true;menu.setOnDismissListener(m->menuOpen=false);menu.show();
+        var menu=new PopupMenu(appearance.context(),anchor);menu.getMenu().add(0,1,0,"Solicitar / Seguimiento");menu.getMenu().add(0,2,1,"Historial de servicios");menu.getMenu().add(0,3,2,"Mi perfil");menu.getMenu().add(0,7,5,"Apariencia");menu.getMenu().add(0,4,6,"Cerrar sesión");menu.getMenu().add(0,5,3,"Avisos de mis servicios");if(BuildConfig.PUSH_ENABLED)menu.getMenu().add(0,6,4,"Activar avisos del teléfono");
+        menu.setOnMenuItemClickListener(item->{if(busy)return true;stopLocation();switch(item.getItemId()){case 1->{screen="home";refresh();}case 2->{clearTrackingMap();historyPage=0;history();}case 3->{clearTrackingMap();profile();}case 4->logout();case 5->{clearTrackingMap();noticePage=0;notices();}case 6->activateNotices();case 7->showAppearance();default->{return false;}}return true;});menuOpen=true;menu.setOnDismissListener(m->menuOpen=false);menu.show();
+    }
+    private void showAppearance() {
+        clearPreview();
+        screen = "appearance";
+        shell();
+        var box = card("Apariencia");
+        appearance.addChoices(box, this::showAppearance);
+        button(root, "Volver al seguimiento", () -> {
+            screen = "home";
+            shell();
+            refresh();
+        }, false);
     }
     private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError,JSONObject payment){}
     private void refresh(){
@@ -181,11 +207,11 @@ public final class MainActivity extends Activity {
         spinner(intro,"Ayudantes",new String[]{"Sin ayudante","1 ayudante","2 ayudantes"},helperChoice,1);
         spinner(intro,"Servicio",availableServices(),serviceChoice,2);
         button(intro,"Ver precio y ruta",this::calculate);
-        quoteArea=new LinearLayout(this);quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();
+        quoteArea=new LinearLayout(appearance.context());quoteArea.setOrientation(LinearLayout.VERTICAL);intro.addView(quoteArea);showQuote();
     }
     private void watch(EditText field,boolean origin){field.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}public void afterTextChanged(Editable value){String next=value.toString();if(origin){if(next.equals(originDraft))return;originDraft=next;}else{if(next.equals(destDraft))return;destDraft=next;}invalidateQuote();}});}
     private void spinner(LinearLayout box,String label,String[] items,int selected,int kind){
-        text(box,label,14,true);var spinner=new Spinner(this);spinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,items));spinner.setSelection(selected);box.addView(spinner,new LinearLayout.LayoutParams(-1,dp(52)));
+        text(box,label,14,true);var spinner=new Spinner(appearance.context());spinner.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,items));spinner.setSelection(selected);box.addView(spinner,new LinearLayout.LayoutParams(-1,dp(52)));
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int position,long id){int old=kind==0?vehicleChoice:kind==1?helperChoice:serviceChoice;if(old==position)return;if(kind==0)vehicleChoice=position;else if(kind==1)helperChoice=position;else serviceChoice=position;invalidateQuote();}});
     }
     private void invalidateQuote(){draftRevision++;quote=null;testQuote=null;requestId="";clearPreview();if(quoteArea!=null){quoteArea.removeAllViews();text(quoteArea,"Calcula el precio después de elegir tu ruta.",14,false);}}
@@ -199,14 +225,14 @@ public final class MainActivity extends Activity {
     private void showQuote(){
         if(quoteArea==null)return;quoteArea.removeAllViews();
         if(quote==null){text(quoteArea,"Elige origen y destino para calcular el precio.",14,false);return;}
-        text(quoteArea,money(quote.price()),28,true).setTextColor(TEAL);text(quoteArea,quote.km()+" km · "+quote.duration(),15,false);
+        text(quoteArea,money(quote.price()),28,true).setTextColor(appearance.accent());text(quoteArea,quote.km()+" km · "+quote.duration(),15,false);
         String pricing = BuildConfig.TEST_ROUTE_PRICING && "pickup".equals(quote.vehicle())
             ? "$400 hasta 3 km · $35 por km adicional"
             : "Base + distancia + vehículo";
         if (quote.helpers() > 0) pricing += " + " + quote.helpers() + " ayudante(s)";
         text(quoteArea, pricing, 13, false);
         clearPreview();
-        try{previewMap=new ClientMapView(this);previewMap.route(quote.polyline());quoteArea.addView(previewMap,new LinearLayout.LayoutParams(-1,dp(240)));}catch(Exception error){clearPreview();text(quoteArea,"Vista de mapa no disponible. Revisa las direcciones antes de solicitar.",13,false);}
+        try{previewMap=new ClientMapView(appearance.context());previewMap.route(quote.polyline());quoteArea.addView(previewMap,new LinearLayout.LayoutParams(-1,dp(240)));}catch(Exception error){clearPreview();text(quoteArea,"Vista de mapa no disponible. Revisa las direcciones antes de solicitar.",13,false);}
         if (BuildConfig.NATIVE_ROUTE_MAP) {
             button(quoteArea, "Ver ruta en mapa", () -> {
                 try { RouteMapActivity.show(this, RouteMapData.decode(quote.polyline())); }
@@ -310,7 +336,7 @@ public final class MainActivity extends Activity {
         if ("cash".equals(job.optString("payment_method"))) text(box, cashPaymentLabel(), 15, true);
         text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
         text(box,job.optString("service_type")+" · "+ClientRules.vehicle(job.optString("vehicle_type")),15,false);
-        text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(TEAL);
+        text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(appearance.accent());
     }
     private void addSandboxRefundButton(LinearLayout box, JSONObject job) {
         if (!sandboxPayments() || !"paid".equals(job.optString("sandbox_card_state"))
@@ -368,7 +394,7 @@ public final class MainActivity extends Activity {
                 : RouteMapData.decode(api.route(job.optString("origin"),job.optString("destination")).getString("polyline"));
             main.post(()->{
             if(isDestroyed()||session!=revision||request!=routeRevision||!user.equals(api.userId())||!"home".equals(screen)||active==null||!key.equals(routeKey))return;
-            try{activeRoutePoints=points;trackingMap=new ClientMapView(this);trackingMap.route(points);trackingMap.updateDriver(currentTrackingFix);attachMap(routeContainer);routeLoading=false;routeMessage.setText(job.optString("distance_km")+" km · Recogida a entrega");if(currentTrackingFix!=null)button(routeContainer,"Ver fletero en mapa",()->{if(trackingMap!=null)trackingMap.centerDriver();});message.setText("Mapa cargado.");}
+            try{activeRoutePoints=points;trackingMap=new ClientMapView(appearance.context());trackingMap.route(points);trackingMap.updateDriver(currentTrackingFix);attachMap(routeContainer);routeLoading=false;routeMessage.setText(job.optString("distance_km")+" km · Recogida a entrega");if(currentTrackingFix!=null)button(routeContainer,"Ver fletero en mapa",()->{if(trackingMap!=null)trackingMap.centerDriver();});message.setText("Mapa cargado.");}
             catch(Exception error){clearTrackingMap();routeKey=key;routeFailed=true;routeMessage.setText("No se pudo abrir el mapa. Pulsa Recargar mapa.");}
         });}catch(Exception error){main.post(()->{if(!isDestroyed()&&session==revision&&request==routeRevision&&key.equals(routeKey)&&"home".equals(screen)){routeLoading=false;routeFailed=true;routeMessage.setText("No se pudo cargar la ruta. Pulsa Recargar mapa.");}});}});
     }
@@ -413,13 +439,13 @@ public final class MainActivity extends Activity {
     }
     private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));details(box,job);addSandboxRefundButton(box,job);text(box,job.optString("created_at").split("T")[0],13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});if(sandboxPayments())button(root,"Actualizar historial",this::history);button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private void profile(){task(api::profile,p->{screen="profile";shell();var box=card("Mi perfil de cliente");var name=field(box,"Nombre completo",p.optString("full_name"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);button(box,"Guardar perfil",()->task(()->{api.saveName(name.getText().toString());return true;},ok->message.setText("Perfil guardado.")));button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
-    private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(this).setOnDismissListener(d->picking=false);}
+    private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(appearance.context()).setOnDismissListener(d->picking=false);}
     private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();String[] device=PushManager.disableLocally(this);task(()->{try{api.unregisterPush(device[0],device[1]);}catch(Exception ignored){}api.logout();return true;},ok->{revision++;login();});}).show();}
     private void open(String uri){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(uri)));}catch(ActivityNotFoundException error){message.setText("No se pudo abrir el enlace.");}}
     private void picker(EditText target){
-        picking=true;var box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(12),dp(8),dp(12),dp(8));text(box,"Mueve el mapa hasta colocar el centro sobre el punto exacto. También puedes tocar un lugar.",15,false);
-        try{pickerMap=new ClientMapView(this);pickerMap.picker(ClientRules.coordinates(target.getText().toString()));box.addView(pickerMap,new LinearLayout.LayoutParams(-1,dp(340)));
-            long draft=draftRevision;pickerDialog=new AlertDialog.Builder(this).setTitle(target==originField?"Punto de recogida":"Punto de entrega").setView(box).setNegativeButton("Volver",null).setPositiveButton("Elegir este punto",null).create();
+        picking=true;var box=new LinearLayout(appearance.context());box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(12),dp(8),dp(12),dp(8));text(box,"Mueve el mapa hasta colocar el centro sobre el punto exacto. También puedes tocar un lugar.",15,false);
+        try{pickerMap=new ClientMapView(appearance.context());pickerMap.picker(ClientRules.coordinates(target.getText().toString()));box.addView(pickerMap,new LinearLayout.LayoutParams(-1,dp(340)));
+            long draft=draftRevision;pickerDialog=new AlertDialog.Builder(appearance.context()).setTitle(target==originField?"Punto de recogida":"Punto de entrega").setView(box).setNegativeButton("Volver",null).setPositiveButton("Elegir este punto",null).create();
             pickerDialog.setOnShowListener(d->pickerDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->pickerMap.selected((lat,lng)->{if(draft==draftRevision&&"home".equals(screen)&&active==null)target.setText(String.format(Locale.US,"%.6f, %.6f",lat,lng));pickerDialog.dismiss();},()->Toast.makeText(this,"El mapa sigue cargando. Intenta de nuevo.",Toast.LENGTH_SHORT).show())));
             pickerDialog.setOnDismissListener(d->{picking=false;if(pickerMap!=null){pickerMap.dispose();pickerMap=null;}pickerDialog=null;});pickerDialog.show();
         }catch(Exception error){picking=false;if(pickerMap!=null){pickerMap.dispose();pickerMap=null;}message.setText("No se pudo abrir el mapa. Puedes escribir una dirección.");}

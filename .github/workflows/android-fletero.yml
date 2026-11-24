@@ -26,21 +26,13 @@ jobs:
           gradle-version: '8.13'
       - name: Install pinned Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
-      - name: Test, lint and build both environments
+      - name: Test, lint and build PRUEBAS only
         working-directory: apps/fletero-android
-        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
+        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: FLETYA-Fletero-Android-${{ github.sha }}
-          path: |
-            apps/fletero-android/app/build/outputs/apk/pruebas/debug/*.apk
-            apps/fletero-android/app/build/outputs/apk/piloto/debug/*.apk
-          retention-days: 30
-      - uses: actions/upload-artifact@v4
-        with:
-          name: FLETYA-Fletero-Piloto-unsigned-${{ github.sha }}
-          path: apps/fletero-android/app/build/outputs/apk/piloto/release/*-unsigned.apk
-          if-no-files-found: error
+          name: FLETYA-Fletero-PRUEBAS-${{ github.sha }}
+          path: apps/fletero-android/app/build/outputs/apk/pruebas/debug/*.apk
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()

@@ -208,6 +208,13 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <button id="saveRecoveryPassword" class="btn" onclick="finishPasswordRecovery()">Guardar contraseña nueva</button><p id="passwordRecoveryMessage" role="status"></p>
 </section>
 <section id="admin" class="hidden">
+<section class="card hidden" id="adminCashIssues" aria-labelledby="adminCashIssuesTitle" style="margin-bottom:18px;border:2px solid #b43a3a">
+  <h2 id="adminCashIssuesTitle" class="danger">Impagos · Administración <span id="cashIssuesBadge" aria-live="polite"></span></h2>
+  <p class="muted">Los reportes activos bloquean nuevas solicitudes hasta confirmar el cobro o resolver la incidencia.</p>
+  <button class="btn light" type="button" onclick="loadAdminCashIssues()">Actualizar impagos</button>
+  <div id="adminCashIssuesList" aria-live="polite"></div>
+</section>
+
 <div class="card hidden" id="sandboxRefunds">
   <h2>Reembolsos de tarjeta · Pruebas</h2>
   <button class="btn light" type="button" onclick="loadSandboxRefunds()">Consultar reembolsos</button>
@@ -2427,6 +2434,77 @@ async function markJobPaid(jobId) {
     paymentJobsInFlight.delete(jobId);
   }
 }
+
+// Impagos: only administrators see this testing-only section. RPC validates admin role server-side.
+let cashIssueRequestVersion = 0;
+let lastActiveCashIssueIds = null;
+let adminCashIssuesTimer = null;
+function startAdminCashIssueRefresh() {
+  if (IS_FLETYA_PRODUCTION_HOST || adminCashIssuesTimer) return;
+  adminCashIssuesTimer = setInterval(() => {
+    if (activeSessionRole === 'admin' && !logoutPending && !document.hidden)
+      void loadAdminCashIssues();
+  }, 30000);
+}
+async function loadAdminCashIssues() {
+  const box=document.getElementById('adminCashIssuesList');
+  if (!box || IS_FLETYA_PRODUCTION_HOST || activeSessionRole!=='admin' || logoutPending) return;
+  const rev=sessionRevision, version=++cashIssueRequestVersion;
+  box.textContent='Consultando reportes…';
+  const {data,error}=await supabaseClient.rpc('cash_collection_issues_for_admin');
+  if (rev!==sessionRevision || version!==cashIssueRequestVersion || activeSessionRole!=='admin' || logoutPending) return;
+  if (error || !Array.isArray(data)) { box.textContent='No se pudieron consultar los impagos. Vuelve a intentar.'; return; }
+  box.replaceChildren();
+  const active=new Set(['reported','reviewing','payment_required','closed_unpaid']);
+  const current=data.filter(i=>active.has(i.review_state) && !i.cash_collected_at);
+  document.getElementById('cashIssuesBadge').textContent=current.length ? '🔴 '+current.length+' pendiente(s)' : 'Sin casos activos';
+  const activeIds = new Set(current.map(i=>String(i.id)));
+  if (lastActiveCashIssueIds !== null && current.some(i=>!lastActiveCashIssueIds.has(String(i.id))))
+    toast('🔴 URGENTE: nuevo impago reportado. Revisa Administración.');
+  lastActiveCashIssueIds=activeIds;
+  if (!data.length) { const empty=document.createElement('p');empty.textContent='No hay incidencias registradas.';box.append(empty);return; }
+  for (const i of data) {
+    const row=document.createElement('div');row.className='card';row.style.marginTop='12px';
+    const title=document.createElement('strong');
+    title.textContent=(current.includes(i)?'🔴 ':'')+'Servicio '+String(i.id||'').slice(0,8)+' · '+String(i.review_state||'sin estado');
+    const details=document.createElement('p');details.className='muted';
+    details.textContent='Servicio: '+String(i.job_status||'—')+' · Reportado: '+(i.reported_at?new Date(i.reported_at).toLocaleString('es-MX'):'—')+
+      (i.payment_due_at?' · Vence: '+new Date(i.payment_due_at).toLocaleString('es-MX'):'')+
+      (i.cash_collected_at?' · Cobro confirmado':'');
+    row.append(title,details);
+    const actions=document.createElement('div');actions.className='row';
+    const add=(label,action)=>{
+      const b=document.createElement('button');b.type='button';b.className='btn light';b.textContent=label;
+      b.addEventListener('click',()=>changeCashIssue(i.id,action));actions.appendChild(b);
+    };
+    if(i.review_state==='reported')add('Revisar','review');
+    if(i.review_state==='reviewing')add('Requerir pago (24 h)','require_payment');
+    if(current.includes(i)) {
+      if(i.job_status==='completed')add('Registrar cobro recuperado','collected');
+      if(['reviewing','payment_required','closed_unpaid'].includes(i.review_state))add('Desestimar','dismiss');
+      if(['reviewing','payment_required'].includes(i.review_state))add('Cerrar sin cobro','close_unpaid');
+    }
+    row.append(actions);box.appendChild(row);
+  }
+}
+async function changeCashIssue(jobId,action) {
+  if(IS_FLETYA_PRODUCTION_HOST || activeSessionRole!=='admin' || logoutPending)return;
+  const labels={review:'revisar',require_payment:'requerir el pago',collected:'registrar el cobro recuperado',dismiss:'desestimar',close_unpaid:'cerrar sin cobro'};
+  if(!Object.hasOwn(labels,action) || !confirm('¿Confirmas '+labels[action]+' para este servicio?'))return;
+  let note=null;
+  if(action==='dismiss'||action==='close_unpaid') {
+    note=prompt('Escribe una justificación para esta decisión:');
+    if(!note || note.trim().length<10 || note.trim().length>2000) {toast('La justificación debe contener entre 10 y 2000 caracteres.');return;}
+  }
+  const rpc=action==='collected'?'record_cash_payment':action==='dismiss'||action==='close_unpaid'?'resolve_cash_issue':'review_cash_issue';
+  const args=action==='collected'?{p_job:jobId,p_event:'collected'}:
+    action==='dismiss'||action==='close_unpaid'?{p_job:jobId,p_action:action,p_note:note}:
+    {p_job:jobId,p_action:action,p_note:null};
+  const {error}=await supabaseClient.rpc(rpc,args);
+  if(error) {toast('No se pudo aplicar la acción. Revisa el estado del reporte.');return;}
+  toast('Incidencia actualizada.');await loadAdminCashIssues();
+}
+
 async function renderAdmin(){
   const revision = sessionRevision;
   const renderVersion=++adminRenderVersion;
@@ -2456,6 +2534,8 @@ async function renderAdmin(){
     return;
   }
 
+  document.getElementById('adminCashIssues')?.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
+  if (!IS_FLETYA_PRODUCTION_HOST) { startAdminCashIssueRefresh(); void loadAdminCashIssues(); }
   document.getElementById('sandboxRefunds')?.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
   document.getElementById('sandboxFinances').classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
   for (const element of document.querySelectorAll('[data-legacy-finances]')) {
