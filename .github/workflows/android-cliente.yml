@@ -26,6 +26,11 @@ jobs:
           gradle-version: '8.13'
       - name: Install pinned Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check frontend admin and client regressions
+        run: node --test tests/frontend/*.test.cjs
       - name: Test, lint and build both environments
         working-directory: apps/cliente-android
         run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
