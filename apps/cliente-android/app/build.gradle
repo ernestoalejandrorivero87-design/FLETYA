@@ -3,6 +3,10 @@ def configFile=file('src/piloto/google-services.json')
 def firebaseConfig=configFile.exists()?new groovy.json.JsonSlurper().parse(configFile):null
 def firebaseClient=firebaseConfig?.client?.find { it.client_info.android_client_info.package_name == 'app.fletya.client' }
 if(firebaseConfig && !firebaseClient)throw new GradleException('Firebase package must match app.fletya.client')
+def testFirebaseFile=file('src/pruebas/google-services.json')
+def testFirebaseConfig=testFirebaseFile.exists()?new groovy.json.JsonSlurper().parse(testFirebaseFile):null
+def testFirebaseClient=testFirebaseConfig?.client?.find { it.client_info.android_client_info.package_name == 'app.fletya.client.pruebas' }
+if(testFirebaseConfig && !testFirebaseClient)throw new GradleException('Firebase package must match app.fletya.client.pruebas')
 def testMapsKey = providers.environmentVariable('FLETYA_MAPS_ANDROID_TEST_KEY').getOrElse('').trim()
 def pilotMapsKey = providers.environmentVariable('FLETYA_MAPS_ANDROID_PILOT_KEY').getOrElse('').trim()
 def pilotSigning = [
@@ -54,7 +58,13 @@ android {
             buildConfigField 'boolean', 'TEST_ROUTE_PRICING', 'true'
             dimension 'environment'
             applicationIdSuffix '.pruebas'
-            buildConfigField 'boolean', 'PUSH_ENABLED', 'false'
+            buildConfigField 'boolean', 'PUSH_ENABLED', testFirebaseClient?'true':'false'
+            if(testFirebaseClient){
+                resValue 'string','google_app_id',testFirebaseClient.client_info.mobilesdk_app_id
+                resValue 'string','gcm_defaultSenderId',testFirebaseConfig.project_info.project_number
+                resValue 'string','google_api_key',testFirebaseClient.api_key[0].current_key
+                resValue 'string','project_id',testFirebaseConfig.project_info.project_id
+            }
             resValue 'string', 'app_name', 'FLETYA Cliente · Pruebas'
             buildConfigField 'String', 'SUPABASE_URL', '"https://ccdtpwvalqznasstnqxj.supabase.co"'
             buildConfigField 'String', 'SUPABASE_KEY', '"sb_publishable_l9eqPSc8ifaIacmQJFOudw_rWpTSg89"'
