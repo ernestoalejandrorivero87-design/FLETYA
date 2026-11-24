@@ -2438,10 +2438,14 @@ async function markJobPaid(jobId) {
 // Impagos: only administrators see this testing-only section. RPC validates admin role server-side.
 let cashIssueRequestVersion = 0;
 let lastActiveCashIssueIds = null;
-setInterval(() => {
-  if (!IS_FLETYA_PRODUCTION_HOST && activeSessionRole === 'admin' && !logoutPending && !document.hidden)
-    void loadAdminCashIssues();
-}, 30000);
+let adminCashIssuesTimer = null;
+function startAdminCashIssueRefresh() {
+  if (IS_FLETYA_PRODUCTION_HOST || adminCashIssuesTimer) return;
+  adminCashIssuesTimer = setInterval(() => {
+    if (activeSessionRole === 'admin' && !logoutPending && !document.hidden)
+      void loadAdminCashIssues();
+  }, 30000);
+}
 async function loadAdminCashIssues() {
   const box=document.getElementById('adminCashIssuesList');
   if (!box || IS_FLETYA_PRODUCTION_HOST || activeSessionRole!=='admin' || logoutPending) return;
@@ -2531,7 +2535,7 @@ async function renderAdmin(){
   }
 
   document.getElementById('adminCashIssues')?.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
-  if (!IS_FLETYA_PRODUCTION_HOST) void loadAdminCashIssues();
+  if (!IS_FLETYA_PRODUCTION_HOST) { startAdminCashIssueRefresh(); void loadAdminCashIssues(); }
   document.getElementById('sandboxRefunds')?.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
   document.getElementById('sandboxFinances').classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
   for (const element of document.querySelectorAll('[data-legacy-finances]')) {
