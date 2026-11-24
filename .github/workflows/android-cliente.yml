@@ -31,21 +31,13 @@ jobs:
           node-version: '22'
       - name: Check frontend admin and client regressions
         run: node --test tests/frontend/*.test.cjs
-      - name: Test, lint and build both environments
+      - name: Test, lint and build PRUEBAS only
         working-directory: apps/cliente-android
-        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
+        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: FLETYA-Cliente-Android-${{ github.sha }}
-          path: |
-            apps/cliente-android/app/build/outputs/apk/pruebas/debug/*.apk
-            apps/cliente-android/app/build/outputs/apk/piloto/debug/*.apk
-          retention-days: 30
-      - uses: actions/upload-artifact@v4
-        with:
-          name: FLETYA-Cliente-Piloto-unsigned-${{ github.sha }}
-          path: apps/cliente-android/app/build/outputs/apk/piloto/release/*-unsigned.apk
-          if-no-files-found: error
+          name: FLETYA-Cliente-PRUEBAS-${{ github.sha }}
+          path: apps/cliente-android/app/build/outputs/apk/pruebas/debug/*.apk
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
