@@ -16,7 +16,7 @@ final class ClientRules {
     static String status(String state) {
         return switch (state) { case "requested" -> "Buscando fletero"; case "en_route" -> "En camino a recoger"; case "picked_up" -> "Carga recogida · En camino a la entrega"; case "completed" -> "Completado"; case "cancelled" -> "Cancelado"; default -> "Estado no disponible"; };
     }
-    static String vehicle(String code) { return switch(code) { case "pickup" -> "Pickup / Estaquita"; case "camioneta" -> "Camioneta"; case "camion" -> "Camión"; default -> "Sin registrar"; }; }
+    static String vehicle(String code) { return switch(code) { case "pickup" -> "Camioneta pickup"; case "estaquita_abierta" -> "Estaquita abierta"; case "estaquita_caja_seca" -> "Estaquita caja seca"; case "camion_3_5t" -> "Camión 3.5 t"; case "camioneta" -> "Camioneta"; case "camion" -> "Camión"; default -> "Sin registrar"; }; }
     static double price(double km, String vehicle, int helpers) {
         if (!Double.isFinite(km) || km <= 0 || helpers < 0 || helpers > 2) throw new IllegalArgumentException("Revisa distancia y ayudantes.");
         int rate = switch(vehicle) { case "pickup" -> 35; case "camioneta" -> 45; case "camion" -> 65; default -> throw new IllegalArgumentException("Elige un vehículo válido."); };
