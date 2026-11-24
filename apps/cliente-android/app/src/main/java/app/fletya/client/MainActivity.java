@@ -485,7 +485,7 @@ public final class MainActivity extends Activity {
             text(box, cashPaymentLabel(), 15, true);
             String cashStatus = !job.optString("cash_collected_at", "").isEmpty() && !job.isNull("cash_collected_at")
                 ? "Pagado · efectivo recibido por el fletero"
-                : "cancelled".equals(job.optString("status")) ? "Pago cancelado" : "Pendiente de confirmación del fletero";
+                : "cancelled".equals(job.optString("status")) ? "Pago cancelado" : "Pendiente de confirmación del pago en efectivo";
             text(box, cashStatus, 15, true);
         }
         text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
@@ -516,18 +516,21 @@ public final class MainActivity extends Activity {
 
     private void renderActive(ClientApi.Tracking tracking,boolean trackingError,JSONArray arrivals){
         screen="home";shell();trackingStatus=null;originField=null;destField=null;quoteArea=null;
-        JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);text(box,"accepted".equals(job.optString("status")) ? "Confirmando aceptación" : ClientRules.status(job.optString("status")),19,true);details(box,job);
-        if (ClientRules.assigned(job.optString("status")) && arrivals!=null && arrivals.length()>0) {
+        JSONObject job=active;var box=card("Tu servicio");addNoticePermissionButton(box);
+        String status=job.optString("status");
+        String heading="accepted".equals(status) ? "Confirmando aceptación" : ClientRules.status(status);
+        if (ClientRules.assigned(status) && arrivals!=null && arrivals.length()>0) {
             JSONObject latest=arrivals.optJSONObject(0);
             if (latest!=null) {
                 String type=latest.optString("type");
-                String status=job.optString("status");
                 if ("client_arrived_delivery".equals(type) && "picked_up".equals(status))
-                    text(box,"Tu fletero llegó al punto de entrega.",17,true);
+                    heading="Tu fletero llegó al punto de entrega.";
                 else if ("client_arrived_pickup".equals(type) && "en_route".equals(status))
-                    text(box,"Tu fletero llegó al punto de recogida.",17,true);
+                    heading="Tu fletero llegó al punto de recogida.";
             }
         }
+        text(box,heading,19,true);
+        details(box,job);
         if("requested".equals(job.optString("status"))&&!job.optString("release_reason","").isEmpty()&&!job.isNull("release_reason"))text(box,"El fletero liberó el servicio. Buscando otro. Motivo: "+job.optString("release_reason"),14,false);
         addSandboxRefundButton(box, job);
         if("requested".equals(job.optString("status"))&&job.isNull("driver_id")
