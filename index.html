@@ -2474,11 +2474,11 @@ async function loadAdminCashIssues() {
       b.addEventListener('click',()=>changeCashIssue(i.id,action));actions.appendChild(b);
     };
     if(i.review_state==='reported')add('Revisar','review');
-    if(['reported','reviewing'].includes(i.review_state))add('Requerir pago (24 h)','require_payment');
+    if(i.review_state==='reviewing')add('Requerir pago (24 h)','require_payment');
     if(current.includes(i)) {
       if(i.job_status==='completed')add('Registrar cobro recuperado','collected');
-      add('Desestimar','dismiss');
-      add('Cerrar sin cobro','close_unpaid');
+      if(['reviewing','payment_required','closed_unpaid'].includes(i.review_state))add('Desestimar','dismiss');
+      if(['reviewing','payment_required'].includes(i.review_state))add('Cerrar sin cobro','close_unpaid');
     }
     row.append(actions);box.appendChild(row);
   }
@@ -2490,7 +2490,7 @@ async function changeCashIssue(jobId,action) {
   let note=null;
   if(action==='dismiss'||action==='close_unpaid') {
     note=prompt('Escribe una justificación para esta decisión:');
-    if(!note || !note.trim())return;
+    if(!note || note.trim().length<10 || note.trim().length>2000) {toast('La justificación debe contener entre 10 y 2000 caracteres.');return;}
   }
   const rpc=action==='collected'?'record_cash_payment':action==='dismiss'||action==='close_unpaid'?'resolve_cash_issue':'review_cash_issue';
   const args=action==='collected'?{p_job:jobId,p_event:'collected'}:
