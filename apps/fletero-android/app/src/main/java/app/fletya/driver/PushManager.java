@@ -15,6 +15,7 @@ import java.util.concurrent.*;
 /** No location, idle polling or background service while waiting for an offer. */
 final class PushManager {
     private static final String CHANNEL = "new_service_offers_v1";
+    private static final String CASH_CHANNEL = "cash_issue_events_v1";
     private static final String TAG = "fletya_offers";
     private static final ExecutorService worker = Executors.newSingleThreadExecutor();
     private static volatile String report = "Conectando avisos…";
@@ -60,6 +61,11 @@ final class PushManager {
         channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build());
         channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
         manager.createNotificationChannel(channel);
+        NotificationChannel cash = new NotificationChannel(CASH_CHANNEL, "Avisos de pagos de fletes", NotificationManager.IMPORTANCE_HIGH);
+        cash.setDescription("Requerimientos y confirmaciones de pagos pendientes.");
+        cash.enableVibration(true);
+        cash.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+        manager.createNotificationChannel(cash);
         SharedPreferences prefs = prefs(context);
         String installation = prefs.getString("installation", "");
         if (installation.isEmpty()) {
@@ -121,12 +127,14 @@ final class PushManager {
         while (seen.size() > 100) seen.remove(seen.iterator().next());
         prefs.edit().putStringSet("seen", seen).commit();
         NotificationManager manager = context.getSystemService(NotificationManager.class);
-        if (manager.getNotificationChannel(CHANNEL) == null) return;
+        boolean isCash = !"new_service".equals(data.get("type"));
+        String selectedChannel = isCash ? CASH_CHANNEL : CHANNEL;
+        if (manager.getNotificationChannel(selectedChannel) == null) return;
         Intent intent = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent open = PendingIntent.getActivity(context, 77, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Notification notification = new Notification.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_truck)
-            .setContentTitle("Nueva solicitud de flete")
-            .setContentText("Abre FLETYA para consultar la disponibilidad.")
+        Notification notification = new Notification.Builder(context, selectedChannel).setSmallIcon(R.drawable.ic_truck)
+            .setContentTitle(isCash ? ("cash_issue_payment_required".equals(data.get("type")) ? "Pago pendiente de un servicio" : "Pago recuperado") : "Nueva solicitud de flete")
+            .setContentText(isCash ? "Abre FLETYA para consultar el reporte de pago." : "Abre FLETYA para consultar la disponibilidad.")
             .setContentIntent(open).setAutoCancel(true).setCategory(Notification.CATEGORY_RECOMMENDATION)
             .setVisibility(Notification.VISIBILITY_PRIVATE).build();
         if (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
