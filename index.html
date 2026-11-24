@@ -2437,6 +2437,11 @@ async function markJobPaid(jobId) {
 
 // Impagos: only administrators see this testing-only section. RPC validates admin role server-side.
 let cashIssueRequestVersion = 0;
+let lastActiveCashIssueIds = null;
+setInterval(() => {
+  if (!IS_FLETYA_PRODUCTION_HOST && activeSessionRole === 'admin' && !logoutPending && !document.hidden)
+    void loadAdminCashIssues();
+}, 30000);
 async function loadAdminCashIssues() {
   const box=document.getElementById('adminCashIssuesList');
   if (!box || IS_FLETYA_PRODUCTION_HOST || activeSessionRole!=='admin' || logoutPending) return;
@@ -2449,6 +2454,10 @@ async function loadAdminCashIssues() {
   const active=new Set(['reported','reviewing','payment_required','closed_unpaid']);
   const current=data.filter(i=>active.has(i.review_state) && !i.cash_collected_at);
   document.getElementById('cashIssuesBadge').textContent=current.length ? '🔴 '+current.length+' pendiente(s)' : 'Sin casos activos';
+  const activeIds = new Set(current.map(i=>String(i.id)));
+  if (lastActiveCashIssueIds !== null && current.some(i=>!lastActiveCashIssueIds.has(String(i.id))))
+    toast('🔴 URGENTE: nuevo impago reportado. Revisa Administración.');
+  lastActiveCashIssueIds=activeIds;
   if (!data.length) { const empty=document.createElement('p');empty.textContent='No hay incidencias registradas.';box.append(empty);return; }
   for (const i of data) {
     const row=document.createElement('div');row.className='card';row.style.marginTop='12px';
