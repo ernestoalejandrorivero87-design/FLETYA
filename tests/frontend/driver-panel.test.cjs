@@ -73,7 +73,7 @@ function runtime(responses = [], pathname = "/") {
     };
   }
   const context = vm.createContext({
-    document, window: { location: { pathname } }, console: { error() {}, warn() {}, log() {} }, supabaseClient: api,
+    document, IS_FLETYA_PRODUCTION_HOST: true, window: { location: { pathname, hostname: 'fletya.vercel.app' } }, console: { error() {}, warn() {}, log() {} }, supabaseClient: api,
     navigator: { geolocation: { clearWatch(id) { clearedWatches.push(id); } } },
     localStorage: { getItem() { return null; } },
     L: { map() { return map; }, marker, polyline() { return { addTo() {return this;}, getBounds() {return [];} }; }, tileLayer() { return { addTo() {} }; } },
