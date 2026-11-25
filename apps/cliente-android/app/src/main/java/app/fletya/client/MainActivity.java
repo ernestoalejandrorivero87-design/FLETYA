@@ -523,7 +523,7 @@ public final class MainActivity extends Activity {
                 : "cancelled".equals(job.optString("status")) ? "Pago cancelado" : "Pendiente de confirmación del pago en efectivo";
             text(box, cashStatus, 15, true);
         }
-        text(box,"Recogida: "+job.optString("origin"),16,true);text(box,"Entrega: "+job.optString("destination"),16,true);
+        showAddress(box,"Recogida: ",job.optString("origin"));showAddress(box,"Entrega: ",job.optString("destination"));
         text(box,job.optString("service_type")+" · "+ClientRules.vehicle(job.optString("vehicle_type")),15,false);
         text(box,job.optString("distance_km")+" km · Ayudantes: "+job.optInt("helpers"),15,false);text(box,money(job.optDouble("price")),25,true).setTextColor(appearance.accent());
     }
@@ -645,6 +645,20 @@ public final class MainActivity extends Activity {
     private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(appearance.context()).setOnDismissListener(d->picking=false);}
     private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();String[] device=PushManager.disableLocally(this);task(()->{try{api.unregisterPush(device[0],device[1]);}catch(Exception ignored){}api.logout();return true;},ok->{revision++;login();});}).show();}
     private void open(String uri){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(uri)));}catch(ActivityNotFoundException error){message.setText("No se pudo abrir el enlace.");}}
+    private void showAddress(LinearLayout box,String prefix,String value){
+        double[] point=ClientRules.coordinates(value);
+        TextView label=text(box,prefix+(point==null?value:"Punto seleccionado en el mapa"),16,true);
+        if(point==null||!isPruebas()) {if(!isPruebas())label.setText(prefix+value);return;}
+        new Thread(()->{
+            try{
+                if(!android.location.Geocoder.isPresent())return;
+                var addresses=new android.location.Geocoder(this,Locale.getDefault()).getFromLocation(point[0],point[1],1);
+                if(addresses==null||addresses.isEmpty())return;
+                String address=addresses.get(0).getAddressLine(0);
+                if(address!=null&&!address.trim().isEmpty())main.post(()->{if(label.isAttachedToWindow())label.setText(prefix+address);});
+            }catch(Exception ignored){}
+        }).start();
+    }
     private void picker(EditText target){
         picking=true;var box=new LinearLayout(appearance.context());box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(12),dp(8),dp(12),dp(8));text(box,"Mueve el mapa hasta colocar el centro sobre el punto exacto. También puedes tocar un lugar.",15,false);
         try{pickerMap=new ClientMapView(appearance.context());pickerMap.picker(ClientRules.coordinates(target.getText().toString()));box.addView(pickerMap,new LinearLayout.LayoutParams(-1,dp(340)));
