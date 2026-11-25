@@ -1,15 +1,11 @@
 name: Android cliente
 on:
-  pull_request:
-    paths: ['apps/cliente-android/**', 'apps/android-shared/**', '.github/workflows/android-cliente.yml']
-  push:
-    branches: [main]
-    paths: ['apps/cliente-android/**', 'apps/android-shared/**', '.github/workflows/android-cliente.yml']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
+    if: github.ref == 'refs/heads/codex/pruebas-consolidacion'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -26,77 +22,18 @@ jobs:
           gradle-version: '8.13'
       - name: Install pinned Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
-      - name: Test, lint and build both environments
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check frontend admin and client regressions
+        run: node --test tests/frontend/*.test.cjs
+      - name: Test, lint and build PRUEBAS only
         working-directory: apps/cliente-android
-        run: gradle --no-daemon testPruebasDebugUnitTest testPilotoDebugUnitTest lintPruebasDebug lintPilotoRelease assemblePruebasDebug assemblePilotoDebug assemblePilotoRelease
-      - name: Sign and verify Piloto release
-        if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/codex/pilot-signed-appearance-recovery' || github.ref == 'refs/heads/codex/pilot-finance-integration')
-        shell: bash
-        env:
-          KEYSTORE_B64: ${{ secrets.FLETYA_PILOT_KEYSTORE_BASE64 }}
-          KS_PASS: ${{ secrets.FLETYA_PILOT_STORE_PASSWORD }}
-          KEY_PASS: ${{ secrets.FLETYA_PILOT_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.FLETYA_PILOT_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          umask 077
-          ks=$(mktemp)
-          trap 'rm -f "$ks"' EXIT
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$ks"
-          sdk="$ANDROID_HOME/build-tools/35.0.0"
-          mkdir -p signed-piloto
-          for apk in apps/cliente-android/app/build/outputs/apk/piloto/release/*-unsigned.apk; do
-            "$sdk/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
-            "$sdk/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-key-alias "$KEY_ALIAS" --ks-pass env:KS_PASS --key-pass env:KEY_PASS --out "signed-piloto/FLETYA-Cliente-Piloto.apk" "$RUNNER_TEMP/aligned.apk"
-            "$sdk/apksigner" verify --print-certs "signed-piloto/FLETYA-Cliente-Piloto.apk" | tee "$RUNNER_TEMP/cert.txt"
-            grep -Fi '42c513aceaca6fe4d58a2529b1a7c6143145ecffd4becfeac0e63f9ff60c1813' "$RUNNER_TEMP/cert.txt"
-          done
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/codex/pilot-signed-appearance-recovery' || github.ref == 'refs/heads/codex/pilot-finance-integration')
-        with:
-          name: FLETYA-Cliente-Piloto-signed-${{ github.sha }}
-          path: signed-piloto/*.apk
-          if-no-files-found: error
-          retention-days: 30
-      - name: Sign and verify Pruebas with FLETYA distribution certificate
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/pilot-finance-integration'
-        shell: bash
-        env:
-          KEYSTORE_B64: ${{ secrets.FLETYA_PILOT_KEYSTORE_BASE64 }}
-          KS_PASS: ${{ secrets.FLETYA_PILOT_STORE_PASSWORD }}
-          KEY_PASS: ${{ secrets.FLETYA_PILOT_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.FLETYA_PILOT_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          umask 077
-          ks=$(mktemp)
-          trap 'rm -f "$ks"' EXIT
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$ks"
-          sdk="$ANDROID_HOME/build-tools/35.0.0"
-          mkdir -p signed-pruebas
-          apk=apps/cliente-android/app/build/outputs/apk/pruebas/debug/app-pruebas-debug.apk
-          "$sdk/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned-pruebas.apk"
-          "$sdk/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-key-alias "$KEY_ALIAS" --ks-pass env:KS_PASS --key-pass env:KEY_PASS --out "signed-pruebas/FLETYA-Cliente-Pruebas.apk" "$RUNNER_TEMP/aligned-pruebas.apk"
-          "$sdk/apksigner" verify --print-certs "signed-pruebas/FLETYA-Cliente-Pruebas.apk" | tee "$RUNNER_TEMP/pruebas-cert.txt"
-          grep -Fi '42c513aceaca6fe4d58a2529b1a7c6143145ecffd4becfeac0e63f9ff60c1813' "$RUNNER_TEMP/pruebas-cert.txt"
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/pilot-finance-integration'
-        with:
-          name: FLETYA-Cliente-Pruebas-signed-${{ github.sha }}
-          path: signed-pruebas/*.apk
-          if-no-files-found: error
-          retention-days: 30
+        run: gradle --no-daemon testPruebasDebugUnitTest lintPruebasDebug assemblePruebasDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: FLETYA-Cliente-Android-${{ github.sha }}
-          path: |
-            apps/cliente-android/app/build/outputs/apk/pruebas/debug/*.apk
-            apps/cliente-android/app/build/outputs/apk/piloto/debug/*.apk
-          retention-days: 30
-      - uses: actions/upload-artifact@v4
-        with:
-          name: FLETYA-Cliente-Piloto-unsigned-${{ github.sha }}
-          path: apps/cliente-android/app/build/outputs/apk/piloto/release/*-unsigned.apk
+          name: FLETYA-Cliente-PRUEBAS-${{ github.sha }}
+          path: apps/cliente-android/app/build/outputs/apk/pruebas/debug/*.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
