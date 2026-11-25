@@ -787,8 +787,8 @@ test('cancelled services are excluded from admin financial amounts and counted s
  for(const id of ['adminSearch','adminUsersSearch','adminStatusFilter'])r.document.getElementById(id).value='';
  r.document.getElementById('adminReportPeriod').value='all';
  await r.run('renderAdmin()');
- assert.equal(r.document.getElementById('sales').textContent,r.run('money(500)'));
- assert.equal(r.document.getElementById('reportSales').textContent,r.run('money(500)'));
+ assert.equal(r.document.getElementById('sales').textContent,'500.00');
+ assert.equal(r.document.getElementById('reportSales').textContent,'500.00');
  assert.equal(r.document.getElementById('reportJobs').textContent,2);
  assert.equal(r.document.getElementById('cancelledCount').textContent,1);
  assert.match(r.document.getElementById('adminTable').innerHTML,/Cancelado/);
@@ -899,13 +899,13 @@ test('admin pages retain all financial amounts and filters reset the selected pa
  r.document.getElementById('adminReportPeriod').value='all';
  r.run("panelFilters.adminServices='|';panelPages.adminServices=1");
  await r.run('renderAdmin()');
- assert.equal(r.document.getElementById('sales').textContent,r.run('money(2300)'));
+ assert.equal(r.document.getElementById('sales').textContent,'2,300.00');
  const rows=r.document.getElementById('adminTable').innerHTML;
  assert.match(rows,/Origin 10/);assert.match(rows,/Origin 19/);assert.doesNotMatch(rows,/Origin 20/);
  r.document.getElementById('adminSearch').value='job-22';await r.run('renderAdmin()');
  assert.equal(r.run('panelPages.adminServices'),0);
  assert.match(r.document.getElementById('adminTable').innerHTML,/Origin 22/);
- assert.equal(r.document.getElementById('sales').textContent,r.run('money(2300)'));
+ assert.equal(r.document.getElementById('sales').textContent,'2,300.00');
 });
 test('polling preserves selected pages and signout resets private navigation',async()=>{
  const r=runtime();r.run("activeSessionRole='driver';renderDriver=async()=>{};panelPages.driverHistory=2;");
