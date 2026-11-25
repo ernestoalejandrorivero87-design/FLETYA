@@ -3487,7 +3487,8 @@ const tf=document.getElementById('tariffForm');
 const tariffStatus=s=>document.getElementById('tariffStatus').textContent=s;
 const tariffAllowed=()=>!IS_FLETYA_PRODUCTION_HOST&&activeSessionRole==='admin'&&!logoutPending;
 if(!IS_FLETYA_PRODUCTION_HOST){document.getElementById('tariffAdmin').style.display='';document.getElementById('vehicleTariffAdmin').classList.remove('hidden');}
-function tariffPreview(){let n=k=>Number(tf.elements[k].value);document.getElementById('tariffPreview').textContent='Mudanza 10 km + 1 ayudante + 2 niveles por escaleras: let tariffSaving=false;
+function tariffPreview(){const n=k=>Number(tf.elements[k].value);const total=n('moving_base')+Math.max(0,10-n('included_km'))*n('moving_km')+n('helper_price')+2*n('stair_per_level');document.getElementById('tariffPreview').textContent='Mudanza 10 km + 1 ayudante + 2 niveles por escaleras: '+total.toLocaleString('es-MX',{style:'currency',currency:'MXN'});}
+let tariffSaving=false;
 async function loadVehicleTariffs(){
  if(!tariffAllowed())return;
  const rev=sessionRevision, root=document.getElementById('vehicleTariffRows'), status=document.getElementById('vehicleTariffStatus');
