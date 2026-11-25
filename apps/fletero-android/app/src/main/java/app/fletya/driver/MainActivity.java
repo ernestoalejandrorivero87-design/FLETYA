@@ -94,6 +94,26 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(14); root.addView(box, layout);
         text(box, title, 20, true); return box;
     }
+    private void showAddress(LinearLayout box,String prefix,String value) {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) { text(box,prefix+value,16,true); return; }
+        double lat,lng;
+        try {
+            String[] parts=value.split(",");
+            if(parts.length!=2) throw new IllegalArgumentException();
+            lat=Double.parseDouble(parts[0].trim());lng=Double.parseDouble(parts[1].trim());
+            if(!Double.isFinite(lat)||!Double.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180) throw new IllegalArgumentException();
+        } catch(IllegalArgumentException e) { text(box,prefix+value,16,true);return; }
+        TextView label=text(box,prefix+"Punto seleccionado en el mapa",16,true);
+        new Thread(()->{
+            try {
+                if(!android.location.Geocoder.isPresent())return;
+                var addresses=new android.location.Geocoder(this,Locale.getDefault()).getFromLocation(lat,lng,1);
+                if(addresses==null||addresses.isEmpty())return;
+                String address=addresses.get(0).getAddressLine(0);
+                if(address!=null&&!address.trim().isEmpty())main.post(()->{if(label.isAttachedToWindow())label.setText(prefix+address);});
+            }catch(Exception ignored){}
+        }).start();
+    }
     private TextView text(LinearLayout parent, String value, int size, boolean bold) {
         TextView view = new TextView(appearance.context()); view.setText(value); view.setTextSize(size); view.setTextColor(appearance.text());
         if (bold) view.setTypeface(null, Typeface.BOLD);
@@ -353,8 +373,8 @@ public final class MainActivity extends Activity {
         menu.show();
     }
     private void jobDetails(LinearLayout box, JSONObject job) {
-        text(box, "Recogida: " + job.optString("origin"), 16, true);
-        text(box, "Entrega: " + job.optString("destination"), 16, true);
+        showAddress(box, "Recogida: ", job.optString("origin"));
+        showAddress(box, "Entrega: ", job.optString("destination"));
         text(box, job.optString("service_type", "Flete") + " · " + vehicleLabel(job.optString("vehicle_type")), 15, false);
         text(box, job.optString("distance_km", "—") + " km · Ayudantes: " + job.optInt("helpers"), 15, false);
         NumberFormat money = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX"));
