@@ -126,7 +126,7 @@ public final class ClientApi {
         return get("jobs?select=*&client_id=eq." + eq(userId()) + "&status=in.(" + (sandboxPaymentsAllowed() ? "requested,accepted,en_route,picked_up" : "requested,en_route,picked_up") + ")&order=created_at.desc,id.desc&limit=2");
     }
     public synchronized JSONArray notifications(int offset) throws Exception {
-        return get("notifications?select=id,title,message,type,read,created_at,job_id&user_id=eq."+eq(userId())+"&type=like.client_*&order=created_at.desc,id.desc&limit=13&offset="+Math.max(0,offset));
+        return get("notifications?select=id,title,message,type,read,created_at,job_id&user_id=eq."+eq(userId())+"&or=(type.like.client_*,type.like.cash_issue_*)&order=created_at.desc,id.desc&limit=13&offset="+Math.max(0,offset));
     }
     public synchronized JSONArray arrivalNotices(String jobId) throws Exception {
         token();
