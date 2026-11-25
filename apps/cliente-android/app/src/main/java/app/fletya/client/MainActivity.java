@@ -271,6 +271,7 @@ public final class MainActivity extends Activity {
                     result.setText(price.optBoolean("available")?"Cotización de prueba\n\n"+money(price.getDouble("total"))+"\n"+String.format(java.util.Locale.getDefault(),"%.2f km",price.getDouble("distance_km"))+" · "+vehicle.getSelectedItem()+"\n"+category.getSelectedItem()+" · "+helpers.getSelectedItem()+"\nPago en efectivo al entregar\n\nPrecio sujeto a los datos indicados.":"No hay una tarifa disponible para este vehículo.");
                     if(price.optBoolean("available") && price.has("saved_quote_id")) {
                         final String savedQuote=price.getString("saved_quote_id");
+                        final String requestId=UUID.randomUUID().toString();
                         final String quotedDescription=description.getText().toString().trim();
                         final String quotedSummary=summary;
                         confirmAction[0]=()->{
@@ -283,16 +284,33 @@ public final class MainActivity extends Activity {
                                 || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim())) {
                                 routeReview.removeAllViews();confirmAction[0]=null;quoteButton[0].setText("Ver precio");result.setText("Cambiaste los datos. Vuelve a cotizar antes de confirmar.");return;
                             }
-                            new AlertDialog.Builder(appearance.context())
+                            dialog()
                                 .setTitle("Confirmar solicitud de prueba")
-                                .setMessage("Se enviará un pedido REAL al sistema de Pruebas. Pago en efectivo. Total: "+money(price.optDouble("total"))+"\\n\\n"+quotedSummary)
+                                .setMessage("Se enviará un pedido al sistema de Pruebas. Pago en efectivo. Total: "+money(price.optDouble("total"))+"\n\n"+quotedSummary.replace("Vista previa: sin pedido ni cobro.",""))
                                 .setNegativeButton("Volver",null)
                                 .setPositiveButton("Solicitar flete",(dialog,which)->{
-                                    final String id=UUID.randomUUID().toString();
-                                    task(()->api.confirmSavedCargoQuote(savedQuote,id,quotedDescription),job->{
+                                    if(busy){result.setText("Actualizando datos. Espera e intenta confirmar nuevamente.");return;}
+                                    result.setText("Enviando solicitud…");
+                                    quoteButton[0].setEnabled(false);
+                                    task(()->{
+                                        try{return api.confirmSavedCargoQuote(savedQuote,requestId,quotedDescription);}
+                                        catch(Exception error){
+                                            JSONObject failure=new JSONObject();
+                                            failure.put("confirmation_error",error instanceof ClientApi.Failure?error.getMessage():"No se pudo verificar el envío. Consulta el seguimiento antes de reintentar.");
+                                            return failure;
+                                        }
+                                    },job->{
+                                        quoteButton[0].setEnabled(true);
+                                        if(job.has("confirmation_error")){
+                                            String error=job.optString("confirmation_error");
+                                            result.setText(error);
+                                            dialog().setTitle("No se pudo confirmar").setMessage(error).setPositiveButton("Entendido",null).show();
+                                            return;
+                                        }
                                         routeReview.removeAllViews();
                                         confirmAction[0]=null;quoteButton[0].setText("Ver precio");
-                                        result.setText("Solicitud creada en Pruebas. Folio: "+job.optString("id")+"\\nEstado: "+job.optString("status")+"\\nPrecio contratado: "+money(job.getDouble("price"))+"\\nConsulta el seguimiento para ver si un fletero la acepta.");
+                                        result.setText("Solicitud creada en Pruebas. Folio: "+job.optString("id"));
+                                        refresh();
                                     });
                                 }).show();
                         };
