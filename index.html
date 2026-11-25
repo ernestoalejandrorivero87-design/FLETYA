@@ -2426,7 +2426,9 @@ async function loadAdminCashIssues() {
     details.textContent='Servicio: '+(jobLabels[i.job_status]||'Estado no disponible')+' · Reportado: '+(i.reported_at?new Date(i.reported_at).toLocaleString('es-MX'):'—')+
       (i.payment_due_at?' · Vence: '+new Date(i.payment_due_at).toLocaleString('es-MX'):'')+
       (i.cash_collected_at?' · Cobro confirmado':'');
-    row.append(title,details);
+    const amount=document.createElement('p');
+    amount.textContent=i.amount==null?'Importe no disponible':(i.cash_collected_at?'Importe recuperado: ':'Importe adeudado: ')+Number(i.amount).toLocaleString('es-MX',{style:'currency',currency:'MXN'});
+    row.append(title,amount,details);
     const actions=document.createElement('div');actions.className='row';
     const add=(label,action)=>{
       const b=document.createElement('button');b.type='button';b.className='btn light';b.textContent=label;
