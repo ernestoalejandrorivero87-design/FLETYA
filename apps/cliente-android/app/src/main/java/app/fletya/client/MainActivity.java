@@ -137,7 +137,7 @@ public final class MainActivity extends Activity {
         button(root,"Volver a iniciar sesión",this::login);
     }
     private void login(){
-        resetDraft();disposeMaps();active=null;currentTrackingFix=null;trackingStatus=null;screen="login";shell();
+        debtScreen=false;resetDraft();disposeMaps();active=null;currentTrackingFix=null;trackingStatus=null;screen="login";shell();
         var box=card("Pide tu flete");text(box,"Entra con tu cuenta de cliente de FLETYA.",16,false);
         var email=field(box,"Correo electrónico","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         var password=field(box,"Contraseña","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setSaveEnabled(false);
@@ -160,10 +160,25 @@ public final class MainActivity extends Activity {
             refresh();
         }, false);
     }
-    private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError,JSONObject payment,JSONArray arrivals){}
+    private record Panel(JSONObject profile,JSONArray jobs,ClientApi.Tracking tracking,boolean trackingError,JSONObject payment,JSONArray arrivals,JSONArray debts){}
+    private boolean debtScreen=false;
+    private void renderDebt(JSONArray debts){
+        screen="home";debtScreen=true;stopLocation();clearTrackingMap();clearPreview();originField=null;destField=null;quote=null;testQuote=null;active=null;shell();
+        var box=card("Pago pendiente · Cuenta restringida");
+        text(box,"Regulariza tu pago antes de solicitar otro flete.",17,true);
+        for(int i=0;i<debts.length();i++){JSONObject debt=debts.optJSONObject(i);if(debt==null)continue;
+            text(box,String.format(java.util.Locale.US,"$%.2f MXN",debt.optDouble("amount",0)),22,true).setTextColor(appearance.accent());
+            String due=debt.optString("payment_due_at","");
+            if(!debt.isNull("payment_due_at")&&!due.isEmpty())try{due=java.text.DateFormat.getDateTimeInstance().format(java.util.Date.from(java.time.OffsetDateTime.parse(due).toInstant()));}catch(Exception ignored){}
+            text(box,debt.isNull("payment_due_at")?"Incidencia pendiente de resolución.":"Fecha límite: "+due,15,false);
+        }
+        text(box,"Contacta con soporte de FLETYA para regularizar el pago.",15,false);
+        button(box,"Solicitar flete — bloqueado",()->{}).setEnabled(false);
+        button(box,"Actualizar estado",this::refresh);button(root,"Historial de servicios",()->{historyPage=0;history();});
+    }
     private void refresh(){
         if(!visible||busy||picking||requestingNotices||!api.signedIn())return;
-        task(()->{var profile=api.profile();var jobs=api.activeJobs();var tracking=new ClientApi.Tracking(null,null);boolean error=false;
+        task(()->{var profile=api.profile();var debts=api.cashDebts();var jobs=api.activeJobs();var tracking=new ClientApi.Tracking(null,null);boolean error=false;
             if(jobs.length()==1&&ClientRules.assigned(jobs.getJSONObject(0).optString("status")))try{tracking=api.tracking(jobs.getJSONObject(0));}catch(Exception e){if(!api.signedIn())throw e;error=true;}
             JSONObject payment = null;
             if (sandboxPayments() && jobs.length() == 0) {
@@ -179,12 +194,14 @@ public final class MainActivity extends Activity {
                 try { arrivals=api.arrivalNotices(jobs.getJSONObject(0).getString("id")); }
                 catch(Exception e) { if(!api.signedIn())throw e; }
             }
-            return new Panel(profile,jobs,tracking,error,payment,arrivals);
+            return new Panel(profile,jobs,tracking,error,payment,arrivals,debts);
         },panel->{
             if(!visible||!"home".equals(screen))return;
             PushManager.activate(this,api);
             if (PushManager.shouldRequestOnFirstUse(this)) requestNoticePermission();
             profileName=panel.profile().optString("full_name","cliente");
+            if(panel.debts().length()>0){renderDebt(panel.debts());return;}
+            if(debtScreen){debtScreen=false;originField=null;}
             if(panel.jobs().length()>1){clearTrackingMap();active=null;shell();text(card("Revisión necesaria"),"Tienes más de un servicio activo. Consulta con administración antes de pedir otro.",16,false);button(root,"Actualizar seguimiento",this::refresh);return;}
             JSONObject next=panel.jobs().length()==1?panel.jobs().getJSONObject(0):null;
             if (next == null && panel.payment() != null && ("pending".equals(panel.payment().optString("state"))
