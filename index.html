@@ -208,8 +208,8 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <button id="saveRecoveryPassword" class="btn" onclick="finishPasswordRecovery()">Guardar contraseña nueva</button><p id="passwordRecoveryMessage" role="status"></p>
 </section>
 <section id="admin" class="hidden">
-<section class="card hidden" id="adminCashIssues" aria-labelledby="adminCashIssuesTitle" style="margin-bottom:18px;border:2px solid #b43a3a">
-  <h2 id="adminCashIssuesTitle" class="danger">Impagos · Administración <span id="cashIssuesBadge" aria-live="polite"></span></h2>
+<section class="card hidden" id="adminCashIssues" aria-labelledby="adminCashIssuesTitle" style="margin-bottom:18px;border:2px solid transparent">
+  <h2 id="adminCashIssuesTitle">Impagos · Administración <span id="cashIssuesBadge" aria-live="polite"></span></h2>
   <p class="muted">Los reportes activos bloquean nuevas solicitudes hasta confirmar el cobro o resolver la incidencia.</p>
   <button class="btn light" type="button" onclick="loadAdminCashIssues()">Actualizar impagos</button>
   <div id="adminCashIssuesList" aria-live="polite"></div>
@@ -2409,6 +2409,10 @@ async function loadAdminCashIssues() {
   const active=new Set(['reported','reviewing','payment_required','closed_unpaid']);
   const current=data.filter(i=>active.has(i.review_state) && !i.cash_collected_at);
   document.getElementById('cashIssuesBadge').textContent=current.length ? '🔴 '+current.length+' pendiente(s)' : 'Sin casos activos';
+  document.getElementById('adminCashIssues').style.borderColor=current.length?'#b43a3a':'transparent';
+  document.getElementById('adminCashIssuesTitle').classList.toggle('danger',current.length>0);
+  const issueLabels={reported:'Reportado',reviewing:'En revisión',payment_required:'Pago requerido',closed_unpaid:'Cerrado sin cobro',paid:'Pagado',dismissed:'Desestimado'};
+  const jobLabels={completed:'Completado',cancelled:'Cancelado',assigned:'Asignado',requested:'Solicitado'};
   const activeIds = new Set(current.map(i=>String(i.id)));
   if (lastActiveCashIssueIds !== null && current.some(i=>!lastActiveCashIssueIds.has(String(i.id))))
     toast('🔴 URGENTE: nuevo impago reportado. Revisa Administración.');
@@ -2417,9 +2421,9 @@ async function loadAdminCashIssues() {
   for (const i of data) {
     const row=document.createElement('div');row.className='card';row.style.marginTop='12px';
     const title=document.createElement('strong');
-    title.textContent=(current.includes(i)?'🔴 ':'')+'Servicio '+String(i.id||'').slice(0,8)+' · '+String(i.review_state||'sin estado');
+    title.textContent=(current.includes(i)?'🔴 ':'')+'Servicio '+String(i.id||'').slice(0,8)+' · '+(issueLabels[i.review_state]||'Estado desconocido');
     const details=document.createElement('p');details.className='muted';
-    details.textContent='Servicio: '+String(i.job_status||'—')+' · Reportado: '+(i.reported_at?new Date(i.reported_at).toLocaleString('es-MX'):'—')+
+    details.textContent='Servicio: '+(jobLabels[i.job_status]||'Estado no disponible')+' · Reportado: '+(i.reported_at?new Date(i.reported_at).toLocaleString('es-MX'):'—')+
       (i.payment_due_at?' · Vence: '+new Date(i.payment_due_at).toLocaleString('es-MX'):'')+
       (i.cash_collected_at?' · Cobro confirmado':'');
     row.append(title,details);
