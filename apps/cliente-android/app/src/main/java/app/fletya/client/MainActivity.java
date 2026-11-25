@@ -165,15 +165,15 @@ public final class MainActivity extends Activity {
     private void renderDebt(JSONArray debts){
         screen="home";debtScreen=true;stopLocation();clearTrackingMap();clearPreview();originField=null;destField=null;quote=null;testQuote=null;active=null;shell();
         var box=card("Pago pendiente · Cuenta restringida");
-        text(box,"Regulariza tu pago antes de solicitar otro flete.",17,true);
+        text(box,"Regulariza tu pago antes de solicitar otro flete.",17,true).setTextColor(0xFFDC5353);
         for(int i=0;i<debts.length();i++){JSONObject debt=debts.optJSONObject(i);if(debt==null)continue;
-            text(box,String.format(java.util.Locale.US,"$%.2f MXN",debt.optDouble("amount",0)),22,true).setTextColor(appearance.accent());
+            text(box,String.format(java.util.Locale.US,"$%.2f MXN",debt.optDouble("amount",0)),22,true).setTextColor(0xFFDC5353);
             String due=debt.optString("payment_due_at","");
             if(!debt.isNull("payment_due_at")&&!due.isEmpty())try{due=java.text.DateFormat.getDateTimeInstance().format(java.util.Date.from(java.time.OffsetDateTime.parse(due).toInstant()));}catch(Exception ignored){}
             text(box,debt.isNull("payment_due_at")?"Incidencia pendiente de resolución.":"Fecha límite: "+due,15,false);
         }
         text(box,"Contacta con soporte de FLETYA para regularizar el pago.",15,false);
-        button(box,"Solicitar flete — bloqueado",()->{}).setEnabled(false);
+        var blocked=button(box,"Solicitar flete — bloqueado",()->{});blocked.setEnabled(false);blocked.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF666666));blocked.setTextColor(0xFFFFFFFF);
         button(box,"Actualizar estado",this::refresh);button(root,"Historial de servicios",()->{historyPage=0;history();});
     }
     private void refresh(){
