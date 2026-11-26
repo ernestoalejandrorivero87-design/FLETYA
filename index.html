@@ -2908,7 +2908,7 @@ async function renderCashCuts(panel, names, revision, renderVersion) {
     const heading = document.createElement('h3');
     heading.textContent = IS_FLETYA_PRODUCTION_HOST ? 'Cortes de comisiones en efectivo' : 'Cortes de comisiones en efectivo · Pruebas';
     panel.appendChild(heading);
-    for (const issue of issues.data ?? []) {
+    for (const issue of (issues.data ?? []).filter(i => IS_FLETYA_PRODUCTION_HOST || (['reported','reviewing','payment_required','closed_unpaid'].includes(i.review_state) && !i.cash_collected_at))) {
       const action = document.createElement('button');
       action.className = 'btn';
       action.type = 'button';
