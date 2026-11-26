@@ -24,7 +24,7 @@ public final class DriverRules {
                                       String recipient, String messageNonce, String type, String id) {
         if (signedInUser == null || signedInUser.isEmpty() || !signedInUser.equals(registeredUser)
             || !signedInUser.equals(recipient) || nonce == null || nonce.isEmpty() || !nonce.equals(messageNonce)
-            || !("new_service".equals(type) || "cash_issue_payment_required".equals(type) || "cash_issue_paid".equals(type) || "cash_issue_recovered".equals(type))) return false;
+            || !("new_service".equals(type) || "cash_issue_payment_required".equals(type) || "cash_issue_paid".equals(type) || "cash_issue_recovered".equals(type) || "cash_commission_settled".equals(type))) return false;
         try { return java.util.UUID.fromString(id).toString().equals(id.toLowerCase(java.util.Locale.ROOT)); }
         catch (RuntimeException invalid) { return false; }
     }
