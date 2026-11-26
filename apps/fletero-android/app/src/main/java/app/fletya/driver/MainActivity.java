@@ -465,6 +465,19 @@ public final class MainActivity extends Activity {
             catch (RuntimeException error) { message.setText("No se pudo iniciar el seguimiento. Revisa los permisos y vuelve a intentar."); }
         }
     }
+    private String commissionDate(String value) {
+        try {
+            return java.time.LocalDate.parse(value).format(java.time.format.DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", Locale.forLanguageTag("es-MX")));
+        } catch (RuntimeException invalid) { return value; }
+    }
+
+    private String commissionWeek(String value) {
+        try {
+            java.time.LocalDate start = java.time.LocalDate.parse(value);
+            return commissionDate(start.toString()) + " al " + commissionDate(start.plusDays(6).toString());
+        } catch (RuntimeException invalid) { return value; }
+    }
+
     private void showCashCommissionCuts() {
         task(api::cashCommissionCuts, cuts -> {
             screen = "cash-cuts";
@@ -476,9 +489,10 @@ public final class MainActivity extends Activity {
             for (int i = 0; i < cuts.length(); i++) {
                 JSONObject cut = cuts.getJSONObject(i);
                 String state = cut.optInt("pending_count") == 0 ? "Pagado" : cut.optBoolean("closed") ? "Cerrado" : "En curso";
-                LinearLayout box = card("Semana del " + cut.optString("week_start") + " · " + state);
+                LinearLayout box = card("Corte semanal · " + state);
+                text(box, commissionWeek(cut.optString("week_start")), 15, false);
                 text(box, "Pendiente: " + money.format(cut.optLong("pending_cents") / 100.0) + " MXN", 16, true);
-                text(box, "Fecha límite: " + cut.optString("due_on"), 15, false);
+                text(box, "Fecha límite: " + commissionDate(cut.optString("due_on")), 15, false);
                 if (cut.optBoolean("closed") && cut.optInt("pending_count") > 0) {
                     JSONObject account = cut.optJSONObject("spei_account");
                     String reference = cut.optString("spei_reference", "");
@@ -495,11 +509,15 @@ public final class MainActivity extends Activity {
                     }
                 }
                 JSONArray jobs = cut.getJSONArray("jobs");
+                text(box, "Servicios del corte: " + jobs.length(), 15, true);
                 for (int j = 0; j < jobs.length(); j++) {
                     JSONObject job = jobs.getJSONObject(j);
-                    text(box, job.optString("date") + " · " + money.format(job.optLong("commission_cents") / 100.0)
+                    String jobId = job.optString("id");
+                    String shortId = jobId.length() > 8 ? jobId.substring(0, 8).toUpperCase(Locale.ROOT) : jobId;
+                    text(box, commissionDate(job.optString("date")) + " · " + money.format(job.optLong("commission_cents") / 100.0)
                         + " · " + (job.optBoolean("settled") ? "Pagado" : "Pendiente")
-                        + "\n" + job.optString("id"), 14, false);
+                        + "\nServicio #" + shortId, 14, false);
+                    button(box, "Copiar referencia del servicio", () -> copyPaymentField("Referencia del servicio", jobId));
                 }
             }
             button(root, "Actualizar cortes", this::showCashCommissionCuts);
