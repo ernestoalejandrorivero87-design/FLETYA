@@ -133,11 +133,15 @@ final class PushManager {
         if (manager.getNotificationChannel(selectedChannel) == null) return;
         Intent intent = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent open = PendingIntent.getActivity(context, 77, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Notification notification = new Notification.Builder(context, selectedChannel).setSmallIcon(R.drawable.ic_truck)
+        String settlementMessage = data.get("settlement_message");
+        if (settlementMessage == null || settlementMessage.trim().isEmpty()) settlementMessage = "Tu corte semanal fue liquidado. Consulta el detalle en FLETYA.";
+        Notification.Builder builder = new Notification.Builder(context, selectedChannel).setSmallIcon(R.drawable.ic_truck)
             .setContentTitle(isSettlement ? "Comisiones liquidadas" : isCash ? ("cash_issue_payment_required".equals(data.get("type")) ? "Pago pendiente de un servicio" : "Pago recuperado") : "Nueva solicitud de flete")
-            .setContentText(isSettlement ? "Tu corte semanal fue liquidado. Consulta el detalle en FLETYA." : isCash ? "Abre FLETYA para consultar el reporte de pago." : "Abre FLETYA para consultar la disponibilidad.")
+            .setContentText(isSettlement ? settlementMessage : isCash ? "Abre FLETYA para consultar el reporte de pago." : "Abre FLETYA para consultar la disponibilidad.")
             .setContentIntent(open).setAutoCancel(true).setCategory(Notification.CATEGORY_RECOMMENDATION)
-            .setVisibility(Notification.VISIBILITY_PRIVATE).build();
+            .setVisibility(Notification.VISIBILITY_PRIVATE);
+        if (isSettlement) builder.setStyle(new Notification.BigTextStyle().bigText(settlementMessage));
+        Notification notification = builder.build();
         if (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
             manager.notify(TAG, id.hashCode(), notification);
     }
