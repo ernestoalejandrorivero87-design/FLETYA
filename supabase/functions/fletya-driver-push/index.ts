@@ -1,15 +1,15 @@
 // Server-only FCM HTTP v1 sender. No credentials, token values or payloads are logged.
 type Device = { installation_id: string; token: string; registration_nonce: string };
-type Offer = { notification_id: string; user_id: string; job_id: string; attempt: number; devices: Device[] };
+type Offer = { notification_id: string; user_id: string; job_id: string; event_type?: string; message?: string | null; attempt: number; devices: Device[] };
 type ServiceAccount = { project_id: string; client_email: string; private_key: string };
 type Runtime = { env: (name: string) => string | undefined; fetch: typeof fetch; now: () => number; crypto: Crypto };
 
 export function fcmMessage(offer: Offer, device: Device) {
   return { message: {
     token: device.token,
-    data: { type: 'new_service', notification_id: offer.notification_id, user_id: offer.user_id,
-      job_id: offer.job_id, registration_nonce: device.registration_nonce },
-    android: { priority: 'HIGH', ttl: '120s', collapse_key: offer.job_id, restricted_package_name: 'app.fletya.driver' },
+    data: { type: offer.event_type === 'cash_issue_payment_required' || offer.event_type === 'cash_issue_paid' || offer.event_type === 'cash_commission_settled' ? offer.event_type : 'new_service', notification_id: offer.notification_id, user_id: offer.user_id,
+      job_id: offer.job_id, registration_nonce: device.registration_nonce, ...(offer.event_type === 'cash_commission_settled' && offer.message ? { settlement_message: offer.message } : {}) },
+    android: { priority: 'HIGH', ttl: (offer.event_type?.startsWith('cash_issue_') || offer.event_type === 'cash_commission_settled') ? '600s' : '120s', collapse_key: (offer.event_type?.startsWith('cash_issue_') || offer.event_type === 'cash_commission_settled') ? 'cash_' + offer.job_id : offer.job_id, restricted_package_name: 'app.fletya.driver.pruebas' },
   } }; // Data-only: app validates current local user + login nonce before showing a notification.
 }
 export function invalidDevice(body: unknown): boolean {
