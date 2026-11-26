@@ -128,13 +128,14 @@ final class PushManager {
         prefs.edit().putStringSet("seen", seen).commit();
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         boolean isCash = !"new_service".equals(data.get("type"));
+        boolean isSettlement = "cash_commission_settled".equals(data.get("type"));
         String selectedChannel = isCash ? CASH_CHANNEL : CHANNEL;
         if (manager.getNotificationChannel(selectedChannel) == null) return;
         Intent intent = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent open = PendingIntent.getActivity(context, 77, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification notification = new Notification.Builder(context, selectedChannel).setSmallIcon(R.drawable.ic_truck)
-            .setContentTitle(isCash ? ("cash_issue_payment_required".equals(data.get("type")) ? "Pago pendiente de un servicio" : "Pago recuperado") : "Nueva solicitud de flete")
-            .setContentText(isCash ? "Abre FLETYA para consultar el reporte de pago." : "Abre FLETYA para consultar la disponibilidad.")
+            .setContentTitle(isSettlement ? "Comisiones liquidadas" : isCash ? ("cash_issue_payment_required".equals(data.get("type")) ? "Pago pendiente de un servicio" : "Pago recuperado") : "Nueva solicitud de flete")
+            .setContentText(isSettlement ? "Tu corte semanal fue liquidado. Consulta el detalle en FLETYA." : isCash ? "Abre FLETYA para consultar el reporte de pago." : "Abre FLETYA para consultar la disponibilidad.")
             .setContentIntent(open).setAutoCancel(true).setCategory(Notification.CATEGORY_RECOMMENDATION)
             .setVisibility(Notification.VISIBILITY_PRIVATE).build();
         if (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
