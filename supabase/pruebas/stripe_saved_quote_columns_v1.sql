@@ -1,0 +1,2 @@
+alter table private.stripe_sandbox_orders add column if not exists saved_quote_id uuid, add column if not exists cargo_description text, add column if not exists quoted_driver_payout numeric;
+create unique index if not exists stripe_sandbox_orders_saved_quote_unique on private.stripe_sandbox_orders(saved_quote_id) where saved_quote_id is not null;
