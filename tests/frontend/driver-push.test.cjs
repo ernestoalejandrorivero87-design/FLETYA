@@ -16,7 +16,7 @@ test('FCM data is scoped to recipient and login, short-lived and contains no add
  const body=make().fcmMessage(offer,offer.devices[0]);
  assert.equal(body.message.data.user_id,'driver-1');assert.equal(body.message.data.registration_nonce,'login-1');
  assert.equal(body.message.android.priority,'HIGH');assert.equal(body.message.android.ttl,'120s');
- assert.equal(body.message.android.restricted_package_name,'app.fletya.driver');
+ assert.equal(body.message.android.restricted_package_name,'app.fletya.driver.pruebas');
  assert.equal(body.message.notification,undefined);assert.equal(body.message.data.origin,undefined);assert.equal(body.message.data.price,undefined);
 });
 test('invalid token cleanup only handles explicit UNREGISTERED errors',()=>{
