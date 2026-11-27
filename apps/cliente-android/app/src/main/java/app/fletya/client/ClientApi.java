@@ -275,6 +275,18 @@ public final class ClientApi {
         return sandboxPayment(selected == null ? "status" : "start", selected, id, method);
     }
 
+    public synchronized JSONObject startSavedCargoCard(String savedQuoteId, String requestId, String description, double amount) throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) throw new Failure(403, "Disponible únicamente en Pruebas.");
+        java.util.UUID.fromString(savedQuoteId);
+        java.util.UUID.fromString(requestId);
+        if (!Double.isFinite(amount) || amount <= 0 || description == null || description.trim().length() < 3 || description.length() > 1500)
+            throw new Failure(400, "Revisa la cotización y la descripción.");
+        JSONObject body = new JSONObject().put("action", "start").put("id", requestId)
+            .put("saved_quote_id", savedQuoteId).put("description", description.trim())
+            .put("amount", amount).put("method", "card").put("flow", "authorize_then_capture");
+        return new JSONObject(call("POST", "/functions/v1/fletya-stripe-sandbox", body, null).body());
+    }
+
     public synchronized JSONObject cancelSandboxPayment() throws Exception {
         return sandboxPayment("cancel", null, null, null);
     }
