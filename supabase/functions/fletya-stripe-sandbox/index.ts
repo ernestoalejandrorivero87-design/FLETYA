@@ -1,11 +1,5 @@
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const pruebasProject = "https://ccdtpwvalqznasstnqxj.supabase.co";
-const pilotoProject = "https://wsdfqscrvfygxripmrzi.supabase.co";
-const sandboxProject = Deno.env.get("SUPABASE_URL");
-const allowedProject = sandboxProject === pruebasProject || sandboxProject === pilotoProject;
-const isPilot = sandboxProject === pilotoProject;
-const pilotEnabled = Deno.env.get("FLETYA_PILOT_CARD_ENABLED") === "true";
-const pilotParticipants = new Set((Deno.env.get("FLETYA_PILOT_CARD_PARTICIPANTS") ?? "").split(",").map(v => v.trim().toLowerCase()).filter(v => uuid.test(v)));
+const sandboxProject = "https://ccdtpwvalqznasstnqxj.supabase.co";
 const returnPage = sandboxProject + "/functions/v1/fletya-stripe-sandbox";
 const intentId = /^pi_[A-Za-z0-9]+$/;
 const refundId = /^re_[A-Za-z0-9]+$/;
@@ -29,17 +23,17 @@ function checkoutUrl(value: unknown): string {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === "GET" && allowedProject) {
+  if (request.method === "GET" && Deno.env.get("SUPABASE_URL") === sandboxProject) {
     return new Response(
-      "FLETYA Cliente - Pago de prueba\n\nVuelve a la app y toca Consultar pago para comprobar el estado del pago de prueba.",
+      "FLETYA Cliente - Pruebas\n\nVuelve a la app y toca Consultar pago para comprobar el estado del pago de prueba.",
       { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } },
     );
   }
   if (request.method !== "POST") return json({ message: "Método no permitido." }, 405);
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const stripeKey = Deno.env.get(sandboxProject === pilotoProject ? "FLETYA_PILOT_STRIPE_TEST_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY");
-  if (!allowedProject || !url || url !== sandboxProject || !serviceKey || !/^sk_test_[A-Za-z0-9]+$/.test(stripeKey ?? "")) {
+  const stripeKey = Deno.env.get("STRIPE_TEST_SECRET_KEY");
+  if (url !== sandboxProject || !serviceKey || !/^sk_test_[A-Za-z0-9]+$/.test(stripeKey ?? "")) {
     return json({ message: "El entorno de pagos de prueba aún no está configurado." }, 503);
   }
   const token = request.headers.get("Authorization");
@@ -176,16 +170,6 @@ Deno.serve(async (request) => {
     if (!uuid.test(user) || !body || !["start", "status", "cancel", "accept_card", "cancel_card", "refund_card"].includes(body.action)) {
       return json({ message: "Solicitud de pago inválida." }, 400);
     }
-    if (isPilot) {
-      if (body.action === "start" || body.action === "accept_card") {
-        if (!pilotEnabled || !pilotParticipants.has(user.toLowerCase())) {
-          return json({ message: "Tarjeta de prueba no habilitada para esta cuenta." }, 403);
-        }
-        if (body.action === "start" && body.method !== "card") {
-          return json({ message: "Piloto solo admite tarjeta de prueba." }, 400);
-        }
-      }
-    }
     if (body.action === "refund_card") {
       if (!uuid.test(body.id)) return json({ message: "Solicitud inválida." }, 400);
       const result = await refund("request", body.id, user);
@@ -209,14 +193,15 @@ Deno.serve(async (request) => {
       if (body.method === "card" && body.flow !== "authorize_then_capture") {
         return json({ message: "Actualiza FLETYA Cliente Pruebas para autorizar la tarjeta." }, 426);
       }
-      if (!uuid.test(body.id) || !uuid.test(body.quote) || !["card", "spei"].includes(body.method)) {
+      const saved = body.saved_quote_id !== undefined;
+      if (!uuid.test(body.id) || (saved ? (!uuid.test(body.saved_quote_id) || body.method !== "card" || typeof body.description !== "string") : !uuid.test(body.quote)) || !["card", "spei"].includes(body.method)) {
         return json({ message: "Revisa la cotización y el método de pago." }, 400);
       }
       if (order && order.id !== body.id) {
         return json({ message: "Ya tienes un pago en curso. Revisa su estado." }, 409);
       }
       try {
-        order = await db("reserve", user, {
+        order = saved ? await rpc("stripe_reserve_saved_quote_v1", { p_client: user, p_id: body.id, p_saved_quote: body.saved_quote_id, p_description: body.description, p_amount: body.amount }) : await db("reserve", user, {
           p_id: body.id, p_quote: body.quote, p_vehicle: body.vehicle, p_helpers: body.helpers,
           p_service: body.service, p_amount: body.amount, p_method: body.method,
         });
