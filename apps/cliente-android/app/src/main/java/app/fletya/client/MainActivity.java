@@ -285,12 +285,29 @@ public final class MainActivity extends Activity {
                     }
                     String currentCargo=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
                     if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim()) || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(currentCargo) || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition() || h!=helpers.getSelectedItemPosition() || !String.valueOf(p).equals(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim()) || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim()) || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked() || fragileSnapshot!=fragile.isChecked()) {routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar para ver un precio actualizado.");return;}
-                    result.setText(price.optBoolean("available")?"Cotización de prueba\n\n"+money(price.getDouble("total"))+"\n"+String.format(java.util.Locale.getDefault(),"%.2f km",price.getDouble("distance_km"))+" · "+vehicle.getSelectedItem()+"\n"+category.getSelectedItem()+" · "+helpers.getSelectedItem()+"\nPago en efectivo al entregar\n\nPrecio sujeto a los datos indicados.":"No hay una tarifa disponible para este vehículo.");
+                    result.setText(price.optBoolean("available")?"Cotización de prueba\n\n"+money(price.getDouble("total"))+"\n"+String.format(java.util.Locale.getDefault(),"%.2f km",price.getDouble("distance_km"))+" · "+vehicle.getSelectedItem()+"\n"+category.getSelectedItem()+" · "+helpers.getSelectedItem()+"\n\nPrecio sujeto a los datos indicados.":"No hay una tarifa disponible para este vehículo.");
                     if(price.optBoolean("available") && price.has("saved_quote_id")) {
                         final String savedQuote=price.getString("saved_quote_id");
                         final String requestId=UUID.randomUUID().toString();
                         final String quotedDescription=description.getText().toString().trim();
                         final String quotedSummary=summary;
+                        final android.widget.RadioGroup methods=new android.widget.RadioGroup(appearance.context());
+                        methods.setOrientation(LinearLayout.VERTICAL);
+                        final android.widget.RadioButton cash=new android.widget.RadioButton(appearance.context());
+                        final android.widget.RadioButton cardPayment=new android.widget.RadioButton(appearance.context());
+                        cash.setId(View.generateViewId());cardPayment.setId(View.generateViewId());
+                        cash.setText("Efectivo · paga al entregar");
+                        cardPayment.setText("Tarjeta de débito o crédito · Stripe");
+                        methods.addView(cash);methods.addView(cardPayment);
+                        text(routeReview,"Método de pago",16,true);
+                        routeReview.addView(methods);
+                        final TextView paymentHint=text(routeReview,"Paga al fletero al entregar la carga.",13,false);
+                        methods.check(cash.getId());
+                        methods.setOnCheckedChangeListener((group,checked)->{
+                            boolean card=checked==cardPayment.getId();
+                            quoteButton[0].setText(card?"Autorizar "+money(price.optDouble("total")):"Confirmar flete");
+                            paymentHint.setText(card?"El importe se reserva y solo se cobra si un fletero acepta.":"Paga al fletero al entregar la carga.");
+                        });
                         confirmAction[0]=()->{
                             String current=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
                             if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim())
@@ -301,16 +318,17 @@ public final class MainActivity extends Activity {
                                 || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim())) {
                                 routeReview.removeAllViews();confirmAction[0]=null;quoteButton[0].setText("Ver precio");result.setText("Cambiaste los datos. Vuelve a cotizar antes de confirmar.");return;
                             }
+                            final boolean payByCard=methods.getCheckedRadioButtonId()==cardPayment.getId();
                             dialog()
-                                .setTitle("Confirmar solicitud de prueba")
-                                .setMessage("Se enviará un pedido al sistema de Pruebas. Pago en efectivo. Total: "+money(price.optDouble("total"))+"\n\n"+quotedSummary.replace("Vista previa: sin pedido ni cobro.",""))
+                                .setTitle(payByCard?"Autorizar tarjeta de prueba":"Confirmar solicitud de prueba")
+                                .setMessage((payByCard?"Stripe reservará el importe. Solo se cobra si un fletero acepta. Total: ":"Se enviará un pedido al sistema de Pruebas. Pago en efectivo. Total: ")+money(price.optDouble("total"))+"\n\n"+quotedSummary.replace("Vista previa: sin pedido ni cobro.",""))
                                 .setNegativeButton("Volver",null)
-                                .setPositiveButton("Solicitar flete",(dialog,which)->{
+                                .setPositiveButton(payByCard?"Ir a Stripe":"Solicitar flete",(dialog,which)->{
                                     if(busy){result.setText("Actualizando datos. Espera e intenta confirmar nuevamente.");return;}
                                     result.setText("Enviando solicitud…");
                                     quoteButton[0].setEnabled(false);
                                     task(()->{
-                                        try{return api.confirmSavedCargoQuote(savedQuote,requestId,quotedDescription);}
+                                        try{return payByCard?api.startSavedCargoCard(savedQuote,requestId,quotedDescription,price.optDouble("total")):api.confirmSavedCargoQuote(savedQuote,requestId,quotedDescription);}
                                         catch(Exception error){
                                             JSONObject failure=new JSONObject();
                                             failure.put("confirmation_error",error instanceof ClientApi.Failure?error.getMessage():"No se pudo verificar el envío. Consulta el seguimiento antes de reintentar.");
@@ -322,6 +340,14 @@ public final class MainActivity extends Activity {
                                             String error=job.optString("confirmation_error");
                                             result.setText(error);
                                             dialog().setTitle("No se pudo confirmar").setMessage(error).setPositiveButton("Entendido",null).show();
+                                            return;
+                                        }
+                                        if(payByCard){
+                                            if("pending".equals(job.optString("state"))){
+                                                resetDraft();
+                                                renderPayment(job);
+                                                if(!job.isNull("url") && !job.optString("url").isEmpty())open(job.optString("url"));
+                                            }else refresh();
                                             return;
                                         }
                                         routeReview.removeAllViews();
