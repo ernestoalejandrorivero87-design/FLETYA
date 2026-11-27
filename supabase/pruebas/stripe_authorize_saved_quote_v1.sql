@@ -50,6 +50,7 @@ begin
     end if;
     if attempt.card_state is distinct from 'held' or attempt.hold_until <= now()
        or job.status is distinct from 'requested' or job.driver_id is not null
+       or (attempt.saved_quote_id is not null and not private.driver_job_vehicle_eligible_v2(p_id,p_actor))
        or exists(select 1 from public.jobs where driver_id=p_actor and status in ('accepted','en_route','picked_up')) then
       return null;
     end if;
