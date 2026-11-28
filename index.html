@@ -285,14 +285,14 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
 <div class="card" id="adminApplicationsPanel"><h2>Nuevas cuentas de fletero</h2><p>Revisa los datos y la documentación del conductor antes de autorizar su acceso al piloto.</p><button class="btn light" onclick="loadDriverApplications()">Consultar cuentas pendientes</button><div id="driverApplications"></div></div>
 <div class="grid admin-kpis" id="adminOverview">
 <div class="card"><h3>Servicios</h3><div class="price" id="jobsCount">0</div><span class="muted">solicitudes</span></div>
-<div class="card"><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
-<div class="card"><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
+<div class="card"><h3>Valor de servicios</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
+<div class="card"><h3>Comisión generada</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
 <div class="card"><h3>Fletero recibe</h3><div class="price" id="driverNet">$0</div><span class="muted">85% en este demo</span></div>
  <div class="card"><h3>🟡 Solicitados</h3><div class="price" id="requestedCount">0</div><span class="muted">servicios pendientes</span></div>
 <div class="card"><h3>🔵 En camino</h3><div class="price" id="enRouteCount">0</div><span class="muted">servicios activos</span></div>
 <div class="card"><h3>🟢 Completados</h3><div class="price" id="completedCount">0</div><span class="muted">servicios terminados</span></div>
 <div class="card"><h3>⚪ Cancelados</h3><div class="price" id="cancelledCount">0</div><span class="muted">solicitudes canceladas</span></div>
- <div class="card"><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">valor de servicios no cancelados</span></div>
+ <div class="card"><h3>💰 Valor de servicios del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">valor de servicios no cancelados</span></div>
 
 <div class="card"><h3>🚚 Servicios del mes</h3><div class="price" id="monthlyJobs">0</div><span class="muted">servicios registrados</span></div>
 
@@ -315,7 +315,7 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
 
   <div class="grid" style="margin-top:12px">
     <div class="card">
-      <h3>💰 Ventas</h3>
+      <h3>💰 Valor de servicios</h3>
       <div class="price" id="reportSales">$0</div>
     </div>
 
@@ -325,12 +325,12 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
     </div>
 
     <div class="card">
-      <h3>💵 Comisión FLETYA</h3>
+      <h3>💵 Comisión generada</h3>
       <div class="price" id="reportCommission">$0</div>
     </div>
 
     <div class="card">
-      <h3>🧑‍🔧 Fleteros reciben</h3>
+      <h3>🧑‍🔧 Neto generado para fleteros</h3>
       <div class="price" id="reportDriverNet">$0</div>
     </div>
   </div>
