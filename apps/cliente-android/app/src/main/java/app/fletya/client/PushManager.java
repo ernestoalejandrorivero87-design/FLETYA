@@ -124,9 +124,12 @@ final class PushManager {
         if (manager.getNotificationChannel(CHANNEL) == null) return;
         Intent intent = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("notice_job_id",data.get("job_id"));
         PendingIntent open = PendingIntent.getActivity(context, id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        String type = data.get("type");
+        String body = type != null && type.startsWith("client_refund_") ? data.get("refund_message") : null;
+        if (body == null || body.isBlank()) body = "Abre FLETYA para consultar el estado del servicio.";
         Notification notification = new Notification.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_client)
             .setContentTitle(ClientNotices.title(data.get("type")))
-            .setContentText("Abre FLETYA para consultar el estado del servicio.")
+            .setContentText(body).setStyle(new Notification.BigTextStyle().bigText(body))
             .setContentIntent(open).setAutoCancel(true).setCategory(Notification.CATEGORY_STATUS)
             .setVisibility(Notification.VISIBILITY_PRIVATE).build();
         if (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
