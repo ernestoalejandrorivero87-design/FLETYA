@@ -128,7 +128,9 @@ final class PushManager {
         prefs.edit().putStringSet("seen", seen).commit();
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         boolean isCash = !"new_service".equals(data.get("type"));
-        boolean isSettlement = "cash_commission_settled".equals(data.get("type"));
+        boolean isAdjustment = "sandbox_refund_adjustment_resolved".equals(data.get("type"));
+        boolean isRecovery = "sandbox_refund_recovery_confirmed".equals(data.get("type"));
+        boolean isSettlement = "cash_commission_settled".equals(data.get("type")) || isAdjustment || isRecovery;
         String selectedChannel = isCash ? CASH_CHANNEL : CHANNEL;
         if (manager.getNotificationChannel(selectedChannel) == null) return;
         Intent intent = new Intent(context, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -136,7 +138,7 @@ final class PushManager {
         String settlementMessage = data.get("settlement_message");
         if (settlementMessage == null || settlementMessage.trim().isEmpty()) settlementMessage = "Tu corte semanal fue liquidado. Consulta el detalle en FLETYA.";
         Notification.Builder builder = new Notification.Builder(context, selectedChannel).setSmallIcon(R.drawable.ic_truck)
-            .setContentTitle(isSettlement ? "Comisiones liquidadas" : isCash ? ("cash_issue_payment_required".equals(data.get("type")) ? "Pago pendiente de un servicio" : "Pago recuperado") : "Nueva solicitud de flete")
+            .setContentTitle(isSettlement ? (isAdjustment ? "Ajuste financiero resuelto" : isRecovery ? "Reintegro confirmado" : "Comisiones liquidadas") : isCash ? ("cash_issue_payment_required".equals(data.get("type")) ? "Pago pendiente de un servicio" : "Pago recuperado") : "Nueva solicitud de flete")
             .setContentText(isSettlement ? settlementMessage : isCash ? "Abre FLETYA para consultar el reporte de pago." : "Abre FLETYA para consultar la disponibilidad.")
             .setContentIntent(open).setAutoCancel(true).setCategory(Notification.CATEGORY_RECOMMENDATION)
             .setVisibility(Notification.VISIBILITY_PRIVATE);
