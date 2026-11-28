@@ -380,7 +380,11 @@ public final class MainActivity extends Activity {
         NumberFormat money = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX"));
         text(box, money.format(job.optDouble("price", 0)) + " MXN", 24, true).setTextColor(appearance.accent());
         if ("cash".equals(job.optString("payment_method"))) {
-            text(box, "Cobras en efectivo al entregar", 16, true);
+            String cashStatus = "completed".equals(job.optString("status"))
+                ? (!job.isNull("cash_collected_at") && !job.optString("cash_collected_at").isEmpty()
+                    ? "Pagado · cobro confirmado" : "Cobro pendiente de confirmación")
+                : "Cobras en efectivo al entregar";
+            text(box, cashStatus, 16, true);
         }
         if (!job.isNull("sandbox_payment_method")) {
             text(box, "Tarjeta de prueba · No cobrar efectivo ni esperar transferencia real", 16, true);
@@ -649,14 +653,24 @@ public final class MainActivity extends Activity {
             message.setText("");
         });
     }
+    private String historyDate(String value) {
+        try {
+            return java.time.OffsetDateTime.parse(value).atZoneSameInstant(java.time.ZoneId.of("America/Cancun"))
+                .format(java.time.format.DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", java.util.Locale.forLanguageTag("es-MX")));
+        } catch (java.time.DateTimeException e) { return "Fecha no disponible"; }
+    }
+    private void historyReference(LinearLayout box, JSONObject job) {
+        String id = job.optString("id", "");
+        if (!id.isEmpty()) text(box, "Servicio #" + id.substring(0, Math.min(8, id.length())).toUpperCase(java.util.Locale.ROOT), 14, true);
+    }
     private void history() {
         int page = historyPage;
         task(() -> api.history(page * 5), rows -> {
             screen = "history"; shell(); card("Mis servicios completados");
             for (int i = 0; i < Math.min(5, rows.length()); i++) {
                 JSONObject job = rows.getJSONObject(i);
-                LinearLayout box = card("Completado"); jobDetails(box, job);
-                text(box, job.optString("created_at").split("T")[0], 13, false);
+                LinearLayout box = card("Completado"); historyReference(box, job); jobDetails(box, job);
+                text(box, historyDate(job.optString("created_at")), 13, false);
             }
             if (rows.length() == 0) text(root, "No hay servicios en esta página.", 16, false);
             text(root, "Página " + (page + 1), 14, false);
