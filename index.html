@@ -97,6 +97,16 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 #admin .admin-nav{background:var(--a-card);border:1px solid var(--a-border);padding:10px;border-radius:14px}
 @media(min-width:1050px){#appMain:has(#admin:not(.hidden)){max-width:1600px;padding:20px 28px}#admin{padding:18px 18px 18px 252px;min-height:75vh}#admin .admin-nav{position:absolute;left:14px;top:18px;width:220px;display:flex;flex-direction:column;gap:5px}#admin .admin-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:1049px){#admin .admin-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}#admin .admin-nav-brand{grid-column:1/-1}}
+</style><style>
+#admin .admin-kpis{align-items:stretch}
+#admin .admin-kpis .card{min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+#admin .admin-kpis .price{white-space:nowrap;overflow-wrap:normal;font-size:clamp(17px,2.1vw,27px)}
+#admin .admin-kpis :is(#sales,#commission,#driverNet,#monthlySales,#monthlyCommission)::after{content:" MXN";display:block;font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--a-muted)}
+body:has(#admin:not(.hidden)) #appHeader{background:#142640;border-color:#35465e}
+body:has(#admin:not(.hidden)) #appHeader .logo{color:#fff}
+body:has(#admin:not(.hidden)) #appHeader .logo span{color:#f2c65c}
+@media(max-width:1049px){#admin .admin-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#admin .admin-kpis .price{font-size:clamp(20px,3.5vw,30px)}}
+@media(min-width:1050px) and (max-width:1300px){#admin .admin-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style></head>
 <body>
 <header id="appHeader">
