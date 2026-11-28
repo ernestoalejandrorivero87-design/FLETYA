@@ -116,6 +116,17 @@ body:has(#admin:not(.hidden)[data-theme="dark"]) #jobModal button{color:inherit}
 #admin input::placeholder{color:var(--a-muted);opacity:1}
 #admin :is(#reportSales,#reportCommission,#reportDriverNet)::after{content:" MXN";font-size:11px;color:var(--a-muted)}
 @media(max-width:1049px){#appMain:has(#admin:not(.hidden)){width:100%;max-width:none;padding:12px}#admin .admin-nav button{font-size:14px}#admin .admin-nav button:last-child{grid-column:1/-1;border:1px solid var(--a-border);justify-content:center}}
+</style><style>
+body:has(#access:not(.hidden) #authAdmin:not(.hidden)){background:#f4f6fa;color:#17243b}
+body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader{background:#142640;border-color:#35465e}
+body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo{color:#fff}
+body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{color:#f2c65c}
+#access:has(#authAdmin:not(.hidden)) .access-hero{background:linear-gradient(125deg,#142640,#233e65);border:1px solid #405675}
+#access:has(#authAdmin:not(.hidden)) .eyebrow{color:#f2c65c}
+#access:has(#authAdmin:not(.hidden)) .access-card{border-color:#dce3ed;box-shadow:0 12px 35px #14264012}
+#authAdmin .btn{background:#203b65;color:white}
+#authAdmin input:focus{outline:2px solid #c79b38;outline-offset:2px}
+#authAdmin input{border-color:#dce3ed}
 </style></head>
 <body>
 <header id="appHeader">
