@@ -7,9 +7,9 @@ type Runtime = { env: (name: string) => string | undefined; fetch: typeof fetch;
 export function fcmMessage(offer: Offer, device: Device) {
   return { message: {
     token: device.token,
-    data: { type: offer.event_type === 'cash_issue_payment_required' || offer.event_type === 'cash_issue_paid' || offer.event_type === 'cash_commission_settled' ? offer.event_type : 'new_service', notification_id: offer.notification_id, user_id: offer.user_id,
-      job_id: offer.job_id, registration_nonce: device.registration_nonce, ...(offer.event_type === 'cash_commission_settled' && offer.message ? { settlement_message: offer.message } : {}) },
-    android: { priority: 'HIGH', ttl: (offer.event_type?.startsWith('cash_issue_') || offer.event_type === 'cash_commission_settled') ? '600s' : '120s', collapse_key: (offer.event_type?.startsWith('cash_issue_') || offer.event_type === 'cash_commission_settled') ? 'cash_' + offer.job_id : offer.job_id, restricted_package_name: 'app.fletya.driver.pruebas' },
+    data: { type: offer.event_type === 'cash_issue_payment_required' || offer.event_type === 'cash_issue_paid' || (['cash_commission_settled','sandbox_refund_adjustment_resolved','sandbox_refund_recovery_confirmed'].includes(offer.event_type ?? '')) ? offer.event_type : 'new_service', notification_id: offer.notification_id, user_id: offer.user_id,
+      job_id: offer.job_id, registration_nonce: device.registration_nonce, ...((['cash_commission_settled','sandbox_refund_adjustment_resolved','sandbox_refund_recovery_confirmed'].includes(offer.event_type ?? '')) && offer.message ? { settlement_message: offer.message } : {}) },
+    android: { priority: 'HIGH', ttl: (offer.event_type?.startsWith('cash_issue_') || (['cash_commission_settled','sandbox_refund_adjustment_resolved','sandbox_refund_recovery_confirmed'].includes(offer.event_type ?? ''))) ? '600s' : '120s', collapse_key: (offer.event_type?.startsWith('cash_issue_') || (['cash_commission_settled','sandbox_refund_adjustment_resolved','sandbox_refund_recovery_confirmed'].includes(offer.event_type ?? ''))) ? 'financial_' + offer.event_type + '_' + offer.job_id : offer.job_id, restricted_package_name: 'app.fletya.driver.pruebas' },
   } }; // Data-only: app validates current local user + login nonce before showing a notification.
 }
 export function invalidDevice(body: unknown): boolean {
