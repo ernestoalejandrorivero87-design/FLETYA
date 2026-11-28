@@ -16,7 +16,7 @@ test('FCM data is scoped to recipient and login, short-lived and contains no add
  const body=make().fcmMessage(offer,offer.devices[0]);
  assert.equal(body.message.data.user_id,'client-1');assert.equal(body.message.data.registration_nonce,'login-1');
  assert.equal(body.message.android.priority,'HIGH');assert.equal(body.message.android.ttl,'600s');
- assert.equal(body.message.android.restricted_package_name,'app.fletya.client');
+ assert.equal(body.message.android.restricted_package_name,'app.fletya.client.pruebas');
  assert.equal(body.message.notification,undefined);assert.equal(body.message.data.origin,undefined);assert.equal(body.message.data.price,undefined);
 });
 test('invalid token cleanup only handles explicit UNREGISTERED errors',()=>{
@@ -37,7 +37,7 @@ test('missing Firebase server credentials defers eligible offers without pretend
  assert.equal(calls[1].body.p_result,'retry');assert.equal(calls.length,2);
 });
 test('credential diagnostics never return the secret or its contents',async()=>{
- for(const [secret,expected] of [['not-json','invalid_json'],[JSON.stringify({project_id:'wrong'}),'wrong_project'],[JSON.stringify({project_id:'fletya'}),'missing_service_account_fields']]){
+ for(const [secret,expected] of [['not-json','json_missing_opening_brace'],[JSON.stringify({project_id:'wrong'}),'wrong_project'],[JSON.stringify({project_id:'fletya'}),'missing_service_account_fields']]){
   const handler=make().handler({env:env({SUPABASE_URL:'https://db.example',SUPABASE_SERVICE_ROLE_KEY:'synthetic',FIREBASE_SERVICE_ACCOUNT_JSON:secret}),fetch:async()=>Response.json([]),now:Date.now,crypto});
   const value=await(await handler(request('a'.repeat(64)))).json();
   assert.equal(value.configuration,expected);assert.equal(value.configured,false);
@@ -61,4 +61,10 @@ test('Google OAuth and send are server-side, successful delivery is acknowledged
  const response=await(await handler(request('a'.repeat(64)))).json();assert.equal(response.sent,1);
  assert.match(calls[1].body.toString(),/grant_type=urn/);assert.equal(JSON.parse(calls[3].body).p_result,'sent');
  assert.equal(JSON.parse(calls[2].body).message.data.user_id,'client-1');
+});
+
+test('refund events carry their own message and distinct collapse keys',()=>{
+ const api=make(); const a=api.fcmMessage({...offer,event_type:'client_refund_approved',message:'Approved test refund'},offer.devices[0]).message;
+ const b=api.fcmMessage({...offer,event_type:'client_refund_confirmed',message:'MXN 420.00'},offer.devices[0]).message;
+ assert.equal(a.data.refund_message,'Approved test refund');assert.equal(b.data.refund_message,'MXN 420.00');assert.notEqual(a.android.collapse_key,b.android.collapse_key);assert.equal(b.data.user_id,'client-1');
 });
