@@ -6,7 +6,30 @@ import java.net.URI;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
-final class HttpTransport implements DriverApi.Transport {
+final class HttpTransport implements DriverApi.Transport, DriverApi.DocumentTransport {
+    @Override public DriverApi.Response upload(String path, String accessToken, String mime, byte[] data) throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT) || !path.startsWith("/storage/v1/object/driver-documents/") || accessToken == null || accessToken.isBlank())
+            throw new SecurityException("Carga no autorizada");
+        HttpURLConnection connection = (HttpURLConnection) URI.create(BuildConfig.SUPABASE_URL + path).toURL().openConnection();
+        connection.setInstanceFollowRedirects(false);
+        connection.setConnectTimeout(12000);
+        connection.setReadTimeout(60000);
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("apikey", BuildConfig.SUPABASE_KEY);
+        connection.setRequestProperty("Authorization", "Bearer " + accessToken);
+        connection.setRequestProperty("Content-Type", mime);
+        connection.setRequestProperty("x-upsert", "false");
+        connection.setDoOutput(true);
+        connection.setFixedLengthStreamingMode(data.length);
+        try {
+            try (var out = connection.getOutputStream()) { out.write(data); }
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            String value = "";
+            if (stream != null) try (stream) { value = readUtf8(stream); }
+            return new DriverApi.Response(status, value);
+        } finally { connection.disconnect(); }
+    }
     private String readUtf8(InputStream stream) throws java.io.IOException {
         java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
         byte[] buffer = new byte[8192];
