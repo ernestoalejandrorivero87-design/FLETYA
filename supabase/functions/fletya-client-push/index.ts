@@ -1,6 +1,6 @@
 // Server-only FCM HTTP v1 sender. No credentials, token values or payloads are logged.
 type Device = { installation_id: string; token: string; registration_nonce: string };
-type Offer = { notification_id: string; user_id: string; job_id: string; attempt: number; event_type: string; devices: Device[] };
+type Offer = { notification_id: string; user_id: string; job_id: string; attempt: number; event_type: string; message?: string | null; devices: Device[] };
 type ServiceAccount = { project_id: string; client_email: string; private_key: string };
 type Runtime = { env: (name: string) => string | undefined; fetch: typeof fetch; now: () => number; crypto: Crypto };
 
@@ -8,8 +8,8 @@ export function fcmMessage(offer: Offer, device: Device) {
   return { message: {
     token: device.token,
     data: { type: offer.event_type, notification_id: offer.notification_id, user_id: offer.user_id,
-      job_id: offer.job_id, registration_nonce: device.registration_nonce },
-    android: { priority: 'HIGH', ttl: '600s', collapse_key: offer.job_id, restricted_package_name: 'app.fletya.client' },
+      job_id: offer.job_id, registration_nonce: device.registration_nonce, ...(offer.event_type.startsWith('client_refund_') && offer.message ? { refund_message: offer.message } : {}) },
+    android: { priority: 'HIGH', ttl: '600s', collapse_key: offer.event_type.startsWith('client_refund_') ? offer.event_type + '_' + offer.job_id : offer.job_id, restricted_package_name: 'app.fletya.client.pruebas' },
   } }; // Data-only: app validates current local user + login nonce before showing a notification.
 }
 export function invalidDevice(body: unknown): boolean {
@@ -64,7 +64,15 @@ export function handler(runtime: Runtime) {
     let configuration = configured ? 'invalid_json' : 'missing_secret';
     try {
       if (configured) {
-        account = JSON.parse(configured);
+        const raw = configured.trim().replace(/^\uFEFF/, '');
+        try {
+          const normalized = raw.replace(/("private_key"\s*:\s*")([^"]*)(")/, (_match, prefix, value, suffix) => prefix + value.replace(/\r\n|\r|\n/g, '\\n') + suffix);
+          account = JSON.parse(normalized);
+          if (typeof account === 'string') account = JSON.parse(account);
+        } catch {
+          configuration = !raw.startsWith('{') ? 'json_missing_opening_brace' : !raw.endsWith('}') ? 'json_missing_closing_brace' : /[\u201c\u201d]/.test(raw) ? 'json_typographic_quotes' : /"private_key"\s*:\s*"[^"]*[\r\n]/.test(raw) ? 'json_literal_newline_in_key' : 'json_syntax_error';
+          throw new Error('Invalid credential format');
+        }
         if (account?.project_id !== 'fletya') { account = null; configuration = 'wrong_project'; }
         else if (typeof account.client_email !== 'string' || typeof account.private_key !== 'string'
             || !account.private_key.includes('-----BEGIN PRIVATE KEY-----')) { account = null; configuration = 'missing_service_account_fields'; }
