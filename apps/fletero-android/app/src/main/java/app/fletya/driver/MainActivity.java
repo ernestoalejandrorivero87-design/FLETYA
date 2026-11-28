@@ -213,7 +213,7 @@ public final class MainActivity extends Activity {
     private void refresh() {
         if (busy || !visible || requestingNotices || !api.signedIn()) return;
         if ("history".equals(screen)) { history(); return; }
-        if ("profile".equals(screen) || "appearance".equals(screen)) return;
+        if ("profile".equals(screen) || "appearance".equals(screen) || "documents".equals(screen)) return;
         task(() -> {
             JSONObject profile = api.profile();
             JSONArray jobs = "approved".equals(profile.optString("driver_status","approved")) ? api.activeJobs() : new JSONArray();
@@ -228,7 +228,7 @@ public final class MainActivity extends Activity {
                 stopService(new Intent(this,TrackingService.class));PushManager.disableLocally(this);active=null;clearRoute();
                 LinearLayout pending=card("pending".equals(panel.profile().optString("driver_status"))?"Cuenta pendiente de aprobación":"Cuenta no autorizada");
                 text(pending,"Completa tu nombre, teléfono, vehículo y placas en Mi perfil. Administración debe revisar tu cuenta antes de que puedas recibir o aceptar servicios.",16,false);
-                button(pending,"Completar mi perfil",this::profile);button(root,"Consultar aprobación",this::refresh);message.setText("");return;
+                button(pending,"Completar mi perfil",this::profile);if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) button(pending,"Mi documentación",this::showDocuments);button(root,"Consultar aprobación",this::refresh);message.setText("");return;
             }
             if (panel.active().length() == 0 && PushManager.shouldRequestOnFirstUse(this)) {
                 requestNoticePermission();
@@ -342,6 +342,7 @@ public final class MainActivity extends Activity {
         PopupMenu menu = new PopupMenu(appearance.context(), anchor);
         menu.getMenu().add(0, 1, 0, "Mi servicio / Solicitudes");
         menu.getMenu().add(0, 2, 1, "Mi perfil");
+        if ("PRUEBAS".equals(BuildConfig.ENVIRONMENT)) menu.getMenu().add(0, 8, 2, "Mi documentación");
         menu.getMenu().add(0, 3, 2, "Mis servicios completados");
         if (BuildConfig.PUSH_ENABLED) menu.getMenu().add(0, 4, 3, "Avisos de solicitudes");
         menu.getMenu().add(0, 6, 4, "Comisión en efectivo");
@@ -352,6 +353,7 @@ public final class MainActivity extends Activity {
             switch (item.getItemId()) {
                 case 1 -> { screen = "home"; refresh(); }
                 case 2 -> profile();
+                case 8 -> showDocuments();
                 case 3 -> { screen = "history"; historyPage = 0; history(); }
                 case 4 -> new AlertDialog.Builder(appearance.context()).setTitle("Avisos de solicitudes")
                     .setMessage(PushManager.report()).setNegativeButton("Volver", null)
@@ -620,6 +622,72 @@ public final class MainActivity extends Activity {
     private void open(String uri, String action) {
         try { startActivity(new Intent(action, Uri.parse(uri))); }
         catch (ActivityNotFoundException error) { message.setText("No se encontró una aplicación para abrir el enlace."); }
+    }
+    private String documentKind, documentExpiry, documentOwner;
+    private void showDocuments() {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) return;
+        task(api::myDocuments, this::renderDocuments);
+    }
+    private void renderDocuments(JSONArray docs) {
+        screen="documents"; shell();
+        String[] kinds={"portrait","license","vehicle","registration","mobility_permit"};
+        String[] labels={"Fotografía personal","Licencia de conducir","Fotografía del vehículo","Tarjeta de circulación","Permiso de movilidad"};
+        java.util.Map<String,JSONObject> latest=new java.util.HashMap<>();
+        for(int i=0;i<docs.length();i++){JSONObject d=docs.optJSONObject(i);if(d!=null)latest.put(d.optString("document_type"),d);}
+        int approved=0;
+        for(int i=0;i<4;i++){JSONObject d=latest.get(kinds[i]);if(d!=null&&"approved".equals(d.optString("review_state"))&&!documentExpired(d))approved++;}
+        LinearLayout summary=card("Mi documentación");
+        text(summary,approved+" de 4 documentos obligatorios aprobados",16,true);
+        ProgressBar progress=new ProgressBar(appearance.context(),null,android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(4);progress.setProgress(approved);summary.addView(progress);
+        text(summary,"Tus archivos son privados. Solo tú y Administración pueden consultarlos.",14,false);
+        for(int i=0;i<kinds.length;i++){
+            final String kind=kinds[i];JSONObject d=latest.get(kind);
+            LinearLayout box=card(labels[i]);text(box,i==4?"Según corresponda":"Obligatorio",14,false);
+            String state=d==null?"":d.optString("review_state");
+            boolean expired=d!=null&&documentExpired(d);
+            text(box,expired?"Vencido":switch(state){case "approved"->"Aprobado";case "in_review"->"En revisión";case "rejected"->"Rechazado";default->"Sin adjuntar";},16,true);
+            if(d!=null&&!d.isNull("expires_on"))text(box,"Vigencia: "+d.optString("expires_on"),14,false);
+            if(d!=null&&"rejected".equals(state)&&!d.isNull("review_note"))text(box,"Motivo: "+d.optString("review_note"),14,false);
+            if(d==null||expired||"rejected".equals(state))button(box,d==null?"Adjuntar archivo":"Sustituir documento",()->chooseDocument(kind));
+        }
+        button(root,"Actualizar documentación",this::showDocuments);
+        button(root,"Volver al inicio",()->{screen="home";refresh();},false);
+        message.setText("");
+    }
+    private boolean documentExpired(JSONObject d){
+        try{return !d.isNull("expires_on")&&java.time.LocalDate.parse(d.optString("expires_on")).isBefore(java.time.LocalDate.now(java.time.ZoneId.of("America/Cancun")));}catch(Exception e){return true;}
+    }
+    private void chooseDocument(String kind){
+        if(java.util.Set.of("license","registration","mobility_permit").contains(kind)){
+            java.util.Calendar now=java.util.Calendar.getInstance();
+            DatePickerDialog picker=new DatePickerDialog(appearance.context(),(view,y,m,d)->launchDocument(kind,String.format(Locale.ROOT,"%04d-%02d-%02d",y,m+1,d)),now.get(java.util.Calendar.YEAR),now.get(java.util.Calendar.MONTH),now.get(java.util.Calendar.DAY_OF_MONTH));
+            picker.setTitle("Fecha de vencimiento");picker.getDatePicker().setMinDate(System.currentTimeMillis()-86400000L);picker.show();
+        }else launchDocument(kind,null);
+    }
+    private void launchDocument(String kind,String expiry){
+        documentKind=kind;documentExpiry=expiry;documentOwner=api.userId();
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/jpeg","image/png","application/pdf"});
+        try{startActivityForResult(intent,831);}catch(ActivityNotFoundException e){message.setText("No se encontró un selector de archivos.");}
+    }
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request!=831)return;
+        String kind=documentKind,expiry=documentExpiry,owner=documentOwner;documentKind=null;documentExpiry=null;documentOwner=null;
+        if(result!=RESULT_OK||data==null||data.getData()==null||kind==null||!api.userId().equals(owner)||!"documents".equals(screen))return;
+        Uri uri=data.getData();
+        task(()->{
+            String mime=getContentResolver().getType(uri);
+            if(mime==null||!java.util.Set.of("image/jpeg","image/png","application/pdf").contains(mime))throw new DriverApi.Failure(400,"Selecciona JPG, PNG o PDF.");
+            try(java.io.InputStream in=getContentResolver().openInputStream(uri);java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
+                if(in==null)throw new DriverApi.Failure(400,"No se pudo abrir el archivo.");
+                byte[] buffer=new byte[8192];int n;
+                while((n=in.read(buffer))!=-1){if(out.size()+n>10485760)throw new DriverApi.Failure(400,"El archivo supera 10 MB.");out.write(buffer,0,n);}
+                api.uploadDocument(kind,mime,out.toByteArray(),expiry,new HttpTransport());
+            }
+            return api.myDocuments();
+        },docs->{renderDocuments(docs);message.setText("Documento enviado a revisión.");});
     }
     private void profile() {
         task(api::profile, profile -> {
