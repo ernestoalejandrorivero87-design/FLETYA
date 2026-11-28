@@ -666,7 +666,17 @@ public final class MainActivity extends Activity {
             clearTrackingMap();screen="notice";shell();LinearLayout box=card(ClientRules.status(job.optString("status")));details(box,job);button(root,"Historial de servicios",()->{historyPage=0;history();});button(root,"Volver a solicitar",()->{screen="home";refresh();});message.setText("");
         });
     }
-    private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));details(box,job);addSandboxRefundButton(box,job);text(box,job.optString("created_at").split("T")[0],13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});if(sandboxPayments())button(root,"Actualizar historial",this::history);button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
+    private String historyDate(String value) {
+        try {
+            return java.time.OffsetDateTime.parse(value).atZoneSameInstant(java.time.ZoneId.of("America/Cancun"))
+                .format(java.time.format.DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", java.util.Locale.forLanguageTag("es-MX")));
+        } catch (java.time.DateTimeException e) { return "Fecha no disponible"; }
+    }
+    private void historyReference(LinearLayout box, JSONObject job) {
+        String id = job.optString("id", "");
+        if (!id.isEmpty()) text(box, "Servicio #" + id.substring(0, Math.min(8, id.length())).toUpperCase(java.util.Locale.ROOT), 14, true);
+    }
+    private void history(){task(()->api.history(historyPage*5),rows->{screen="history";shell();card("Historial de servicios");for(int i=0;i<Math.min(5,rows.length());i++){var job=rows.getJSONObject(i);var box=card(ClientRules.status(job.optString("status")));historyReference(box,job);details(box,job);addSandboxRefundButton(box,job);text(box,historyDate(job.optString("created_at")),13,false);}if(rows.length()==0)text(root,"No hay servicios en esta página.",16,false);if(historyPage>0)button(root,"Anterior",()->{historyPage--;history();});if(rows.length()>5)button(root,"Ver más",()->{historyPage++;history();});if(sandboxPayments())button(root,"Actualizar historial",this::history);button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private void profile(){task(api::profile,p->{screen="profile";shell();var box=card("Mi perfil de cliente");var name=field(box,"Nombre completo",p.optString("full_name"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);button(box,"Guardar perfil",()->task(()->{api.saveName(name.getText().toString());return true;},ok->message.setText("Perfil guardado.")));button(root,"Volver al seguimiento",()->{screen="home";refresh();});message.setText("");});}
     private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(appearance.context()).setOnDismissListener(d->picking=false);}
     private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();String[] device=PushManager.disableLocally(this);task(()->{try{api.unregisterPush(device[0],device[1]);}catch(Exception ignored){}api.logout();return true;},ok->{revision++;login();});}).show();}
