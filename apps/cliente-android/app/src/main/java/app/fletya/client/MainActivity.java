@@ -373,10 +373,10 @@ public final class MainActivity extends Activity {
         addNoticePermissionButton(intro);
         originField=field(intro,"Punto de recogida",originDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         if(isPruebas())text(intro,"Puedes escribir un lugar por nombre (por ejemplo, Plaza Las Américas, Cancún) o elegirlo en el mapa. Confirma la ruta antes de continuar.",13,false);
-        if (isPruebas()) compactLocationActions(intro, originField);
+        if (isPruebas()) { attachAddressPreview(intro, originField); compactLocationActions(intro, originField); }
         else {button(intro,"Elegir recogida en mapa",()->picker(originField),false);button(intro,"Usar mi ubicación como recogida",()->locate(originField),false);}
         destField=field(intro,"Destino",destDraft,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        if (isPruebas()) compactLocationActions(intro, destField);
+        if (isPruebas()) { attachAddressPreview(intro, destField); compactLocationActions(intro, destField); }
         else {button(intro,"Elegir entrega en mapa",()->picker(destField),false);button(intro,"Usar mi ubicación como entrega",()->locate(destField),false);}
         watch(originField,true);watch(destField,false);
         if(isPruebas()) {
@@ -681,6 +681,36 @@ public final class MainActivity extends Activity {
     private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(appearance.context()).setOnDismissListener(d->picking=false);}
     private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();String[] device=PushManager.disableLocally(this);task(()->{try{api.unregisterPush(device[0],device[1]);}catch(Exception ignored){}api.logout();return true;},ok->{revision++;login();});}).show();}
     private void open(String uri){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(uri)));}catch(ActivityNotFoundException error){message.setText("No se pudo abrir el enlace.");}}
+    private void attachAddressPreview(LinearLayout box, EditText field) {
+        TextView label=text(box,"",13,false);
+        Runnable refresh=()->{
+            String value=field.getText().toString().trim();
+            double[] point=ClientRules.coordinates(value);
+            label.setVisibility(point==null?View.GONE:View.VISIBLE);
+            if(point==null)return;
+            label.setText("Punto elegido en el mapa · consultando dirección…");
+            new Thread(()->{
+                String resolved="Punto elegido en el mapa · dirección no disponible";
+                try {
+                    if(android.location.Geocoder.isPresent()){
+                        var addresses=new android.location.Geocoder(this,Locale.getDefault()).getFromLocation(point[0],point[1],1);
+                        if(addresses!=null&&!addresses.isEmpty()){
+                            String address=addresses.get(0).getAddressLine(0);
+                            if(address!=null&&!address.trim().isEmpty())resolved=address;
+                        }
+                    }
+                }catch(Exception ignored){}
+                final String result=resolved;
+                main.post(()->{if(label.isAttachedToWindow()&&value.equals(field.getText().toString().trim()))label.setText(result);});
+            }).start();
+        };
+        field.addTextChangedListener(new TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            public void onTextChanged(CharSequence s,int start,int before,int count){}
+            public void afterTextChanged(Editable value){main.removeCallbacks(refresh);label.setVisibility(View.GONE);main.postDelayed(refresh,350);}
+        });
+        main.post(refresh);
+    }
     private void showAddress(LinearLayout box,String prefix,String value){
         double[] point=ClientRules.coordinates(value);
         TextView label=text(box,prefix+(point==null?value:"Punto seleccionado en el mapa"),16,true);
