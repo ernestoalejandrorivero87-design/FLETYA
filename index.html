@@ -2813,7 +2813,7 @@ if (!IS_FLETYA_PRODUCTION_HOST) {
   else {
     const captured=Number(balance.captured_cents), refunded=Number(balance.refunded_cents);
     balanceText.textContent='Capturado: $'+money2(captured/100)+' MXN · Reembolsado: $'+money2(refunded/100)+' MXN · Cobros netos: $'+money2((captured-refunded)/100)+' MXN (antes de comisiones y liquidaciones).';
-    exposureText.textContent='Liquidaciones históricas: $'+money2(Number(balance.settled_cents)/100)+' MXN · Liquidaciones con devolución confirmada, sujetas a revisión: $'+money2(Number(balance.settled_refund_review_cents)/100)+' MXN. No implica deuda automática del fletero.';
+    exposureText.textContent='Liquidaciones históricas: MXN '+money2(Number(balance.settled_cents)/100)+' · Ajustes pendientes de resolución: MXN '+money2(Number(balance.settled_refund_review_cents)/100)+' · FLETYA asume: MXN '+money2(Number(balance.platform_assumed_cents)/100)+' · Reintegro acordado (no implica cobro recibido): MXN '+money2(Number(balance.driver_agreed_cents)/100)+'.';
   }
   const byJob = new Map((Array.isArray(states)?states:[]).map(x=>[x.job_id,x]));
   let gross=0,net=0,pending=0,settled=0,missing=0;
