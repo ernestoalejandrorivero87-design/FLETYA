@@ -260,7 +260,7 @@ public final class MainActivity extends Activity {
                 result.setText(category.getSelectedItem()+"\nCarga: "+description.getText().toString().trim()+(q>0?"\nCantidad: "+q:"")+(w>0?"\nPeso: "+w+" kg":"")+(dimensions.getText().toString().trim().isEmpty()?"":"\nDimensiones: "+dimensions.getText().toString().trim())+"\n"+vehicle.getSelectedItem()+" · "+helpers.getSelectedItem()+"\nRecogida: nivel "+p+" · "+(p==0?"Sin suplemento":pickupElevator.isChecked()?"Elevador":"Escaleras")+"\nEntrega: nivel "+d+" · "+(d==0?"Sin suplemento":dropoffElevator.isChecked()?"Elevador":"Escaleras")+"\n"+(fragile.isChecked()?"Carga frágil\n":"")+(access.getText().toString().trim().isEmpty()?"":"Observaciones: "+access.getText().toString().trim()+"\n")+"Vista previa: sin pedido ni cobro.");
                 final String summary=result.getText().toString();
                 final String cat=new String[]{"","Paquetería","Mudanza","Materiales"}[category.getSelectedItemPosition()];
-                final String start=originField.getText().toString().trim(),end=destField.getText().toString().trim();
+                final String start=routeInput(originField),end=routeInput(destField);
                 final int h=helpers.getSelectedItemPosition();
                 final boolean pe=pickupElevator.isChecked(),de=dropoffElevator.isChecked();
                 if(start.isEmpty()||end.isEmpty()){result.setText("Indica recogida y destino en los campos principales.");return;}
@@ -284,7 +284,7 @@ public final class MainActivity extends Activity {
                         return;
                     }
                     String currentCargo=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
-                    if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim()) || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(currentCargo) || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition() || h!=helpers.getSelectedItemPosition() || !String.valueOf(p).equals(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim()) || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim()) || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked() || fragileSnapshot!=fragile.isChecked()) {routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar para ver un precio actualizado.");return;}
+                    if(routeDraft!=draftRevision || !start.equals(routeInput(originField)) || !end.equals(routeInput(destField)) || !cargoSnapshot.equals(currentCargo) || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition() || h!=helpers.getSelectedItemPosition() || !String.valueOf(p).equals(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim()) || !String.valueOf(d).equals(dropoffLevel.getText().toString().trim().isEmpty()?"0":dropoffLevel.getText().toString().trim()) || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked() || fragileSnapshot!=fragile.isChecked()) {routeReview.removeAllViews();result.setText("Cambiaste los datos. Vuelve a cotizar para ver un precio actualizado.");return;}
                     result.setText(price.optBoolean("available")?"Cotización de prueba\n\n"+money(price.getDouble("total"))+"\n"+String.format(java.util.Locale.getDefault(),"%.2f km",price.getDouble("distance_km"))+" · "+vehicle.getSelectedItem()+"\n"+category.getSelectedItem()+" · "+helpers.getSelectedItem()+"\n\nPrecio sujeto a los datos indicados.":"No hay una tarifa disponible para este vehículo.");
                     if(price.optBoolean("available") && price.has("saved_quote_id")) {
                         final String savedQuote=price.getString("saved_quote_id");
@@ -310,8 +310,8 @@ public final class MainActivity extends Activity {
                         });
                         confirmAction[0]=()->{
                             String current=description.getText().toString()+"|"+quantity.getText()+"|"+dimensions.getText()+"|"+weight.getText()+"|"+access.getText();
-                            if(routeDraft!=draftRevision || !start.equals(originField.getText().toString().trim())
-                                || !end.equals(destField.getText().toString().trim()) || !cargoSnapshot.equals(current)
+                            if(routeDraft!=draftRevision || !start.equals(routeInput(originField))
+                                || !end.equals(routeInput(destField)) || !cargoSnapshot.equals(current)
                                 || categorySnapshot!=category.getSelectedItemPosition() || vehicleSnapshot!=vehicle.getSelectedItemPosition()
                                 || h!=helpers.getSelectedItemPosition() || pe!=pickupElevator.isChecked() || de!=dropoffElevator.isChecked()
                                 || fragileSnapshot!=fragile.isChecked() || !String.valueOf(p).equals(pickupLevel.getText().toString().trim().isEmpty()?"0":pickupLevel.getText().toString().trim())
@@ -413,7 +413,7 @@ public final class MainActivity extends Activity {
         Button location = button(actions, "◎ Mi ubicación", () -> locate(target), false);
         location.setLayoutParams(new LinearLayout.LayoutParams(0, dp(46), 1));
     }
-    private void watch(EditText field,boolean origin){field.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}public void afterTextChanged(Editable value){String next=value.toString();if(origin){if(next.equals(originDraft))return;originDraft=next;}else{if(next.equals(destDraft))return;destDraft=next;}invalidateQuote();}});}
+    private void watch(EditText field,boolean origin){field.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}public void afterTextChanged(Editable value){String next=routeInput(field);if(origin){if(next.equals(originDraft))return;originDraft=next;}else{if(next.equals(destDraft))return;destDraft=next;}invalidateQuote();}});}
     private void spinner(LinearLayout box,String label,String[] items,int selected,int kind){
         text(box,label,14,true);var spinner=new Spinner(appearance.context());spinner.setAdapter(new ArrayAdapter<>(appearance.context(),android.R.layout.simple_spinner_dropdown_item,items));spinner.setSelection(selected);box.addView(spinner,new LinearLayout.LayoutParams(-1,dp(52)));
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int position,long id){int old=kind==0?vehicleChoice:kind==1?helperChoice:serviceChoice;if(old==position)return;if(kind==0)vehicleChoice=position;else if(kind==1)helperChoice=position;else serviceChoice=position;invalidateQuote();}});
@@ -681,10 +681,16 @@ public final class MainActivity extends Activity {
     private AlertDialog.Builder dialog(){picking=true;return new AlertDialog.Builder(appearance.context()).setOnDismissListener(d->picking=false);}
     private void logout(){dialog().setTitle("¿Cerrar sesión de cliente?").setMessage("Tu servicio seguirá guardado. La app del fletero conserva su propia sesión.").setNegativeButton("Volver",null).setPositiveButton("Cerrar sesión",(d,w)->{stopLocation();disposeMaps();String[] device=PushManager.disableLocally(this);task(()->{try{api.unregisterPush(device[0],device[1]);}catch(Exception ignored){}api.logout();return true;},ok->{revision++;login();});}).show();}
     private void open(String uri){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(uri)));}catch(ActivityNotFoundException error){message.setText("No se pudo abrir el enlace.");}}
+    private String routeInput(EditText field) {
+        String visible=field.getText().toString().trim();
+        Object tag=field.getTag();
+        if(tag instanceof String[] pair && pair.length==2 && visible.equals(pair[1]))return pair[0];
+        return visible;
+    }
     private void attachAddressPreview(LinearLayout box, EditText field) {
         TextView label=text(box,"",13,false);
         Runnable refresh=()->{
-            String value=field.getText().toString().trim();
+            String value=routeInput(field);
             double[] point=ClientRules.coordinates(value);
             label.setVisibility(point==null?View.GONE:View.VISIBLE);
             if(point==null)return;
@@ -701,13 +707,26 @@ public final class MainActivity extends Activity {
                     }
                 }catch(Exception ignored){}
                 final String result=resolved;
-                main.post(()->{if(label.isAttachedToWindow()&&value.equals(field.getText().toString().trim()))label.setText(result);});
+                main.post(()->{
+                    if(!label.isAttachedToWindow()||!value.equals(routeInput(field)))return;
+                    if(!result.startsWith("Punto elegido en el mapa")&&!field.hasFocus()&&field.getText().toString().trim().equals(value)){
+                        field.setTag(new String[]{value,result});
+                        field.setText(result);
+                        label.setText("Punto exacto conservado · verifica en el mapa");
+                    }else label.setText(result);
+                });
             }).start();
         };
         field.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             public void onTextChanged(CharSequence s,int start,int before,int count){}
-            public void afterTextChanged(Editable value){main.removeCallbacks(refresh);label.setVisibility(View.GONE);main.postDelayed(refresh,350);}
+            public void afterTextChanged(Editable value){
+                Object tag=field.getTag();
+                if(tag instanceof String[] pair && !value.toString().trim().equals(pair[1]))field.setTag(null);
+                main.removeCallbacks(refresh);
+                if(field.getTag() instanceof String[]){label.setVisibility(View.VISIBLE);label.setText("Punto exacto conservado · verifica en el mapa");return;}
+                label.setVisibility(View.GONE);main.postDelayed(refresh,350);
+            }
         });
         main.post(refresh);
     }
@@ -727,7 +746,7 @@ public final class MainActivity extends Activity {
     }
     private void picker(EditText target){
         picking=true;var box=new LinearLayout(appearance.context());box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(12),dp(8),dp(12),dp(8));text(box,"Mueve el mapa hasta colocar el centro sobre el punto exacto. También puedes tocar un lugar.",15,false);
-        try{pickerMap=new ClientMapView(appearance.context());pickerMap.picker(ClientRules.coordinates(target.getText().toString()));box.addView(pickerMap,new LinearLayout.LayoutParams(-1,dp(340)));
+        try{pickerMap=new ClientMapView(appearance.context());pickerMap.picker(ClientRules.coordinates(routeInput(target)));box.addView(pickerMap,new LinearLayout.LayoutParams(-1,dp(340)));
             long draft=draftRevision;pickerDialog=new AlertDialog.Builder(appearance.context()).setTitle(target==originField?"Punto de recogida":"Punto de entrega").setView(box).setNegativeButton("Volver",null).setPositiveButton("Elegir este punto",null).create();
             pickerDialog.setOnShowListener(d->pickerDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->pickerMap.selected((lat,lng)->{if(draft==draftRevision&&"home".equals(screen)&&active==null)target.setText(String.format(Locale.US,"%.6f, %.6f",lat,lng));pickerDialog.dismiss();},()->Toast.makeText(this,"El mapa sigue cargando. Intenta de nuevo.",Toast.LENGTH_SHORT).show())));
             pickerDialog.setOnDismissListener(d->{picking=false;if(pickerMap!=null){pickerMap.dispose();pickerMap=null;}pickerDialog=null;});pickerDialog.show();
