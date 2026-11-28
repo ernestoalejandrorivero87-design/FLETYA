@@ -266,7 +266,7 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
 </section>
 <section id="admin" class="hidden">
 <div class="hero"><div class="row" style="justify-content:space-between"><div><p class="eyebrow">FLETYA · PRUEBAS</p><h1>Centro de administración</h1><p>Operaciones, finanzas y cuentas</p></div><button type="button" class="btn light" id="adminThemeToggle" onclick="const a=document.getElementById('admin');const d=a.dataset.theme!=='dark';a.dataset.theme=d?'dark':'light';this.textContent=d?'Tema claro':'Tema oscuro';this.setAttribute('aria-pressed',String(d));">Tema oscuro</button></div></div>
-<div id="adminUrgentAlert" class="hidden" role="alert" style="margin:0 0 16px;padding:15px;border:2px solid #b43a3a;border-radius:12px;background:#fff0f0;color:#8b2020"><div class="row" style="justify-content:space-between"><div><strong>⚠ Atención: impagos pendientes</strong><p id="adminUrgentAlertText" style="margin:6px 0 0"></p></div><button type="button" class="btn" onclick="selectAdminWorkspace('adminCashIssues')" style="background:#a62929;color:white">Revisar impagos</button></div></div><div class="admin-nav" aria-label="Secciones de administración"><strong class="admin-nav-brand">ESPACIO DE TRABAJO</strong><button type="button" data-admin-target="adminOverview" onclick="selectAdminWorkspace('adminOverview')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"/></svg><span>Resumen</span></button><button type="button" data-admin-target="adminServicesPanel" onclick="selectAdminWorkspace('adminServicesPanel')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h12v13H3z M15 9h4l3 4v5h-7 M6 18v3 M18 18v3"/></svg><span>Servicios</span></button><button type="button" data-admin-target="adminFinancePanel" onclick="selectAdminWorkspace('adminFinancePanel')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18 M5 16v-5 M12 16V4 M19 16V8"/></svg><span>Finanzas</span></button><button type="button" data-admin-target="adminCashIssues" onclick="selectAdminWorkspace('adminCashIssues')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20z M12 9v5 M12 17v1"/></svg><span>Impagos</span></button><button type="button" data-admin-target="sandboxRefunds" onclick="selectAdminWorkspace('sandboxRefunds')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h13a5 5 0 0 1 0 10H9 M4 10l5-5 M4 10l5 5"/></svg><span>Reembolsos</span></button><button type="button" data-admin-target="adminUsersPanel" onclick="selectAdminWorkspace('adminUsersPanel')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-3a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v3 M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-3a4 4 0 0 0-3-4"/></svg><span>Usuarios</span></button><button type="button" data-admin-target="adminCutsPanel" onclick="selectAdminWorkspace('adminCutsPanel')"><span>Cortes y liquidaciones</span></button><button type="button" data-admin-target="adminDriversPanel" onclick="selectAdminWorkspace('adminDriversPanel')"><span>Gestión de fleteros</span></button><button type="button" data-admin-target="adminApplicationsPanel" onclick="selectAdminWorkspace('adminApplicationsPanel')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v16H3z M7 9h10 M7 14h6"/></svg><span>Altas de fleteros</span></button><button type="button" data-admin-target="vehicleTariffAdmin" onclick="selectAdminWorkspace('vehicleTariffAdmin')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h9l8 8-10 10-8-8V3z M8 8h.01"/></svg><span>Tarifas</span></button><button id="adminExpandToggle" type="button" aria-expanded="false" onclick="selectAdminWorkspace(this.getAttribute('aria-expanded')==='true'?(this.dataset.previous||'adminOverview'):'all')">Ver todas las secciones</button></div>
+<div id="adminUrgentAlert" class="hidden" role="alert" style="margin:0 0 16px;padding:15px;border:2px solid #b43a3a;border-radius:12px;background:#fff0f0;color:#8b2020"><div class="row" style="justify-content:space-between"><div><strong>⚠ Atención: impagos pendientes</strong><p id="adminUrgentAlertText" style="margin:6px 0 0"></p></div><button type="button" class="btn" onclick="selectAdminWorkspace('adminCashIssues')" style="background:#a62929;color:white">Revisar impagos</button></div></div><div class="admin-nav" aria-label="Secciones de administración"><strong class="admin-nav-brand">ESPACIO DE TRABAJO</strong><button type="button" data-admin-target="adminOverview" onclick="selectAdminWorkspace('adminOverview')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"/></svg><span>Resumen</span></button><button type="button" data-admin-target="adminServicesPanel" onclick="selectAdminWorkspace('adminServicesPanel')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h12v13H3z M15 9h4l3 4v5h-7 M6 18v3 M18 18v3"/></svg><span>Servicios</span></button><button type="button" data-admin-target="adminFinancePanel" onclick="selectAdminWorkspace('adminFinancePanel')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18 M5 16v-5 M12 16V4 M19 16V8"/></svg><span>Finanzas</span></button><button type="button" data-admin-target="adminCashIssues" onclick="selectAdminWorkspace('adminCashIssues')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20z M12 9v5 M12 17v1"/></svg><span>Impagos</span></button><button type="button" data-admin-target="sandboxRefunds" onclick="selectAdminWorkspace('sandboxRefunds')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h13a5 5 0 0 1 0 10H9 M4 10l5-5 M4 10l5 5"/></svg><span>Reembolsos</span></button><button type="button" data-admin-target="adminUsersPanel" onclick="selectAdminWorkspace('adminUsersPanel')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-3a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v3 M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-3a4 4 0 0 0-3-4"/></svg><span>Clientes</span></button><button type="button" data-admin-target="adminCutsPanel" onclick="selectAdminWorkspace('adminCutsPanel')"><span>Cortes y liquidaciones</span></button><button type="button" data-admin-target="adminDriversPanel" onclick="selectAdminWorkspace('adminDriversPanel')"><span>Gestión de fleteros</span></button><button type="button" data-admin-target="adminApplicationsPanel" onclick="selectAdminWorkspace('adminApplicationsPanel')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v16H3z M7 9h10 M7 14h6"/></svg><span>Altas de fleteros</span></button><button type="button" data-admin-target="vehicleTariffAdmin" onclick="selectAdminWorkspace('vehicleTariffAdmin')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h9l8 8-10 10-8-8V3z M8 8h.01"/></svg><span>Tarifas</span></button><button id="adminExpandToggle" type="button" aria-expanded="false" onclick="selectAdminWorkspace(this.getAttribute('aria-expanded')==='true'?(this.dataset.previous||'adminOverview'):'all')">Ver todas las secciones</button></div>
 <section class="card hidden" id="adminCashIssues" aria-labelledby="adminCashIssuesTitle" style="margin-bottom:18px;border:2px solid transparent">
   <h2 id="adminCashIssuesTitle">Impagos · Administración <span id="cashIssuesBadge" aria-live="polite"></span></h2>
   <p class="muted">Los reportes activos bloquean nuevas solicitudes hasta confirmar el cobro o resolver la incidencia.</p>
@@ -396,8 +396,8 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
  </select>
   <div id="adminTable"></div><div id="adminServicesPager"></div></div>
  <div class="card" id="adminUsersPanel" style="margin-top:18px">
-  <h2>👥 Usuarios</h2>
-  <p class="muted">Clientes, fleteros y administradores registrados.</p>
+  <h2>Clientes registrados</h2>
+  <p class="muted">Información de contacto y registro de clientes.</p>
 
   <input
     id="adminUsersSearch"
@@ -408,9 +408,9 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
   >
 
   <div id="adminUsersTable"></div><div id="adminUsersPager"></div>
-  <div id="driverAccountsTable" style="margin-top:18px"></div><div id="adminAccountsPager"></div>
+
  </div>
- <div class="card" id="adminCutsPanel"><h2>Finanzas · Cortes y liquidaciones</h2><div id="adminCashCuts" class="card hidden"></div></div>
+ <div class="card" id="adminCutsPanel"><h2>Finanzas · Cortes y liquidaciones</h2><div id="driverAccountsTable"></div><div id="adminAccountsPager"></div><div id="adminCashCuts" class="card hidden"></div></div>
  <div class="card" id="adminDriversPanel"><h2>Gestión de fleteros</h2><p>Expedientes permanentes, documentación y vigencias. Sin movimientos financieros.</p><button class="btn light" onclick="loadDriverApplications(true)">Consultar fleteros registrados</button><div id="registeredDriverDocuments"></div></div>
 </section>
 </main>
@@ -2624,10 +2624,10 @@ const userSearch =
     .toLowerCase()
     .trim();
 
-const filteredUsers = adminUsers.filter(user =>
+const filteredUsers = adminUsers.filter(user => user.role==='client' && (
   (user.full_name || '').toLowerCase().includes(userSearch) ||
   (user.email || '').toLowerCase().includes(userSearch)
-);
+));
 const filteredServices = services.filter(job => {
   const clientName = escapeText(nameById[job.client_id] || 'Sin cliente');
   const driverName = escapeText(nameById[job.driver_id] || 'Sin fletero');
@@ -2749,7 +2749,7 @@ const filteredServices = services.filter(job => {
     `
     : '';
   document.getElementById('adminUsersTable').innerHTML =
-    adminUsers.length
+    filteredUsers.length
       ? `
         <table>
           <tr>
@@ -3442,7 +3442,7 @@ async function loadSandboxRefunds() {
     box.append(card);
   }
 }
-async function loadDriverApplications(registered=false){
+async function loadDriverApplications(registered=false,page=0){
  const revision=sessionRevision,box=document.getElementById(registered?'registeredDriverDocuments':'driverApplications');box.textContent='Consultando…';
  const {data:{user},error:authError}=await supabaseClient.auth.getUser();
  if(revision!==sessionRevision||logoutPending)return;
@@ -3452,11 +3452,14 @@ async function loadDriverApplications(registered=false){
  if(roleError||actor?.role!=='admin'){box.textContent='Solo administración puede revisar cuentas.';return;}
  let query=supabaseClient.from('profiles').select('id,full_name,email,phone,vehicle_type,plates,driver_status').eq('role','driver');
  query=registered?query.neq('driver_status','pending'):query.eq('driver_status','pending');
- const {data,error}=await query.order('created_at',{ascending:true}).limit(20);
+ const {data,error}=await query.order('created_at',{ascending:true}).order('id',{ascending:true}).range(page*20,page*20+20);
  if(revision!==sessionRevision||logoutPending)return;box.textContent='';
  if(error){box.textContent='No se pudieron consultar las cuentas pendientes.';return;}
  if(!data?.length){box.textContent=registered?'No hay fleteros registrados fuera de altas pendientes.':'No hay cuentas pendientes.';return;}
- for(const profile of data){const card=document.createElement('div');card.className='card';
+ const pager=document.createElement('div');pager.className='row';
+ for(const [label,target,disabled] of [['Anterior',page-1,page===0],['Siguiente',page+1,data.length<=20]]){const b=document.createElement('button');b.className='btn light';b.textContent=label;b.disabled=disabled;b.onclick=()=>loadDriverApplications(registered,target);pager.append(b);}
+ const pageLabel=document.createElement('span');pageLabel.textContent='Página '+(page+1);pager.append(pageLabel);box.append(pager);
+ for(const profile of data.slice(0,20)){const card=document.createElement('div');card.className='card';
   const description=document.createElement('p');description.textContent=[profile.full_name,profile.email,profile.phone,vehicleLabel(profile.vehicle_type),profile.plates].filter(Boolean).join(' · ');card.append(description);
   const docsBox=document.createElement('div');card.append(docsBox);docsBox.textContent='Consultando documentación…';
   const {data:docs,error:docsError}=await supabaseClient.rpc('admin_driver_documents_v1',{p_driver:profile.id});
@@ -3485,7 +3488,7 @@ async function loadDriverApplications(registered=false){
         action.onclick=async()=>{if(revision!==sessionRevision||logoutPending)return;const note=approved?null:window.prompt('Motivo del rechazo (5 a 500 caracteres)');if(!approved&&(note===null||note.trim().length<5||note.length>500))return;
           if(approved&&!window.confirm('¿Confirmas que revisaste y validaste el archivo?'))return;
           action.disabled=true;const {error}=await supabaseClient.rpc('review_driver_document_v1',{p_id:d.id,p_approved:approved,p_note:note});
-          if(revision!==sessionRevision||logoutPending)return;if(error){toast('No se pudo registrar la revisión.');action.disabled=false;return;}await loadDriverApplications(registered);
+          if(revision!==sessionRevision||logoutPending)return;if(error){toast('No se pudo registrar la revisión.');action.disabled=false;return;}await loadDriverApplications(registered,page);
         };row.append(action);
       }
     }docsBox.append(row);
