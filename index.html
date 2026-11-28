@@ -292,7 +292,7 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
 <div class="card"><h3>🔵 En camino</h3><div class="price" id="enRouteCount">0</div><span class="muted">servicios activos</span></div>
 <div class="card"><h3>🟢 Completados</h3><div class="price" id="completedCount">0</div><span class="muted">servicios terminados</span></div>
 <div class="card"><h3>⚪ Cancelados</h3><div class="price" id="cancelledCount">0</div><span class="muted">solicitudes canceladas</span></div>
- <div class="card"><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">ventas realizadas</span></div>
+ <div class="card"><h3>💰 Ventas del mes</h3><div class="price" id="monthlySales">$0</div><span class="muted">valor de servicios no cancelados</span></div>
 
 <div class="card"><h3>🚚 Servicios del mes</h3><div class="price" id="monthlyJobs">0</div><span class="muted">servicios registrados</span></div>
 
@@ -300,7 +300,7 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
 </div>
  <div class="card" id="adminFinancePanel" style="margin-top:18px">
   <h2>📊 Reporte financiero</h2>
-  <p class="muted">Consulta el rendimiento de FLETYA por período. Los importes excluyen solicitudes canceladas.</p>
+  <p class="muted">Consulta el rendimiento de FLETYA por período. Los importes generales representan valor de servicios no cancelados, no necesariamente cobrado. La tarjeta de prueba se informa por separado.</p>
 <p class="muted" id="reportPeriodLabel">📅 Período: Este mes</p>
   <select
     id="adminReportPeriod"
@@ -332,6 +332,14 @@ body:has(#access:not(.hidden) #authAdmin:not(.hidden)) #appHeader .logo span{col
     <div class="card">
       <h3>🧑‍🔧 Fleteros reciben</h3>
       <div class="price" id="reportDriverNet">$0</div>
+    </div>
+  </div>
+  <div class="card hidden" id="adminCashReport" style="margin-top:18px">
+    <h3>Cobros en efectivo · PRUEBAS</h3>
+    <p class="muted">Servicios completados del período seleccionado, según fecha de solicitud. Importes simulados; no incluyen tarjeta ni servicios antiguos sin método registrado.</p>
+    <div class="grid">
+      <div class="card"><h3>Cobro confirmado</h3><div class="price" id="reportCashCollected">—</div></div>
+      <div class="card"><h3>Cobro pendiente</h3><div class="price" id="reportCashOutstanding">—</div></div>
     </div>
   </div>
   <div class="card hidden" id="adminSandboxCards" style="margin-top:18px">
@@ -2858,6 +2866,14 @@ document.getElementById('reportCommission').textContent =
 
 document.getElementById('reportDriverNet').textContent =
   money2(reportDriverNet);
+const cashReport = document.getElementById('adminCashReport');
+cashReport.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
+if (!IS_FLETYA_PRODUCTION_HOST) {
+  const completedCash = reportServices.filter(job => job.status === 'completed' && job.payment_method === 'cash');
+  const cashTotal = rows => rows.reduce((sum, job) => sum + Math.round(Number(job.price || 0) * 100), 0) / 100;
+  document.getElementById('reportCashCollected').textContent = money2(cashTotal(completedCash.filter(job => job.cash_collected_at))) + ' MXN';
+  document.getElementById('reportCashOutstanding').textContent = money2(cashTotal(completedCash.filter(job => !job.cash_collected_at))) + ' MXN';
+}
 const sandboxPanel = document.getElementById('adminSandboxCards');
 sandboxPanel.classList.toggle('hidden', IS_FLETYA_PRODUCTION_HOST);
 if (!IS_FLETYA_PRODUCTION_HOST) {
