@@ -2813,7 +2813,7 @@ if (!IS_FLETYA_PRODUCTION_HOST) {
   else {
     const captured=Number(balance.captured_cents), refunded=Number(balance.refunded_cents);
     balanceText.textContent='Capturado: $'+money2(captured/100)+' MXN · Reembolsado: $'+money2(refunded/100)+' MXN · Cobros netos: $'+money2((captured-refunded)/100)+' MXN (antes de comisiones y liquidaciones).';
-    exposureText.textContent='Liquidaciones históricas: MXN '+money2(Number(balance.settled_cents)/100)+' · Ajustes pendientes de resolución: MXN '+money2(Number(balance.settled_refund_review_cents)/100)+' · FLETYA asume: MXN '+money2(Number(balance.platform_assumed_cents)/100)+' · Reintegro acordado (no implica cobro recibido): MXN '+money2(Number(balance.driver_agreed_cents)/100)+'.';
+    exposureText.textContent='Liquidaciones históricas: MXN '+money2(Number(balance.settled_cents)/100)+' · Ajustes pendientes de resolución: MXN '+money2(Number(balance.settled_refund_review_cents)/100)+' · FLETYA asume: MXN '+money2(Number(balance.platform_assumed_cents)/100)+' · Reintegro acordado (no implica cobro recibido): MXN '+money2(Number(balance.driver_agreed_cents)/100)+' · Reintegro recibido: MXN '+money2(Number(balance.recovered_cents)/100)+' · Pendiente de recibir: MXN '+money2((Number(balance.driver_agreed_cents)-Number(balance.recovered_cents))/100)+'.';
   }
   const byJob = new Map((Array.isArray(states)?states:[]).map(x=>[x.job_id,x]));
   let gross=0,net=0,pending=0,settled=0,missing=0;
@@ -2830,7 +2830,21 @@ if (!IS_FLETYA_PRODUCTION_HOST) {
 settled+=Number(state.settled_cents);line.append(' · Liquidado (simulado)');
 if(state.refund_state==='confirmed'){
 const total=Number(state.settled_cents);
-if(state.resolution){line.append(' · Ajuste resuelto: FLETYA MXN '+money2(Number(state.resolution.platform_cents)/100)+' · Reintegro acordado MXN '+money2(Number(state.resolution.driver_cents)/100)+' · '+state.resolution.note);}
+if(state.resolution){line.append(' · Ajuste resuelto: FLETYA MXN '+money2(Number(state.resolution.platform_cents)/100)+' · Reintegro acordado MXN '+money2(Number(state.resolution.driver_cents)/100)+' · '+state.resolution.note);
+if(state.recovery){line.append(' · Reintegro recibido (simulado): MXN '+money2(Number(state.recovery.amount_cents)/100));}
+else if(Number(state.resolution.driver_cents)>0){
+const amount=Number(state.resolution.driver_cents);
+const recoveryBtn=document.createElement('button');recoveryBtn.type='button';recoveryBtn.className='btn';recoveryBtn.textContent='Registrar reintegro recibido';
+recoveryBtn.onclick=async()=>{
+const note=prompt('Referencia o justificación del reintegro simulado (10 a 500 caracteres)');
+if(note===null)return;
+if(note.trim().length<10||note.trim().length>500){toast('Justificación inválida');return;}
+if(!confirm('¿Registrar reintegro SIMULADO recibido de MXN '+money2(amount/100)+'? No transfiere dinero.'))return;
+recoveryBtn.disabled=true;
+try{const {error}=await supabaseClient.rpc('record_sandbox_refund_recovery_v1',{p_job:j.id,p_expected_cents:amount,p_note:note.trim()});if(error)toast('No se pudo registrar el reintegro.');await renderAdmin();}finally{recoveryBtn.disabled=false;}
+};rows.appendChild(recoveryBtn);
+}
+}
 else{
 line.append(' · Ajuste pendiente de resolución');
 const btn=document.createElement('button');btn.type='button';btn.className='btn';btn.textContent='Resolver ajuste simulado';
