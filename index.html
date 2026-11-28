@@ -70,6 +70,23 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 }
 @media(max-width:380px){header{justify-content:center}nav{display:flex;gap:4px}nav button{margin:0;padding:9px 12px}.session-bar{flex-direction:column}.session-bar .btn{width:100%}}
 </style>
+<style>
+#admin{--a-bg:#f4f6fa;--a-card:#fff;--a-text:#17243b;--a-muted:#52627a;--a-border:#dce3ed;--a-accent:#203b65;color:var(--a-text);background:var(--a-bg);padding:16px;border-radius:20px}
+#admin[data-theme="dark"]{--a-bg:#101a2b;--a-card:#19283e;--a-text:#f1f4fa;--a-muted:#b9c7da;--a-border:#35465e;--a-accent:#f2c65c;color-scheme:dark}
+#admin .card{background:var(--a-card);color:var(--a-text);border-color:var(--a-border);box-shadow:0 4px 14px #00000009;margin-bottom:14px}
+#admin .muted{color:var(--a-muted)}#admin .price{color:var(--a-accent);font-size:clamp(20px,3vw,30px);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#admin .hero{background:linear-gradient(125deg,#142640,#233e65);color:#fff;border:1px solid #405675;padding:22px}
+#admin .hero h1{font-size:28px}#admin .hero .eyebrow{color:#f2c65c}
+#admin .btn{background:#203b65;color:white}#admin .btn.light{background:var(--a-bg);color:var(--a-text);border:1px solid var(--a-border)}
+#admin .btn.dark{background:#17243b;color:white}#admin input,#admin select,#admin textarea{background:var(--a-card);color:var(--a-text);border-color:var(--a-border)!important}
+#admin th,#admin td{border-color:var(--a-border)}#admin .pill{background:var(--a-bg);color:var(--a-text)}
+#admin[data-theme="dark"] .danger{color:#ff9b9b}#admin[data-theme="dark"] .warn{color:#f2c65c}#admin[data-theme="dark"] .ok{color:#80d9b2}
+#admin .admin-nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+#admin .admin-nav a{color:var(--a-text);background:var(--a-card);border:1px solid var(--a-border);border-radius:10px;padding:12px;text-decoration:none;font-weight:700;font-size:13px}
+#admin [id]{scroll-margin-top:100px}#admin .admin-kpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+#admin .admin-kpis .card{padding:14px;margin:0}#admin .admin-kpis h3{font-size:14px;margin:0}
+@media(max-width:760px){#admin{padding:10px}#admin .admin-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#admin .card{padding:14px}#admin .admin-nav{gap:6px}#admin .admin-nav a{flex:1 1 42%;text-align:center}}
+</style>
 </head>
 <body>
 <header id="appHeader">
@@ -208,6 +225,8 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 <button id="saveRecoveryPassword" class="btn" onclick="finishPasswordRecovery()">Guardar contraseña nueva</button><p id="passwordRecoveryMessage" role="status"></p>
 </section>
 <section id="admin" class="hidden">
+<div class="hero"><div class="row" style="justify-content:space-between"><div><p class="eyebrow">FLETYA · PRUEBAS</p><h1>Centro de administración</h1><p>Operaciones, finanzas y cuentas</p></div><button type="button" class="btn light" id="adminThemeToggle" onclick="const a=document.getElementById('admin');const d=a.dataset.theme!=='dark';a.dataset.theme=d?'dark':'light';this.textContent=d?'Tema claro':'Tema oscuro';this.setAttribute('aria-pressed',String(d));">Tema oscuro</button></div></div>
+<div class="admin-nav" aria-label="Accesos de administración"><a href="#adminOverview">Resumen</a><a href="#adminCashIssues">Impagos</a><a href="#sandboxRefunds">Reembolsos</a><a href="#adminFinancePanel">Finanzas</a><a href="#adminServicesPanel">Servicios</a><a href="#adminUsersPanel">Usuarios y cortes</a><a href="#vehicleTariffAdmin">Tarifas</a><a href="#adminApplicationsPanel">Altas de fleteros</a></div>
 <section class="card hidden" id="adminCashIssues" aria-labelledby="adminCashIssuesTitle" style="margin-bottom:18px;border:2px solid transparent">
   <h2 id="adminCashIssuesTitle">Impagos · Administración <span id="cashIssuesBadge" aria-live="polite"></span></h2>
   <p class="muted">Los reportes activos bloquean nuevas solicitudes hasta confirmar el cobro o resolver la incidencia.</p>
@@ -223,9 +242,8 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
   <button class="btn light" type="button" onclick="loadSandboxRefunds()">Consultar reembolsos</button>
   <div id="sandboxRefundCases" aria-live="polite"></div>
 </div>
-<div class="card"><h2>Nuevas cuentas de fletero</h2><p>Revisa los datos y la documentación del conductor antes de autorizar su acceso al piloto.</p><button class="btn light" onclick="loadDriverApplications()">Consultar cuentas pendientes</button><div id="driverApplications"></div></div>
-<div class="hero"><h1>FLETYA Admin</h1><p>Control básico de servicios, ventas y comisión.</p></div>
-<div class="grid">
+<div class="card" id="adminApplicationsPanel"><h2>Nuevas cuentas de fletero</h2><p>Revisa los datos y la documentación del conductor antes de autorizar su acceso al piloto.</p><button class="btn light" onclick="loadDriverApplications()">Consultar cuentas pendientes</button><div id="driverApplications"></div></div>
+<div class="grid admin-kpis" id="adminOverview">
 <div class="card"><h3>Servicios</h3><div class="price" id="jobsCount">0</div><span class="muted">solicitudes</span></div>
 <div class="card"><h3>Ventas</h3><div class="price" id="sales">$0</div><span class="muted">valor de servicios</span></div>
 <div class="card"><h3>Comisión FLETYA</h3><div class="price" id="commission">$0</div><span class="muted">15% de comisión demo</span></div>
@@ -240,7 +258,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
 
 <div class="card"><h3>💵 Comisión del mes</h3><div class="price" id="monthlyCommission">$0</div><span class="muted">15% de comisión</span></div>
 </div>
- <div class="card" style="margin-top:18px">
+ <div class="card" id="adminFinancePanel" style="margin-top:18px">
   <h2>📊 Reporte financiero</h2>
   <p class="muted">Consulta el rendimiento de FLETYA por período. Los importes excluyen solicitudes canceladas.</p>
 <p class="muted" id="reportPeriodLabel">📅 Período: Este mes</p>
@@ -308,7 +326,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
   </div>
   </div>
  </div>
-<div class="card" style="margin-top:18px"><h2>Servicios recientes</h2> 
+<div class="card" id="adminServicesPanel" style="margin-top:18px"><h2>Servicios recientes</h2> 
   <input
   id="adminSearch"
   type="text"
@@ -329,7 +347,7 @@ nav button[aria-current="page"]{background:#087f8c;color:#fff}
   <option value="cancelled">Cancelado</option>
  </select>
   <div id="adminTable"></div><div id="adminServicesPager"></div></div>
- <div class="card" style="margin-top:18px">
+ <div class="card" id="adminUsersPanel" style="margin-top:18px">
   <h2>👥 Usuarios</h2>
   <p class="muted">Clientes, fleteros y administradores registrados.</p>
 
