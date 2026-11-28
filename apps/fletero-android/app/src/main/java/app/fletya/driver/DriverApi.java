@@ -133,6 +133,32 @@ public final class DriverApi {
         }
         return rows.getJSONObject(0);
     }
+    public interface DocumentTransport {
+        Response upload(String path, String accessToken, String mime, byte[] data) throws Exception;
+    }
+    public synchronized String uploadDocument(String type, String mime, byte[] data, String expires, DocumentTransport uploader) throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) throw new Failure(403, "Módulo disponible solo en pruebas.");
+        if (!java.util.Set.of("portrait","license","vehicle","registration","mobility_permit").contains(type))
+            throw new Failure(400,"Tipo de documento no válido.");
+        String extension = switch (mime) {
+            case "image/jpeg" -> "jpg";
+            case "image/png" -> "png";
+            case "application/pdf" -> "pdf";
+            default -> throw new Failure(400,"Selecciona una imagen JPG, PNG o un PDF.");
+        };
+        if (data == null || data.length == 0 || data.length > 10485760)
+            throw new Failure(400,"El archivo debe pesar entre 1 byte y 10 MB.");
+        if (java.util.Set.of("license","registration","mobility_permit").contains(type)) {
+            try {
+                if (java.time.LocalDate.parse(expires).isBefore(java.time.LocalDate.now(java.time.ZoneId.of("America/Cancun"))))
+                    throw new IllegalArgumentException();
+            } catch (RuntimeException error) { throw new Failure(400,"Indica una fecha de vigencia válida."); }
+        }
+        String access = token();
+        String path = userId()+"/"+type+"/"+java.util.UUID.randomUUID()+"."+extension;
+        check(uploader.upload("/storage/v1/object/driver-documents/"+path, access, mime, data));
+        return registerDocument(type,path,expires);
+    }
     public synchronized JSONArray myDocuments() throws Exception {
         if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) throw new Failure(403, "Módulo disponible solo en pruebas.");
         return new JSONArray(call("POST", "/rest/v1/rpc/my_driver_documents_v1", new JSONObject(), null).body());
