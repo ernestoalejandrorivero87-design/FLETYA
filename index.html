@@ -3475,7 +3475,7 @@ async function loadDriverApplications(registered=false,page=0){
     const row=document.createElement('div');row.className='card';
     const title=document.createElement('p');title.textContent=label+' · '+(d?({approved:'Aprobado',in_review:'En revisión',rejected:'Rechazado',pending:'Pendiente'}[d.review_state]||'Pendiente'):'Sin adjuntar');row.append(title);
     if(d){
-      if(d.expires_on&&d.expires_on<today){const warning=document.createElement('strong');warning.textContent='Documento vencido';row.append(warning);}
+      if(d.expires_on){const days=Math.round((Date.parse(d.expires_on+'T00:00:00Z')-Date.parse(today+'T00:00:00Z'))/86400000);if(days<=30){const warning=document.createElement('strong');warning.textContent=days<0?'Documento vencido':days===0?'Vence hoy':'Vence en '+days+' días';warning.style.color=days<=7?'#dc2626':'#b7791f';row.append(warning);}}
       if(d.expires_on||d.review_note){const info=document.createElement('p');info.textContent=[d.expires_on?'Vigencia: '+d.expires_on:'',d.review_note].filter(Boolean).join(' · ');row.append(info);}
       const view=document.createElement('button');view.className='btn light';view.textContent='Consultar archivo privado';view.onclick=async()=>{
         if(revision!==sessionRevision||logoutPending)return;
@@ -3493,7 +3493,7 @@ async function loadDriverApplications(registered=false,page=0){
       }
     }docsBox.append(row);
   }
-  if(registered){box.append(card);continue;}
+  if(registered){const history=document.createElement('div');const button=document.createElement('button');button.className='btn light';button.textContent='Historial documental';button.onclick=()=>loadDriverDocumentHistory(profile.id,history,0);card.append(button,history);box.append(card);continue;}
   for(const [approved,label] of [[true,'Aprobar cuenta'],[false,'Rechazar solicitud']]){const action=document.createElement('button');action.className='btn light';action.textContent=label;action.disabled=approved&&!ready;action.onclick=async()=>{
    if(revision!==sessionRevision||logoutPending)return;
    const note=window.prompt('Motivo de la revisión (10 a 500 caracteres). Confirma que revisaste los datos y documentación del conductor.');
@@ -3504,6 +3504,28 @@ async function loadDriverApplications(registered=false,page=0){
    toast(approved?'Fletero autorizado para el piloto.':'Solicitud rechazada.');await loadDriverApplications();
   };card.append(action);}box.append(card);
  }
+}
+async function loadDriverDocumentHistory(driver,box,page){
+ const revision=sessionRevision;box.textContent='Consultando historial…';
+ const {data,error}=await supabaseClient.rpc('admin_driver_document_history_v1',{p_driver:driver,p_offset:page*20});
+ if(revision!==sessionRevision||logoutPending||!box.isConnected)return;
+ box.textContent='';
+ if(error||!Array.isArray(data)){box.textContent='No se pudo consultar el historial.';return;}
+ const labels={portrait:'Fotografía personal',license:'Licencia de conducir',vehicle:'Fotografía del vehículo',registration:'Tarjeta de circulación',mobility_permit:'Permiso de movilidad'};
+ const states={approved:'Aprobado',rejected:'Rechazado',in_review:'En revisión',pending:'Pendiente'};
+ if(!data.length)box.textContent='Sin historial documental.';
+ for(const d of data.slice(0,20)){
+  const row=document.createElement('div');row.className='card';
+  const title=document.createElement('strong');title.textContent=(labels[d.document_type]||'Documento')+' · '+(states[d.review_state]||'Pendiente');row.append(title);
+  const info=document.createElement('p');info.textContent=['Registro: '+new Date(d.created_at).toLocaleDateString('es-MX',{timeZone:'America/Cancun'}),d.expires_on?'Vigencia: '+d.expires_on:'',d.review_note||''].filter(Boolean).join(' · ');row.append(info);
+  const view=document.createElement('button');view.className='btn light';view.textContent='Consultar versión';view.onclick=async()=>{
+   if(revision!==sessionRevision||logoutPending)return;
+   const tab=window.open('about:blank','_blank');if(!tab){toast('Permite abrir una nueva pestaña.');return;}tab.opener=null;
+   const {data:link,error}=await supabaseClient.storage.from('driver-documents').createSignedUrl(d.object_path,60);
+   if(error||!link?.signedUrl||revision!==sessionRevision||logoutPending){tab.close();return;}tab.location.replace(link.signedUrl);
+  };row.append(view);box.append(row);
+ }
+ for(const [label,target,disabled] of [['Anterior',page-1,page===0],['Siguiente',page+1,data.length<=20]]){const b=document.createElement('button');b.className='btn light';b.textContent=label;b.disabled=disabled;b.onclick=()=>loadDriverDocumentHistory(driver,box,target);box.append(b);}
 }
 async function registerClient() {
   const fullName = document.getElementById('clientSignupName').value.trim();
