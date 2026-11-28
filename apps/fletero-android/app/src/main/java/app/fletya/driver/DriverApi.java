@@ -133,6 +133,16 @@ public final class DriverApi {
         }
         return rows.getJSONObject(0);
     }
+    public synchronized JSONArray myDocuments() throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) throw new Failure(403, "Módulo disponible solo en pruebas.");
+        return new JSONArray(call("POST", "/rest/v1/rpc/my_driver_documents_v1", new JSONObject(), null).body());
+    }
+    public synchronized String registerDocument(String type, String path, String expires) throws Exception {
+        if (!"PRUEBAS".equals(BuildConfig.ENVIRONMENT)) throw new Failure(403, "Módulo disponible solo en pruebas.");
+        JSONObject body = new JSONObject().put("p_type", type).put("p_path", path)
+            .put("p_expires", expires == null || expires.isBlank() ? JSONObject.NULL : expires);
+        return (String) new org.json.JSONTokener(call("POST", "/rest/v1/rpc/register_driver_document_v1", body, null).body()).nextValue();
+    }
     public synchronized JSONArray activeJobs() throws Exception {
         token();
         return get("jobs?select=*&driver_id=eq." + eq(userId()) + "&status=in.(" + "accepted,en_route,picked_up" + ")&order=created_at.desc,id.desc&limit=2");
