@@ -3455,7 +3455,38 @@ async function loadDriverApplications(){
  if(!data?.length){box.textContent='No hay cuentas pendientes.';return;}
  for(const profile of data){const card=document.createElement('div');card.className='card';
   const description=document.createElement('p');description.textContent=[profile.full_name,profile.email,profile.phone,vehicleLabel(profile.vehicle_type),profile.plates].filter(Boolean).join(' · ');card.append(description);
-  for(const [approved,label] of [[true,'Autorizar para el piloto'],[false,'Rechazar solicitud']]){const action=document.createElement('button');action.className='btn light';action.textContent=label;action.onclick=async()=>{
+  const docsBox=document.createElement('div');card.append(docsBox);docsBox.textContent='Consultando documentación…';
+  const {data:docs,error:docsError}=await supabaseClient.rpc('admin_driver_documents_v1',{p_driver:profile.id});
+  if(revision!==sessionRevision||logoutPending)return;
+  docsBox.textContent='';
+  const kinds={portrait:'Fotografía personal',license:'Licencia de conducir',vehicle:'Fotografía del vehículo',registration:'Tarjeta de circulación',mobility_permit:'Permiso de movilidad'};
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Cancun',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const current=Array.isArray(docs)?docs:[];
+  const ready=!docsError&&Object.keys(kinds).slice(0,4).every(kind=>current.some(d=>d.document_type===kind&&d.review_state==='approved'&&(!d.expires_on||d.expires_on>=today)));
+  if(docsError)docsBox.textContent='No se pudo consultar el expediente.';
+  else for(const [kind,label] of Object.entries(kinds)){
+    const d=current.find(item=>item.document_type===kind);
+    const row=document.createElement('div');row.className='card';
+    const title=document.createElement('p');title.textContent=label+' · '+(d?({approved:'Aprobado',in_review:'En revisión',rejected:'Rechazado',pending:'Pendiente'}[d.review_state]||'Pendiente'):'Sin adjuntar');row.append(title);
+    if(d){
+      if(d.expires_on||d.review_note){const info=document.createElement('p');info.textContent=[d.expires_on?'Vigencia: '+d.expires_on:'',d.review_note].filter(Boolean).join(' · ');row.append(info);}
+      const view=document.createElement('button');view.className='btn light';view.textContent='Consultar archivo privado';view.onclick=async()=>{
+        if(revision!==sessionRevision||logoutPending)return;
+        const tab=window.open('about:blank','_blank');if(!tab){toast('Permite abrir una nueva pestaña.');return;}tab.opener=null;
+        const {data:link,error}=await supabaseClient.storage.from('driver-documents').createSignedUrl(d.object_path,60);
+        if(error||!link?.signedUrl||revision!==sessionRevision||logoutPending){tab.close();toast('No se pudo abrir el documento.');return;}tab.location.replace(link.signedUrl);
+      };row.append(view);
+      if(d.review_state==='in_review')for(const approved of [true,false]){
+        const action=document.createElement('button');action.className='btn light';action.textContent=approved?'Aprobar documento':'Rechazar documento';
+        action.onclick=async()=>{if(revision!==sessionRevision||logoutPending)return;const note=approved?null:window.prompt('Motivo del rechazo (5 a 500 caracteres)');if(!approved&&(note===null||note.trim().length<5||note.length>500))return;
+          if(approved&&!window.confirm('¿Confirmas que revisaste y validaste el archivo?'))return;
+          action.disabled=true;const {error}=await supabaseClient.rpc('review_driver_document_v1',{p_id:d.id,p_approved:approved,p_note:note});
+          if(revision!==sessionRevision||logoutPending)return;if(error){toast('No se pudo registrar la revisión.');action.disabled=false;return;}await loadDriverApplications();
+        };row.append(action);
+      }
+    }docsBox.append(row);
+  }
+  for(const [approved,label] of [[true,'Aprobar cuenta'],[false,'Rechazar solicitud']]){const action=document.createElement('button');action.className='btn light';action.textContent=label;action.disabled=approved&&!ready;action.onclick=async()=>{
    if(revision!==sessionRevision||logoutPending)return;
    const note=window.prompt('Motivo de la revisión (10 a 500 caracteres). Confirma que revisaste los datos y documentación del conductor.');
    if(note===null)return;if(note.trim().length<10||note.trim().length>500){toast('Escribe un motivo de 10 a 500 caracteres.');return;}
